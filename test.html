@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<title>3D_C</title>
+<body>
+  <canvas id="canvas"></canvas>
+  <script>
+	"use strict"
+	 const code_keycode_table = {
+		'Digit0': 48, 'Digit1': 49, 'Digit2': 50, 'Digit3': 51, 'Digit4': 52,
+		'Digit5': 53, 'Digit6': 54, 'Digit7': 55, 'Digit8': 56, 'Digit9': 57,
+		'KeyA': 65, 'KeyB': 66, 'KeyC': 67, 'KeyD': 68, 'KeyE': 69,
+		'KeyF': 70, 'KeyG': 71, 'KeyH': 72, 'KeyI': 73, 'KeyJ': 74,
+		'KeyK': 75, 'KeyL': 76, 'KeyM': 77, 'KeyN': 78, 'KeyO': 79,
+		'KeyP': 80, 'KeyQ': 81, 'KeyR': 82, 'KeyS': 83, 'KeyT': 84,
+		'KeyU': 85, 'KeyV': 86, 'KeyW': 87, 'KeyX': 88, 'KeyY': 89, 'KeyZ': 90,
+		
+		'Backquote': 192,     
+		'Minus': 189,      
+		'Equal': 187,     
+		'BracketLeft': 219,
+		'BracketRight': 221, 
+		'Backslash': 220,   
+		'Semicolon': 186,  
+		'Quote': 222,        
+		'Comma': 188,      
+		'Period': 190,   
+		'Slash': 191,    
+	
+		'Enter': 13,
+		'Space': 32,
+		'Backspace': 8,
+		'Tab': 9,
+		'Escape': 27,
+		'Delete': 46,
+		'CapsLock': 20,
+		'ShiftLeft': 16,
+		'ShiftRight': 16,
+		'ControlLeft': 17,
+		'ControlRight': 17,
+		'AltLeft': 18,
+		'AltRight': 18,
+		'MetaLeft': 91,   
+		'MetaRight': 92,    
+		'ContextMenu': 93,  
+		
+		'ArrowLeft': 37,
+		'ArrowUp': 38,
+		'ArrowRight': 39,
+		'ArrowDown': 40,
+		'Home': 36,
+		'End': 35,
+		'PageUp': 33,
+		'PageDown': 34,
+		
+		'F1': 112, 'F2': 113, 'F3': 114, 'F4': 115, 'F5': 116,
+		'F6': 117, 'F7': 118, 'F8': 119, 'F9': 120, 'F10': 121,
+		'F11': 122, 'F12': 123,
+		
+		'Numpad0': 96, 'Numpad1': 97, 'Numpad2': 98, 'Numpad3': 99,
+		'Numpad4': 100, 'Numpad5': 101, 'Numpad6': 102, 'Numpad7': 103,
+		'Numpad8': 104, 'Numpad9': 105,
+		'NumpadMultiply': 106,
+		'NumpadAdd': 107,     
+		'NumpadSubtract': 109,
+		'NumpadDecimal': 110,
+		'NumpadDivide': 111,  
+		'NumpadEnter': 13,
+		'NumLock': 144,
+		
+		'ScrollLock': 145,
+		'Pause': 19,        
+		
+		'MediaTrackPrevious': 177,
+		'MediaTrackNext': 176,
+		'MediaPlayPause': 179,
+		'MediaStop': 178,
+		'VolumeMute': 173,
+		'VolumeDown': 174,
+		'VolumeUp': 175
+	  };
+	let memory;
+	let wasm_frame;
+	let wasm_init;
+	let wasm_keydown;
+	let wasm_left_button_down;
+	let wasm_right_button_down;
+	let wasm_middle_button_down;
+	let wasm_mousemove;
+	let key_array;
+	let g_wasm_world_data;
+	let g_key;
+	let instance;
+	let prev_tick = performance.now();
+	let width = 2560 / 2;
+	let height = 1440 / 2;
+	let canvas = document.getElementById("canvas");
+	function frame(){
+		let t = performance.now();
+		const ptr = wasm_frame(performance.now());
+		//console.log(performance.now() - t);
+		const pixel_data = new Uint8ClampedArray(memory.buffer,ptr,width * height * 4);
+		const imageData = new ImageData(pixel_data,width,height);
+		const ctx = canvas.getContext("2d");
+		ctx.putImageData(imageData,0,0);
+		requestAnimationFrame(frame);
+	}
+	async function init(){
+		try {
+			const response = await fetch('test.wasm');
+			const bytes = await response.arrayBuffer();
+			const result = await WebAssembly.instantiate(bytes, {});
+			instance = result.instance; 
+			wasm_init = instance.exports.wasmInit;
+			wasm_frame = instance.exports.wasmFrame;
+			wasm_keydown = instance.exports.wasmKeyDown;
+			memory = instance.exports.memory;
+			g_key = instance.exports.g_key;
+			g_wasm_world_data = instance.exports.g_wasm_world_data;
+			wasm_left_button_down   = instance.exports.wasmLeftButtonDown;
+			wasm_middle_button_down = instance.exports.wasmMiddleButtonDown;
+			wasm_right_button_down  = instance.exports.wasmRightButtonDown;
+			wasm_mousemove = instance.exports.wasmMouseMove;
+			key_array = new Uint8Array(memory.buffer,g_key,0x100);
+			
+			let world = await fetch('world/world_1.octvxl');
+			let world_data_file = new Uint8Array(await world.arrayBuffer());
+			let world_data = new Uint8Array(memory.buffer,g_wasm_world_data,world_data_file.length);
+			
+			console.log(world_data.length);
+			console.log(world_data_file.length);
+			for(let i = 0;i < world_data.length;i++)
+				world_data[i] = world_data_file[i];
+			wasm_init(world_data_file.length,width,height);
+			canvas.width = width;
+			canvas.height = height;
+			frame();
+		}
+		catch(error){
+			console.error("Error: ",error);
+		}
+	}
+	init();
+	let suppress_mouse_after_pointerlock;
+	canvas.addEventListener("click", async () => {
+		if(document.pointerLockElement === canvas)
+			return;
+		suppress_mouse_after_pointerlock = true;
+		await canvas.requestPointerLock({unadjustedMovement: true});
+	});
+	window.addEventListener("keydown",(e) => {
+		let key = code_keycode_table[e.code];
+		key_array[key] = 0x80;
+		wasm_keydown(key);
+	});
+	window.addEventListener("keyup",(e) => {
+		key_array[code_keycode_table[e.code]] = 0x00;
+	});
+	window.addEventListener("mousedown",(e) => {
+		if(suppress_mouse_after_pointerlock || document.pointerLockElement != canvas){
+			suppress_mouse_after_pointerlock = false;
+			return;
+		}
+		switch(e.button){
+			case 0:
+				wasm_left_button_down();
+				break;
+			case 1:
+				wasm_middle_button_down();
+				break;
+			case 2:
+				wasm_right_button_down();
+				break;
+		}
+	});
+	window.addEventListener("mousemove",(e) => {
+		if(document.pointerLockElement === canvas){
+			let dx = e.movementX;
+			let dy = e.movementY;
+			wasm_mousemove(dx,dy);
+		}
+	});
+  </script>
+</body>
+</html>
