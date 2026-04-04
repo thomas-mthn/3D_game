@@ -3,7 +3,7 @@
 
 #include "vec3.h"
 
-enumeration(AudioType){
+typedef enum{
 	AUDIO_FOOTSTEP,
 	AUDIO_JUMP,
 	AUDIO_LAND,
@@ -13,7 +13,7 @@ enumeration(AudioType){
 	AUDIO_PUNCH,
 	AUDIO_PUNCH_HIT,
 	AUDIO_EXPLOSION,
-};
+} AudioType;
 
 void audioPlay(Vec3 position,AudioType type);
 

@@ -9,8 +9,9 @@
 #include "staff.h"
 #include "voxel_menu.h"
 #include "audio.h"
+#include "span.h"
 
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
 #include "win32/w_draw_opengl.h"
 #include "win32/w_main.h"
 #endif
@@ -86,15 +87,15 @@ Entity* entityRayCollision(Entity* entity_list,Vec3 position,Vec3 direction){
 	return entity_closest;
 }
 
-static Voxel g_monster_model;
-static Voxel g_slime_model;
-static Voxel g_zombie_model;
-static Voxel g_boss_model;
+static Voxel monster_model;
+static Voxel slime_model;
+static Voxel zombie_model;
+static Voxel boss_model;
 
-static Vec3 sampleFibonacciSphere(int i,int N){
+static Vec3 sampleFibonacciSphere(int i,int n){
     const int GOLDEN_ANGLE = 157286;
 
-    int z = FIXED_ONE - ((i * 2 + 1) * FIXED_ONE) / N;
+    int z = FIXED_ONE - ((i * 2 + 1) * FIXED_ONE) / n;
 
     int zz = fixedMulR(z,z);
     int r = tSqrt(FIXED_ONE - zz);
@@ -147,8 +148,8 @@ static void entityRender3dGenerateSprite(Entity* entity){
 			min_distance = raySphereIntersection(camera_position,direction,(Vec3){0,0,0},FIXED_ONE >> 1);
 		}
 		else{
-			for(int j = 0;j < g_entity_static[entity->type].n_model_sphere;j++){
-				ModelSphere* sphere = model_sphere_array + j;
+			for(int i = 0;i < g_entity_static[entity->type].n_model_sphere;i++){
+				ModelSphere* sphere = model_sphere_array + i;
 				int distance = raySphereIntersection(camera_position,direction,sphere->position,sphere->radius);
 				if(distance == -1 || distance > min_distance)	
 					continue;
@@ -166,11 +167,11 @@ static void entityRender3dGenerateSprite(Entity* entity){
 		Vec3 hit_position = vec3AddR(ray_origin,vec3MulRS(direction,min_distance));
 		Vec3 reflect_vector = vec3Reflect(direction,vec3Direction(hit_position,entity->position));
 		Vec3 color_acc = {0};
-		for(int j = 0;j < countof(ray_array);j++){
-			int strength = vec3Dot(ray_array[j].direction,reflect_vector);
+		for(int i = 0;i < countof(ray_array);i++){
+			int strength = vec3Dot(ray_array[i].direction,reflect_vector);
 			if(strength < 0)
 				continue;
-			vec3Add(&color_acc,vec3MulRS(ray_array[j].luminance,strength));
+			vec3Add(&color_acc,vec3MulRS(ray_array[i].luminance,strength));
 		}
 		vec3DivS(&color_acc,countof(ray_array));
 		entity->texture_dynamic.pixel_data[i] = colorToPixelColor(vec3MulR(color,vec3MulRS(vec3ShrR(color_acc,10),g_exposure)));
@@ -188,7 +189,7 @@ static void entityRender3dGenerateSprite(Entity* entity){
 	voxelModelRasterize(&surface_model,entity->player_angle,entity->luminance_3d,entity->model,camera_position,camera_distance);
 	*/
 	generateMipmaps(&entity->texture_dynamic);
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
 	textureUpdateGL(&entity->texture_dynamic);
 #endif
 	//surface_model.data = 0;
@@ -208,7 +209,7 @@ Entity* entityCreate(Vec3 position,EntityType type){
 	switch(type){
 		case ENTITY_BOSS:{
 			entity->flags = ENTITY_FLAG_HITABLE;
-			entity->model = &g_boss_model;
+			entity->model = &boss_model;
 			entity->health = g_entity_static[type].health;
 			entity->texture_dynamic = (Texture){.size = 0x100,.pixel_data = tMalloc(0x100 * 0x100 * sizeof(unsigned) * 2)};
 		} break;
@@ -234,21 +235,21 @@ Entity* entityCreate(Vec3 position,EntityType type){
 			entityRender3dGenerateSprite(entity);
 		} break;
 		case ENTITY_SLIME:{
-			entity->model = &g_slime_model;
+			entity->model = &slime_model;
 			entity->health = FIXED_ONE / 2;
 			entity->texture_dynamic = (Texture){.size = 0x100,.pixel_data = tMalloc(0x100 * 0x100 * sizeof(unsigned) * 2)};
 			entity->flags = ENTITY_FLAG_HITABLE;
 			entityRender3dGenerateSprite(entity);
 		} break;
 		case ENTITY_ZOMBIE:{
-			entity->model = &g_zombie_model;
+			entity->model = &zombie_model;
 			entity->health = FIXED_ONE / 2 + FIXED_ONE / 4;
 			entity->texture_dynamic = (Texture){.size = 0x100,.pixel_data = tMalloc(0x100 * 0x100 * sizeof(unsigned) * 2)};
 			entity->flags = ENTITY_FLAG_PHYSICS_STAIR | ENTITY_FLAG_HITABLE;
 			entityRender3dGenerateSprite(entity);
 		} break;
 		case ENTITY_MONSTER:{
-			entity->model = &g_monster_model;
+			entity->model = &monster_model;
 			entity->angle = (Vec2){tRnd() % FIXED_ONE,tRnd() % FIXED_ONE};
 			entity->texture_dynamic = (Texture){.size = 0x100,.pixel_data = tMalloc(0x100 * 0x100 * sizeof(unsigned) * 2)};
 			entity->health = FIXED_ONE;
@@ -283,7 +284,7 @@ void entityDestroy(void){
 			g_entity = entity_i->next;
 		Entity* next = entity_i->next;
 		if(entity_i->texture_dynamic.pixel_data){
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
 			deleteTextureGL(entity_i->texture_dynamic.gl_id);
 #endif
 			tFree(entity_i->texture_dynamic.pixel_data);
@@ -297,7 +298,7 @@ void entityDestroy(void){
 void entityDestroyAll(void){
 	for(Entity* entity = g_entity;entity;){
 		if(entity->texture_dynamic.pixel_data){
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
 			deleteTextureGL(entity->texture_dynamic.gl_id);
 #endif
 			tFree(entity->texture_dynamic.pixel_data);
@@ -568,7 +569,7 @@ static Entity* boltMonsterCollision(Voxel* voxel,Vec3 position){
 		}
 		return 0;
 	}
-	for(Entity* entity = voxel->entity_list;entity;entity = entity->next_voxel){
+	for(Entity* entity = (voxel->entity_list);entity;entity = entity->next_voxel){
 		if(!(entity->flags & ENTITY_FLAG_HITABLE))
 			continue;
 		EntityStatic* entity_s = g_entity_static + entity->type;
@@ -586,7 +587,7 @@ void entityHit(Entity* entity){
 	entity->velocity.x += knockback.x / 8;
 	entity->velocity.y += knockback.y / 8;
 	entity->velocity.z += FIXED_ONE / 6;
-	repeat(0x100){
+	for(int i = 0x100;i--;){
 		Vec3 velocity = (Vec3){tRnd() % FIXED_ONE * 2 - FIXED_ONE,tRnd() % FIXED_ONE * 2 - FIXED_ONE,tRnd() % FIXED_ONE * 2};
 		if(vec2Dot((Vec2){velocity.x,velocity.y},(Vec2){velocity.x,velocity.y}) > FIXED_ONE)
 			continue;
@@ -605,7 +606,7 @@ static void spellAdjectiveParticleSpawn(Entity* entity){
 		particle->health = tRnd() % 0x80 + 0x80;
 		particle->size = FIXED_ONE / 16;
 		particle->velocity = vec3ShrR(vec3Rnd(),4);
-		particle->particle_string = "#+";
+		particle->particle_string = (String)STRING_LITERAL("#+");
 	}
 	if(entity->adj_speed && tRndChance(16)){
 		Entity* particle = entityCreate(entity->position,ENTITY_PARTICLE);
@@ -613,7 +614,7 @@ static void spellAdjectiveParticleSpawn(Entity* entity){
 		particle->health = tRnd() % 0x80 + 0x80;
 		particle->size = FIXED_ONE / 16;
 		particle->velocity = vec3ShrR(vec3Rnd(),4);
-		particle->particle_string = ">>";
+		particle->particle_string = (String)STRING_LITERAL(">>");
 	}
 }
 
@@ -667,7 +668,7 @@ static bool entityTickBomb(Entity* entity){
 			vec3Add(&entity_other->velocity,vec3MulRS(vec3Direction(entity->position,entity_other->position),fixedDivR(FIXED_ONE * 4,fixedMulR(distance,distance))));
 			entity_other->health -= shock / 8;
 		}
-		repeat(0x100){ 
+		for(int i = 0x100;i--;){ 
 			Entity* particle = entityCreate(entity->position,ENTITY_PARTICLE);
 			particle->health = tRnd() % 0x400;
 			particle->size = FIXED_ONE / 4 + tRnd() % (FIXED_ONE / 4);
@@ -680,7 +681,7 @@ static bool entityTickBomb(Entity* entity){
 			particle->texture_offset = (Vec2){tRnd() % FIXED_ONE,tRnd() % FIXED_ONE};
 			particle->texture_size = FIXED_ONE / 4;
 		}
-		repeat(0x10){
+		for(int i = 0x10;i--;){
 			Entity* particle = entityCreate(entity->position,ENTITY_PARTICLE);
 			particle->health = tRnd() % 0x40 + 0x40;
 			particle->size = FIXED_ONE / 16;
@@ -766,7 +767,7 @@ void entityTick(void){
 
 void entityInit(void){
 	/*
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
 	g_monster_model = win32LoadModel("model/monster.octvxl");
 #endif
 	*/
@@ -787,17 +788,17 @@ void entityInit(void){
 		Vec3 relative_pos2;
 		relative_pos2 = vec3AddR(relative_pos,(Vec3){FIXED_ONE / 2,FIXED_ONE / 2,-FIXED_ONE / 2});
 		if(vec3Dot(relative_pos2,relative_pos2) < FIXED_ONE / 8){
-			voxelSet(&g_monster_model,voxel_position,voxel_depth,VOXEL_BLOCK_BLUE);
+			voxelSet(&monster_model,voxel_position,voxel_depth,VOXEL_BLOCK_BLUE);
 			continue;
 		}
 		relative_pos2 = vec3AddR(relative_pos,(Vec3){FIXED_ONE / 2,-FIXED_ONE / 2,-FIXED_ONE / 2});
 		if(vec3Dot(relative_pos2,relative_pos2) < FIXED_ONE / 8){
-			voxelSet(&g_monster_model,voxel_position,voxel_depth,VOXEL_BLOCK_BLUE);
+			voxelSet(&monster_model,voxel_position,voxel_depth,VOXEL_BLOCK_BLUE);
 			continue;
 		}
 		relative_pos2 = relative_pos;
 		if(vec3Dot(relative_pos2,relative_pos2) < FIXED_ONE){
-			voxelSet(&g_monster_model,voxel_position,voxel_depth,VOXEL_BLOCK);
+			voxelSet(&monster_model,voxel_position,voxel_depth,VOXEL_BLOCK);
 		}
 	}
 
@@ -817,17 +818,17 @@ void entityInit(void){
 		Vec3 relative_pos2;
 		relative_pos2 = vec3AddR(relative_pos,(Vec3){FIXED_ONE / 2,FIXED_ONE / 2,-FIXED_ONE / 2});
 		if(vec3Dot(relative_pos2,relative_pos2) < FIXED_ONE / 8){
-			voxelSet(&g_slime_model,voxel_position,voxel_depth,VOXEL_BLOCK_GREEN);
+			voxelSet(&slime_model,voxel_position,voxel_depth,VOXEL_BLOCK_GREEN);
 			continue;
 		}
 		relative_pos2 = vec3AddR(relative_pos,(Vec3){FIXED_ONE / 2,-FIXED_ONE / 2,-FIXED_ONE / 2});
 		if(vec3Dot(relative_pos2,relative_pos2) < FIXED_ONE / 8){
-			voxelSet(&g_slime_model,voxel_position,voxel_depth,VOXEL_BLOCK_GREEN);
+			voxelSet(&slime_model,voxel_position,voxel_depth,VOXEL_BLOCK_GREEN);
 			continue;
 		}
 		relative_pos2 = relative_pos;
 		if(vec3Dot(relative_pos2,relative_pos2) < FIXED_ONE){
-			voxelSet(&g_slime_model,voxel_position,voxel_depth,VOXEL_BLOCK);
+			voxelSet(&slime_model,voxel_position,voxel_depth,VOXEL_BLOCK);
 		}
 	}
 
@@ -847,17 +848,17 @@ void entityInit(void){
 		Vec3 relative_pos2;
 		relative_pos2 = vec3AddR(relative_pos,(Vec3){FIXED_ONE / 2,FIXED_ONE / 2,-FIXED_ONE / 2});
 		if(vec3Dot(relative_pos2,relative_pos2) < FIXED_ONE / 8){
-			voxelSet(&g_zombie_model,voxel_position,voxel_depth,VOXEL_BLOCK_RED);
+			voxelSet(&zombie_model,voxel_position,voxel_depth,VOXEL_BLOCK_RED);
 			continue;
 		}
 		relative_pos2 = vec3AddR(relative_pos,(Vec3){FIXED_ONE / 2,-FIXED_ONE / 2,-FIXED_ONE / 2});
 		if(vec3Dot(relative_pos2,relative_pos2) < FIXED_ONE / 8){
-			voxelSet(&g_zombie_model,voxel_position,voxel_depth,VOXEL_BLOCK_RED);
+			voxelSet(&zombie_model,voxel_position,voxel_depth,VOXEL_BLOCK_RED);
 			continue;
 		}
 		relative_pos2 = relative_pos;
 		if(vec3Dot(relative_pos2,relative_pos2) < FIXED_ONE){
-			voxelSet(&g_zombie_model,voxel_position,voxel_depth,VOXEL_BLOCK);
+			voxelSet(&zombie_model,voxel_position,voxel_depth,VOXEL_BLOCK);
 		}
 	}
 
@@ -877,17 +878,17 @@ void entityInit(void){
 		Vec3 relative_pos2;
 		relative_pos2 = vec3AddR(relative_pos,(Vec3){FIXED_ONE / 2,FIXED_ONE / 2,-FIXED_ONE / 2});
 		if(vec3Dot(relative_pos2,relative_pos2) < FIXED_ONE / 8){
-			voxelSet(&g_boss_model,voxel_position,voxel_depth,VOXEL_BLOCK_RED);
+			voxelSet(&boss_model,voxel_position,voxel_depth,VOXEL_BLOCK_RED);
 			continue;
 		}
 		relative_pos2 = vec3AddR(relative_pos,(Vec3){FIXED_ONE / 2,-FIXED_ONE / 2,-FIXED_ONE / 2});
 		if(vec3Dot(relative_pos2,relative_pos2) < FIXED_ONE / 8){
-			voxelSet(&g_boss_model,voxel_position,voxel_depth,VOXEL_BLOCK_RED);
+			voxelSet(&boss_model,voxel_position,voxel_depth,VOXEL_BLOCK_RED);
 			continue;
 		}
 		relative_pos2 = relative_pos;
 		if(vec3Dot(relative_pos2,relative_pos2) < FIXED_ONE){
-			voxelSet(&g_boss_model,voxel_position,voxel_depth,VOXEL_BLOCK);
+			voxelSet(&boss_model,voxel_position,voxel_depth,VOXEL_BLOCK);
 		}
 	}
 }
@@ -937,29 +938,31 @@ static void entityDynamicLightingSideRecursive(Voxel* voxel,Entity* entity,Vec3 
 	((int*)&block_pos_t)[axis.x] += fixedMulR(coord.x << FIXED_PRECISION,size);
 	((int*)&block_pos_t)[axis.y] += fixedMulR(coord.y << FIXED_PRECISION,size);
 
-	Vec3 pos[4] = {block_pos_t,block_pos_t,block_pos_t,block_pos_t};
+	Vec3 positions[4] = {block_pos_t,block_pos_t,block_pos_t,block_pos_t};
 
-	((int*)&pos[1])[axis.y] += size;
-	((int*)&pos[2])[axis.x] += size;
-	((int*)&pos[3])[axis.x] += size;
-	((int*)&pos[3])[axis.y] += size;
+	((int*)&positions[1])[axis.y] += size;
+	((int*)&positions[2])[axis.x] += size;
+	((int*)&positions[3])[axis.x] += size;
+	((int*)&positions[3])[axis.y] += size;
 
 	int distance_max = 0;
 	int distance_max_index;
 
-	for(int i = 0;i < 4;i++){
-		int distance = vec3Dot(vec3ShrR(g_position,4),vec3ShrR(pos[i],4));
+	Vec3* position_farthest;
+
+	for(int i = 0;i < countof(positions);i++){
+		int distance = vec3Dot(vec3ShrR(g_position,4),vec3ShrR(positions[i],4));
 		if(distance > distance_max){
 			distance_max = distance;
-			distance_max_index = i;
+			position_farthest = positions + i;
 		}
 	}
 
-	distance_max = vec3Distance(vec3ShrR(g_position,4),vec3ShrR(pos[distance_max_index],4));
+	distance_max = vec3Distance(vec3ShrR(g_position,4),vec3ShrR(*position_farthest,4));
 
 	Vec3 normal = g_normal_table[side];
 
-	int mipmap = tClamp(mipmapGet(squarePointClosestPosition(pos[0],size,normal),normal,distance_max,surface_angle),26 - LUXEL_MAX_MIPMAP,31);
+	int mipmap = tClamp(mipmapGet(squarePointClosestPosition(positions[0],size,normal),normal,distance_max,surface_angle),26 - LUXEL_MAX_MIPMAP,31);
 
 	int split = 25 + -mipmap - voxel->depth;
 
@@ -970,7 +973,7 @@ static void entityDynamicLightingSideRecursive(Voxel* voxel,Entity* entity,Vec3 
 		if(side & 1)
 			((int*)&v_pos)[side >> 1] += (1 << depth) - 1;
 		
-		if(sdVoxel(entity->position,pos[0],size) > FIXED_ONE * 4)
+		if(sdVoxel(entity->position,positions[0],size) > FIXED_ONE * 4)
 			return;
 
 		coord.x <<= 1;
@@ -994,11 +997,12 @@ static void entityDynamicLightingRecursive(Voxel* voxel,Entity* entity){
 	if(voxel->type == VOXEL_PARENT){
 		if(sdVoxel(entity->position,block_pos,block_size) > FIXED_ONE * 4)
 			return;
-		for(int i = 0;i < 8;i++)
+		for(int i = 0;i < countof(voxel->child_s);i++)
 			entityDynamicLightingRecursive(voxel->child_s[i],entity);
+			
 		return;
 	}
-	if(voxel->type == VOXEL_AIR || voxel->type == VOXEL_MIRROR || g_voxel_static[voxel->type].flags & VOXEL_FLAG_EMITER)
+	if(voxel->type == VOXEL_AIR || voxel->type == VOXEL_MIRROR || g_voxel_static[voxel->type].flags & VOXEL_EMITER)
 		return;
 	entityDynamicLightingSidePre(voxel,entity,block_pos,0);
 	entityDynamicLightingSidePre(voxel,entity,vec3AddR(block_pos,(Vec3){block_size,0,0}),1);
@@ -1009,7 +1013,7 @@ static void entityDynamicLightingRecursive(Voxel* voxel,Entity* entity){
 }
 
 static void entityRender3d(Entity* entity,int entity_size){
-	repeat(0x40){
+	for(int i = 0x40;i--;){
 		Vec3 direction = getLookDirection((Vec2){tRnd() % FIXED_ONE,tRnd() % FIXED_ONE});
 		Vec3 luminance = rayLuminance(entity->position,direction);
 		for(int i = 0;i < 3;i++){
@@ -1023,10 +1027,10 @@ static void entityRender3d(Entity* entity,int entity_size){
 		return;
 	int size = entitySpriteSize(entity->position,entity_size);
 	Vec2 points[] = {
-		{point.x - fixedMulR(size,g_fov.y),point.y - fixedMulR(size,g_fov.x)},
-		{point.x - fixedMulR(size,g_fov.y),point.y + fixedMulR(size,g_fov.x)},
-		{point.x + fixedMulR(size,g_fov.y),point.y + fixedMulR(size,g_fov.x)},
-		{point.x + fixedMulR(size,g_fov.y),point.y - fixedMulR(size,g_fov.x)},
+		{point.x - fixedMulR(size,g_options.fov.y),point.y - fixedMulR(size,g_options.fov.x)},
+		{point.x - fixedMulR(size,g_options.fov.y),point.y + fixedMulR(size,g_options.fov.x)},
+		{point.x + fixedMulR(size,g_options.fov.y),point.y + fixedMulR(size,g_options.fov.x)},
+		{point.x + fixedMulR(size,g_options.fov.y),point.y - fixedMulR(size,g_options.fov.x)},
 	};
 	/*
 	int r = tRnd();
@@ -1046,7 +1050,10 @@ static void entityRender3d(Entity* entity,int entity_size){
 
 	if(change_factor > 0x100)
 		entityRender3dGenerateSprite(entity);
-	
+	if(g_surface.backend == RENDER_BACKEND_SOFTWARE){
+        spanSpriteAdd(&g_surface,&entity->texture_dynamic,points);
+        return;
+    }
 	drawTexturePolygon(g_surface,&entity->texture_dynamic,g_texture_coordinates_fill,points,vec3Single(FIXED_ONE << 4),4);
 }
 
@@ -1058,30 +1065,28 @@ void entityDraw(Entity* entity){
 				return;
 			int size = entitySpriteSize(entity->position,FIXED_ONE / 8);
 			Vec2 points[] = {
-				{point.x - fixedMulR(size,g_fov.x),point.y - fixedMulR(size,g_fov.y)},
-				{point.x + fixedMulR(size,g_fov.x),point.y - fixedMulR(size,g_fov.y)},
-				{point.x + fixedMulR(size,g_fov.x),point.y + fixedMulR(size,g_fov.y)},
-				{point.x - fixedMulR(size,g_fov.x),point.y + fixedMulR(size,g_fov.y)},
+				{point.x - fixedMulR(size,g_options.fov.x),point.y - fixedMulR(size,g_options.fov.y)},
+				{point.x + fixedMulR(size,g_options.fov.x),point.y - fixedMulR(size,g_options.fov.y)},
+				{point.x + fixedMulR(size,g_options.fov.x),point.y + fixedMulR(size,g_options.fov.y)},
+				{point.x - fixedMulR(size,g_options.fov.x),point.y + fixedMulR(size,g_options.fov.y)},
 			};
-			drawEllipses(g_surface,point.x,point.y,fixedMulR(size * 4,g_fov.x),fixedMulR(size * 4,g_fov.y),vec3MulRS(vec3Single(1 << 14),g_exposure));
-			drawEllipses(g_surface,point.x - size / 2,point.y + size / 2,fixedMulR(size,g_fov.x),fixedMulR(size,g_fov.y),vec3MulRS(vec3Single(1 << 18),g_exposure));
-			drawRectangle(g_surface,point.x - size * 2 - size / 4,point.y - size / 2,fixedMulR(size,g_fov.x),fixedMulR(size,g_fov.y) * 4,vec3Single(1 << 16));
-			int fuse = fixedMulR(fixedMulR(size,g_fov.x),entity->health << 10);
-			drawRectangle(g_surface,point.x - size * 2 - size / 4 - fuse / 2,point.y,fixedMulR(fuse,g_fov.x),fixedMulR(size,g_fov.y),pixelColorToColor(0x83B2EB));
-			drawRectangle(g_surface,point.x - size * 2 - size / 4 - fuse / 2 - size / 2,point.y,fixedMulR(size,g_fov.x),fixedMulR(size,g_fov.y),pixelColorToColor(0x1050FF));
+			drawEllipses(g_surface,point.x,point.y,fixedMulR(size * 4,g_options.fov.x),fixedMulR(size * 4,g_options.fov.y),vec3MulRS(vec3Single(1 << 14),g_exposure));
+			drawEllipses(g_surface,point.x - size / 2,point.y + size / 2,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),vec3MulRS(vec3Single(1 << 18),g_exposure));
+			drawRectangle(g_surface,point.x - size * 2 - size / 4,point.y - size / 2,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y) * 4,vec3Single(1 << 16));
+			int fuse = fixedMulR(fixedMulR(size,g_options.fov.x),entity->health << 10);
+			drawRectangle(g_surface,point.x - size * 2 - size / 4 - fuse / 2,point.y,fixedMulR(fuse,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x83B2EB));
+			drawRectangle(g_surface,point.x - size * 2 - size / 4 - fuse / 2 - size / 2,point.y,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x1050FF));
 		} break;
 		case ENTITY_BOLT: case ENTITY_ORB:{
 			Vec3 point = pointToScreen(entity->position);
 			if(!point.z)
 				return;
 			int size = entitySpriteSize(entity->position,FIXED_ONE / 8);
-			Vec2 points[] = {
-				{point.x - fixedMulR(size,g_fov.x),point.y - fixedMulR(size,g_fov.y)},
-				{point.x + fixedMulR(size,g_fov.x),point.y - fixedMulR(size,g_fov.y)},
-				{point.x + fixedMulR(size,g_fov.x),point.y + fixedMulR(size,g_fov.y)},
-				{point.x - fixedMulR(size,g_fov.x),point.y + fixedMulR(size,g_fov.y)},
-			};
-			drawEllipses(g_surface,point.x,point.y,fixedMulR(size,g_fov.x),fixedMulR(size,g_fov.y),vec3MulRS(entity->color_emit,g_exposure));
+            if(g_surface.backend == RENDER_BACKEND_SOFTWARE){
+                spanEllipsesAdd(&g_surface,point.x,point.y,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),vec3MulRS(entity->color_emit,g_exposure));
+                return;
+            }
+			drawEllipses(g_surface,point.x,point.y,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),vec3MulRS(entity->color_emit,g_exposure));
 		} break;
 		case ENTITY_STAFF:{
 			entityRender3d(entity,FIXED_ONE);
@@ -1093,7 +1098,7 @@ void entityDraw(Entity* entity){
 			entityRender3d(entity,FIXED_ONE);
 		} break;
 		case ENTITY_PARTICLE:{
-			repeat(0x40){
+			for(int i = 0x40;i--;){
 				Vec3 luminance = rayLuminance(entity->position,getLookDirection((Vec2){tRnd() % FIXED_ONE,tRnd() % FIXED_ONE}));
 				entity->n_luminance_sample += 1;
 				entity->luminance = vec3Mix(entity->luminance,vec3ShlR(luminance,4),tMin(FIXED_ONE / entity->n_luminance_sample,0x400));
@@ -1105,26 +1110,44 @@ void entityDraw(Entity* entity){
 			if(entity->health < 0x80)
 				fixedMul(&size,entity->health * FIXED_ONE / 0x80);
 			Vec2 points[] = {
-				{point.x + fixedMulR(size,g_fov.x),point.y + fixedMulR(size,g_fov.y)},
-				{point.x + fixedMulR(size,g_fov.x),point.y - fixedMulR(size,g_fov.y)},
-				{point.x - fixedMulR(size,g_fov.x),point.y - fixedMulR(size,g_fov.y)},
-				{point.x - fixedMulR(size,g_fov.x),point.y + fixedMulR(size,g_fov.y)},
+				{point.x + fixedMulR(size,g_options.fov.x),point.y + fixedMulR(size,g_options.fov.y)},
+				{point.x + fixedMulR(size,g_options.fov.x),point.y - fixedMulR(size,g_options.fov.y)},
+				{point.x - fixedMulR(size,g_options.fov.x),point.y - fixedMulR(size,g_options.fov.y)},
+				{point.x - fixedMulR(size,g_options.fov.x),point.y + fixedMulR(size,g_options.fov.y)},
 			};
 			Vec3 color = vec3MulRS(vec3MulR(entity->luminance,entity->color),g_exposure);
 			if(entity->texture){
-				Vec2 texture_coordinates[] = {
-					{entity->texture_offset.x,entity->texture_offset.y},
-					{entity->texture_offset.x,entity->texture_offset.y + entity->texture_size},
-					{entity->texture_offset.x + entity->texture_size,entity->texture_offset.y + entity->texture_size},
-					{entity->texture_offset.x + entity->texture_size,entity->texture_offset.y},
-				};
-				drawTexturePolygon(g_surface,entity->texture,texture_coordinates,points,color,4);
+                if(g_surface.backend == RENDER_BACKEND_SOFTWARE){
+                    //spanQuadAdd(&g_surface,points,color);
+                    
+                    //spanSpriteAdd(&g_surface,entity->texture,points);
+                }
+                else{
+                    Vec2 texture_coordinates[] = {
+                        {entity->texture_offset.x,entity->texture_offset.y},
+                        {entity->texture_offset.x,entity->texture_offset.y + entity->texture_size},
+                        {entity->texture_offset.x + entity->texture_size,entity->texture_offset.y + entity->texture_size},
+                        {entity->texture_offset.x + entity->texture_size,entity->texture_offset.y},
+                    };
+                    drawTexturePolygon(g_surface,entity->texture,texture_coordinates,points,color,4);
+                }
 			}
-			else if(entity->particle_string){
-				drawString(g_surface,point.x,point.y,entity->particle_string,-1,size,pixelColorToColor(0xFFFFFF),0x800);
+			else if(entity->particle_string.data){
+				drawString(g_surface,point.x,point.y,entity->particle_string,size,pixelColorToColor(0xFFFFFF),0x800);
 			}
 			else{
-				drawPolygon(g_surface,points,4,color);
+                if(g_surface.backend == RENDER_BACKEND_SOFTWARE){
+                    Vec2 points[] = {
+                        {point.x + fixedMulR(size,g_options.fov.x),-point.y + fixedMulR(size,g_options.fov.y)},
+                        {point.x + fixedMulR(size,g_options.fov.x),-point.y - fixedMulR(size,g_options.fov.y)},
+                        {point.x - fixedMulR(size,g_options.fov.x),-point.y - fixedMulR(size,g_options.fov.y)},
+                        {point.x - fixedMulR(size,g_options.fov.x),-point.y + fixedMulR(size,g_options.fov.y)},
+                    };
+                    spanQuadAdd(&g_surface,points,color);
+                }
+                else{
+                    drawPolygon(g_surface,points,4,color);
+                }
 			}
 		} break;
 		case ENTITY_PICKUP:{
@@ -1133,21 +1156,21 @@ void entityDraw(Entity* entity){
 				return;
 			int size = entitySpriteSize(entity->position,FIXED_ONE / 2);
 			Vec2 points[] = {
-				{point.x - fixedMulR(size,g_fov.x),point.y - fixedMulR(size,g_fov.y)},
-				{point.x + fixedMulR(size,g_fov.x),point.y - fixedMulR(size,g_fov.y)},
-				{point.x + fixedMulR(size,g_fov.x),point.y + fixedMulR(size,g_fov.y)},
-				{point.x - fixedMulR(size,g_fov.x),point.y + fixedMulR(size,g_fov.y)},
+				{point.x - fixedMulR(size,g_options.fov.x),point.y - fixedMulR(size,g_options.fov.y)},
+				{point.x + fixedMulR(size,g_options.fov.x),point.y - fixedMulR(size,g_options.fov.y)},
+				{point.x + fixedMulR(size,g_options.fov.x),point.y + fixedMulR(size,g_options.fov.y)},
+				{point.x - fixedMulR(size,g_options.fov.x),point.y + fixedMulR(size,g_options.fov.y)},
 			};
-			drawFrame(g_surface,point.x - fixedMulR(size / 2,g_fov.x),point.y - fixedMulR(size / 2,g_fov.y),fixedMulR(size,g_fov.x),fixedMulR(size,g_fov.y),pixelColorToColor(0x808080),fixedMulR(size,g_fov.x) >> 4);
+			drawFrame(g_surface,point.x - fixedMulR(size / 2,g_options.fov.x),point.y - fixedMulR(size / 2,g_options.fov.y),fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x808080),fixedMulR(size,g_options.fov.x) >> 4);
 			switch(entity->pickup_type){
 				case SPELL_BOLT:{
-					drawEllipses(g_surface,point.x,point.y,fixedMulR(size / 3,g_fov.x),fixedMulR(size / 3,g_fov.y),vec3MulRS(pixelColorToColor(0xFF0000),g_exposure));
+					drawEllipses(g_surface,point.x,point.y,fixedMulR(size / 3,g_options.fov.x),fixedMulR(size / 3,g_options.fov.y),vec3MulRS(pixelColorToColor(0xFF0000),g_exposure));
 				} break;
 				case SPELL_BOMB:{
-					drawEllipses(g_surface,point.x,point.y,fixedMulR(size / 3,g_fov.x),fixedMulR(size / 3,g_fov.y),vec3MulRS(pixelColorToColor(0x0000FF),g_exposure));
+					drawEllipses(g_surface,point.x,point.y,fixedMulR(size / 3,g_options.fov.x),fixedMulR(size / 3,g_options.fov.y),vec3MulRS(pixelColorToColor(0x0000FF),g_exposure));
 				} break;
 				case SPELL_ORB:{
-					drawEllipses(g_surface,point.x,point.y,fixedMulR(size / 3,g_fov.x),fixedMulR(size / 3,g_fov.y),vec3MulRS(pixelColorToColor(0x00FF00),g_exposure));
+					drawEllipses(g_surface,point.x,point.y,fixedMulR(size / 3,g_options.fov.x),fixedMulR(size / 3,g_options.fov.y),vec3MulRS(pixelColorToColor(0x00FF00),g_exposure));
 				} break;
 			}
 			//drawTexturePolygon(g_surface,g_textures + TEXTURE_PICKUP,g_texture_coordinates_fill,points,vec3Single(1 << 20),4);

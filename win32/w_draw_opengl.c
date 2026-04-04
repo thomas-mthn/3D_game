@@ -68,7 +68,7 @@ typedef long long (stdcall *Proc)();
 typedef int (stdcall *Proc)();
 #endif
 
-enumeration(GlDrawType){
+typedef enum{
 	GL_POINTS,        
 	GL_LINES,      
 	GL_LINE_LOOP,     
@@ -79,14 +79,14 @@ enumeration(GlDrawType){
 	GL_QUADS,         
 	GL_QUAD_STRIP,    
 	GL_POLYGON,       
-};
+} GlDrawType;
 
-enumeration(GlTextureType){
+typedef enum{
 	GL_TEXTURE_1D = 0x0DE0,
 	GL_TEXTURE_2D,
-};
+} GlTextureType;
 
-enumeration(GlDataType){
+typedef enum{
 	GL_BYTE = 0x1400,
 	GL_UNSIGNED_BYTE,
 	GL_SHORT,
@@ -99,23 +99,23 @@ enumeration(GlDataType){
 	GL_4_BYTES,
 	GL_DOUBLE,
 	GL_HALF_FLOAT,
-};
+} GlDataType;
 
-enumeration(GlTextureParameterType){
+typedef enum{
 	GL_TEXTURE_MAG_FILTER = 0x2800,
 	GL_TEXTURE_MIN_FILTER,
 	GL_TEXTURE_WRAP_S,
 	GL_TEXTURE_WRAP_T,
-};
+} GlTextureParameterType;
 
-enumeration(GlGetStringName){
+typedef enum{
 	GL_VENDOR = 0x1F00,
 	GL_RENDERER,
 	GL_VERSION,
 	GL_EXTENSIONS,
-};
+} GlGetStringName;
 
-enumeration(GlAlphaTesting){
+typedef enum{
 	GL_NEVER = 0x0200,
 	GL_LESS,
 	GL_EQUAL,
@@ -124,9 +124,9 @@ enumeration(GlAlphaTesting){
 	GL_NOTEQUAL,
 	GL_GEQUAL,
 	GL_ALWAYS,
-};
+} GlAlphaTesting;
 
-enumeration(GlFormat){
+typedef enum{
 	GL_COLOR_INDEX = 0x1900,
 	GL_STENCIL_INDEX,
 	GL_DEPTH_COMPONENT,
@@ -138,15 +138,15 @@ enumeration(GlFormat){
 	GL_RGBA,
 	GL_LUMINANCE,
 	GL_LUMINANCE_ALPHA,
-};
+} GlFormat;
 
-enumeration(GlPolygonModeType){
+typedef enum{
 	GL_POINT = 0x1B00,
 	GL_LINE,
 	GL_FILL
-};
+} GlPolygonModeType;
 
-enumeration(GlDrawBufferMode){
+typedef enum{
 	GL_FRONT_LEFT = 0x0400,
 	GL_FRONT_RIGHT,
 	GL_BACK_LEFT,
@@ -160,7 +160,7 @@ enumeration(GlDrawBufferMode){
 	GL_AUX1,
 	GL_AUX2,
 	GL_AUX3
-};
+} GlDrawBufferMode;
 
 static Proc (stdcall *WglGetProcAddress)(const char* function_name);
 static int (stdcall *WglMakeCurrent)(void* context,void* gl_context);
@@ -206,7 +206,7 @@ static void (stdcall *GlBindTexture)(GlTextureType target,unsigned texture);
 static void (stdcall *GlTexImage2D)(
 	GlTextureType target,
 	int level,
-	int internal_format,
+	int static_format,
 	int width,
 	int height,
 	int border,
@@ -255,7 +255,7 @@ static int convertColor(int color){
 	return tClamp((color >> 13),INT8_MIN,INT8_MAX);
 }
 
-char *g_vertex_circle_source = ""
+static char *vertex_circle_source = ""
 "#version 330 core\n"
 "layout (location = 0) in vec3 verticles;"
 "layout (location = 1) in vec2 coordinates;"
@@ -270,7 +270,7 @@ char *g_vertex_circle_source = ""
 	"gl_Position = vec4(verticles.xy,0.0,verticles.z);"
 "}";
 
-char* g_fragment_circle_source = ""
+static char* fragment_circle_source = ""
 "#version 330 core\n"
 "out vec4 FragColor;"
 
@@ -283,7 +283,7 @@ char* g_fragment_circle_source = ""
 	"FragColor = vec4(lighting_io,1.0);"
 "}";
 
-char *g_vertex_source = ""
+static char *vertex_source = ""
 "#version 330 core\n"
 "layout (location = 0) in vec3 verticles;"
 
@@ -291,7 +291,7 @@ char *g_vertex_source = ""
 	"gl_Position = vec4(verticles.xy,0.0,verticles.z);"
 "}";
 
-char *g_fragment_source = ""
+static char *fragment_source = ""
 "#version 330 core\n"
 "out vec4 FragColor;"
 
@@ -302,57 +302,48 @@ char *g_fragment_source = ""
 	"FragColor = vec4(color,1.0);"
 "}";
 
-char *g_vertex_lighting_source = ""
+static char *vertex_lighting_source = ""
 "#version 330 core\n"
 "layout (location = 0) in vec3 verticles;"
 "layout (location = 1) in vec3 lighting;"
-"layout (location = 2) in vec4 fog;"
 
 "out vec3 lighting_io;"
-"out vec4 fog_io;"
 
 "void main(){"
 	"lighting_io = lighting;"
-	"fog_io = fog;"
 	"gl_Position = vec4(verticles.xy,0.0,verticles.z);"
 "}";
 
-char *g_fragment_lighting_source = ""
+static char *fragment_lighting_source = ""
 "#version 330 core\n"
 "out vec4 FragColor;"
 
 "in vec3 lighting_io;"
-"in vec4 fog_io;"
 
 "void main(){"
 	"FragColor = vec4(lighting_io,1.0f);"
-	"FragColor.rgb = mix(FragColor.rgb,fog_io.rgb,fog_io.a);"
 "}";
 
-char *g_vertex_texture_lighting_source = ""
+static char *vertex_texture_lighting_source = ""
 "#version 330 core\n"
 "layout (location = 0) in vec3 verticles;"
 "layout (location = 1) in vec2 textcoords;"
 "layout (location = 2) in vec3 lighting;"
-"layout (location = 3) in vec4 fog;"
 
 "out vec3 lighting_io;"
 "out vec2 textcoords_io;"
-"out vec4 fog_io;"
 
 "void main(){"
 	"textcoords_io = textcoords;"
 	"lighting_io = lighting;"
-	"fog_io = fog;"
 	"gl_Position = vec4(verticles.xy,0.0,verticles.z);"
 "}";
 
-char *g_fragment_texture_lighting_source = ""
+static char *fragment_texture_lighting_source = ""
 "#version 330 core\n"
 "out vec4 FragColor;"
 "in vec2 textcoords_io;"
 "in vec3 lighting_io;"
-"in vec4 fog_io;"
 
 "uniform sampler2D ourTexture;"
 "vec3 CubicHermite (vec3 A, vec3 B, vec3 C, vec3 D, float t){"
@@ -406,32 +397,29 @@ char *g_fragment_texture_lighting_source = ""
 	"if(texture(ourTexture,textcoords_io).a > 0.5)"
 		"discard;"
 	"FragColor.rgb *= texture_color;"
-	"FragColor.rgb = mix(FragColor.rgb,fog_io.rgb,fog_io.a);"
 "}";  
 
-char *g_fragment_texture_lighting_skybox_source = ""
+static char *fragment_texture_lighting_skybox_source = ""
 "#version 330 core\n"
 "out vec4 FragColor;"
 "in vec2 textcoords_io;"
 "in vec3 lighting_io;"
-"in vec4 fog_io;"
 
 "uniform sampler2D ourTexture;"
 "void main(){"
 	"FragColor = vec4(lighting_io,1.0);"
 	"vec3 texture_color = texture(ourTexture,textcoords_io).rgb;"
 	"FragColor.rgb *= texture_color;"
-	"FragColor.rgb = mix(FragColor.rgb,fog_io.rgb,fog_io.a);"
 "}";  
 
 int g_smaa_max;
 
-static unsigned g_hdr_fbo;
-static bool g_hdr = false;
-static int g_anti_aliasing;
+static unsigned hdr_fbo;
+static bool hdr = false;
+static int anti_aliasing;
 bool g_vsync = true;
 
-static bool g_modern_gl;
+static bool modern_gl;
 
 structure(ShaderProgram){
 	unsigned vertex_shader;
@@ -440,43 +428,41 @@ structure(ShaderProgram){
 	unsigned* vao;
 };
 
-static ShaderProgram g_shader_program;
-static ShaderProgram g_shader_lighting_program;
-static ShaderProgram g_shader_texture_lighting_program;
-static ShaderProgram g_shader_circle_program;
-static ShaderProgram g_shader_skybox_program;
+static ShaderProgram shader_program;
+static ShaderProgram shader_lighting_program;
+static ShaderProgram shader_texture_lighting_program;
+static ShaderProgram shader_circle_program;
+static ShaderProgram shader_skybox_program;
 
-static unsigned g_vao;
-static unsigned g_vao_lighting;
-static unsigned g_vao_lighting_texture;
-static unsigned g_vao_circle;
+static unsigned vao;
+static unsigned vao_lighting;
+static unsigned vao_lighting_texture;
+static unsigned vao_circle;
 
-static unsigned g_ebo_quad;
+static unsigned ebo_quad;
 
-typedef struct{
+structure(VertexLightingTexture){
 	float pos[3];
 	float texture_pos[2];
 	float lighting[3];
-	float fog[4];
-} VertexLightingTexture;
+};
 
-typedef struct{
+structure(VertexLighting){
 	float pos[3];
 	float lighting[3];
-	float fog[4];
-} VertexLighting;
+};
 
-typedef struct{
+structure(Vertex){
 	float pos[3];
-} Vertex;
+};
 
-typedef struct{
+structure(VertexCircle){
 	float pos[3];
 	float coordinates[2];
 	float lighting[3];
-} VertexCircle;
+};
 
-static bool stringInString(char* haystack,char* needle){
+static bool cstringInString(char* haystack,char* needle){
     for(;*haystack;++haystack){
         char* h = haystack;
         char* n = needle;
@@ -491,33 +477,32 @@ static bool stringInString(char* haystack,char* needle){
     return false;
 }
 
-static ShaderProgram* g_current_shaderprogram;
-static unsigned g_current_texture;
+static ShaderProgram* current_shaderprogram;
+static unsigned current_texture;
 
-#define N_VERTEX_BUFFER 0x1000
-static int g_quad_indices[N_VERTEX_BUFFER];
-static char g_vertex_buffer[N_VERTEX_BUFFER];
-static int g_vertex_buffer_ptr;
-static GlDrawType g_buffer_drawtype;
+static int quad_indices[0x1000];
+static char vertex_buffer[countof(quad_indices)];
+static int vertex_buffer_ptr;
+static GlDrawType buffer_drawtype;
 
 static void batchDraw(void){
-	if(!g_vertex_buffer_ptr)
+	if(!vertex_buffer_ptr)
 		return;
-	if(!g_current_shaderprogram->vao)
+	if(!current_shaderprogram->vao)
 		return;
-	GlBindVertexArray(*g_current_shaderprogram->vao);
-	if(*g_current_shaderprogram->vao == g_vao_lighting_texture)
-		GlBindTexture(GL_TEXTURE_2D,g_current_texture);
+	GlBindVertexArray(*current_shaderprogram->vao);
+	if(*current_shaderprogram->vao == vao_lighting_texture)
+		GlBindTexture(GL_TEXTURE_2D,current_texture);
 	else
 		GlBindTexture(GL_TEXTURE_2D,0);
-	GlUseProgram(g_current_shaderprogram->id);
-	GlBufferData(GL_ARRAY_BUFFER,g_vertex_buffer_ptr,g_vertex_buffer,GL_DYNAMIC_DRAW);
-	GlBindBuffer(GL_ELEMENT_ARRAY_BUFFER,g_ebo_quad);
-	if(g_buffer_drawtype == GL_TRIANGLES)
-		GlDrawElements(g_buffer_drawtype,g_vertex_buffer_ptr,GL_UNSIGNED_INT,0);
+	GlUseProgram(current_shaderprogram->id);
+	GlBufferData(GL_ARRAY_BUFFER,vertex_buffer_ptr,vertex_buffer,GL_DYNAMIC_DRAW);
+	GlBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo_quad);
+	if(buffer_drawtype == GL_TRIANGLES)
+		GlDrawElements(buffer_drawtype,vertex_buffer_ptr,GL_UNSIGNED_INT,0);
 	else
-		GlDrawArrays(g_buffer_drawtype,0,g_vertex_buffer_ptr);
-	g_vertex_buffer_ptr = 0;
+		GlDrawArrays(buffer_drawtype,0,vertex_buffer_ptr);
+	vertex_buffer_ptr = 0;
 }
 
 void deleteTextureGL(unsigned texture){
@@ -527,33 +512,33 @@ void deleteTextureGL(unsigned texture){
 }
 
 void drawColoredPolygonGL(DrawSurface surface,Vec2* coordinats,Vec3* color,int n_point){
-	if(g_modern_gl){
-		if(g_current_shaderprogram != &g_shader_lighting_program || g_vertex_buffer_ptr >= N_VERTEX_BUFFER - sizeof(VertexLighting) * 4 || g_buffer_drawtype != GL_TRIANGLES){
+	if(modern_gl){
+		if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
 			batchDraw();
-			g_current_shaderprogram = &g_shader_lighting_program;
-			g_buffer_drawtype = GL_TRIANGLES;
+			current_shaderprogram = &shader_lighting_program;
+			buffer_drawtype = GL_TRIANGLES;
 		}
 		float color_div = FIXED_ONE << 4;
-		if(g_hdr)
+		if(hdr)
 			color_div *= 0.33f;
-		VertexLighting* vertex = (VertexLighting*)(g_vertex_buffer + g_vertex_buffer_ptr);
+		VertexLighting* vertex = (VertexLighting*)(vertex_buffer + vertex_buffer_ptr);
 		vertex[0] = (VertexLighting){
 			.pos = {-(float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color[0].x / color_div,(float)color[0].y / color_div,(float)color[0].z / color_div}
+			.lighting = {(float)color[0].z / color_div,(float)color[0].y / color_div,(float)color[0].x / color_div}
 		};
 		vertex[1] = (VertexLighting){
 			.pos = {-(float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color[1].x / color_div,(float)color[1].y / color_div,(float)color[1].z / color_div}
+			.lighting = {(float)color[1].z / color_div,(float)color[1].y / color_div,(float)color[1].x / color_div}
 		};
 		vertex[2] = (VertexLighting){
 			.pos = {-(float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color[2].x / color_div,(float)color[2].y / color_div,(float)color[2].z / color_div}
+			.lighting = {(float)color[2].z / color_div,(float)color[2].y / color_div,(float)color[2].x / color_div}
 		};
 		vertex[3] = (VertexLighting){
 			.pos = {-(float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color[3].x / color_div,(float)color[3].y / color_div,(float)color[3].z / color_div}
+			.lighting = {(float)color[3].z / color_div,(float)color[3].y / color_div,(float)color[3].x / color_div}
 		};
-		g_vertex_buffer_ptr += sizeof(VertexLighting) * 4;
+		vertex_buffer_ptr += sizeof(VertexLighting) * 4;
 	}
 	else{
 		GlBegin(GL_QUADS);
@@ -573,7 +558,7 @@ void drawColoredPolygonGL(DrawSurface surface,Vec2* coordinats,Vec3* color,int n
 }
 
 void drawPolygonGL(DrawSurface surface,Vec2* coordinats,int n_point,Vec3 color){
-	if(g_modern_gl){
+	if(modern_gl){
 		Vec3 gl_color[] = {
 			color,
 			color,
@@ -593,38 +578,34 @@ void drawPolygonGL(DrawSurface surface,Vec2* coordinats,int n_point,Vec3 color){
 	}
 }
 
-void drawColoredPolygon3dGL(DrawSurface surface,Vec3* coordinats,Vec3* color,Vec3* fog_color,int* fog_strength){
-	if(g_modern_gl){
-		if(g_current_shaderprogram != &g_shader_lighting_program || g_vertex_buffer_ptr >= N_VERTEX_BUFFER - sizeof(VertexLighting) * 4 || g_buffer_drawtype != GL_TRIANGLES){
+void drawColoredPolygon3dGL(DrawSurface* surface,Vec3* coordinats,Vec3* color){
+	if(modern_gl){
+		if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
 			batchDraw();
-			g_current_shaderprogram = &g_shader_lighting_program;
-			g_buffer_drawtype = GL_TRIANGLES;
+			current_shaderprogram = &shader_lighting_program;
+			buffer_drawtype = GL_TRIANGLES;
 		}
 		float color_div = FIXED_ONE << 4;
-		if(g_hdr)
+		if(hdr)
 			color_div *= 0.33f;
-		VertexLighting* vertex = (VertexLighting*)(g_vertex_buffer + g_vertex_buffer_ptr);
+		VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
 		vertex[0] = (VertexLighting){
 			.pos = {-(float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE,(float)coordinats[0].z / FIXED_ONE},
-			.lighting = {(float)color[0].x / color_div,(float)color[0].y / color_div,(float)color[0].z / color_div},
-			.fog = {(float)fog_color[0].x / FIXED_ONE,(float)fog_color[0].y / FIXED_ONE,(float)fog_color[0].z / FIXED_ONE,(float)fog_strength[0] / FIXED_ONE},
+			.lighting = {(float)color[0].z / color_div,(float)color[0].y / color_div,(float)color[0].x / color_div},
 		};
 		vertex[1] = (VertexLighting){
 			.pos = {-(float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE,(float)coordinats[1].z / FIXED_ONE},
-			.lighting = {(float)color[1].x / color_div,(float)color[1].y / color_div,(float)color[1].z / color_div},
-			.fog = {(float)fog_color[1].x / FIXED_ONE,(float)fog_color[1].y / FIXED_ONE,(float)fog_color[1].z / FIXED_ONE,(float)fog_strength[1] / FIXED_ONE},
+			.lighting = {(float)color[1].z / color_div,(float)color[1].y / color_div,(float)color[1].x / color_div},
 		};
 		vertex[2] = (VertexLighting){
 			.pos = {-(float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE,(float)coordinats[2].z / FIXED_ONE},
-			.lighting = {(float)color[2].x / color_div,(float)color[2].y / color_div,(float)color[2].z / color_div},
-			.fog = {(float)fog_color[2].x / FIXED_ONE,(float)fog_color[2].y / FIXED_ONE,(float)fog_color[2].z / FIXED_ONE,(float)fog_strength[2] / FIXED_ONE},
+			.lighting = {(float)color[2].z / color_div,(float)color[2].y / color_div,(float)color[2].x / color_div},
 		};
 		vertex[3] = (VertexLighting){
 			.pos = {-(float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE,(float)coordinats[3].z / FIXED_ONE},
-			.lighting = {(float)color[3].x / color_div,(float)color[3].y / color_div,(float)color[3].z / color_div},
-			.fog = {(float)fog_color[3].x / FIXED_ONE,(float)fog_color[3].y / FIXED_ONE,(float)fog_color[3].z / FIXED_ONE,(float)fog_strength[3] / FIXED_ONE},
+			.lighting = {(float)color[3].z / color_div,(float)color[3].y / color_div,(float)color[3].x / color_div},
 		};
-		g_vertex_buffer_ptr += sizeof(VertexLighting) * 4;
+		vertex_buffer_ptr += sizeof(VertexLighting) * 4;
 	}
 	else{
 		GlBegin(GL_QUADS);
@@ -643,15 +624,27 @@ void drawColoredPolygon3dGL(DrawSurface surface,Vec3* coordinats,Vec3* color,Vec
 	}
 }
 
-void drawPolygon3dGL(DrawSurface surface,Vec3* coordinats,Vec3* fog_color,int* fog_strength,Vec3 color){
-	if(g_modern_gl){
+void drawPolygon3dGL(DrawSurface* surface,Vec3* coordinats,Vec3 color){
+	Vec3 point_2[4];
+	point_2[0] = pointToScreenRenderer(coordinats[0],g_tri,g_position,g_options.fov);
+	point_2[1] = pointToScreenRenderer(coordinats[1],g_tri,g_position,g_options.fov);
+	point_2[2] = pointToScreenRenderer(coordinats[2],g_tri,g_position,g_options.fov);
+	point_2[3] = pointToScreenRenderer(coordinats[3],g_tri,g_position,g_options.fov);
+
+	Vec3 d_point[] = {
+		{point_2[0].x,point_2[0].y,point_2[0].z},
+		{point_2[1].x,point_2[1].y,point_2[1].z},
+		{point_2[3].x,point_2[3].y,point_2[3].z},
+		{point_2[2].x,point_2[2].y,point_2[2].z}
+	};
+	if(modern_gl){
 		Vec3 gl_color[] = {
 			color,
 			color,
 			color,
 			color,
 		};
-		drawColoredPolygon3dGL(surface,coordinats,gl_color,fog_color,fog_strength);
+		drawColoredPolygon3dGL(surface,d_point,gl_color);
 	}
 	else{
 		GlBegin(GL_QUADS);
@@ -671,7 +664,7 @@ static void textureUpdate(Texture* texture){
 	int size = texture->size;
 	int offset = 0;
 	for(int i = 0;size;i++){
-		GlTexImage2D(GL_TEXTURE_2D,i,GL_RGBA,size,size,0,GL_RGBA,GL_UNSIGNED_BYTE,texture->pixel_data + offset);
+		GlTexImage2D(GL_TEXTURE_2D,i,GL_BGRA,size,size,0,GL_BGRA,GL_UNSIGNED_BYTE,texture->pixel_data + offset);
 		offset += size * size;
 		size /= 2;
 	}
@@ -687,7 +680,7 @@ void textureUpdateGL(Texture* texture){
 static void textureUpload(Texture* texture){
 	GlGenTextures(1,&texture->gl_id);
 	GlBindTexture(GL_TEXTURE_2D,texture->gl_id);
-	if(g_modern_gl){
+	if(modern_gl){
 		GlTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST_MIPMAP_LINEAR);
 		GlTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
 		GlTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_REPEAT);
@@ -710,17 +703,17 @@ void drawTexturePolygonGL(DrawSurface surface,Texture* texture,Vec2* texture_coo
 	else
 		GlBindTexture(GL_TEXTURE_2D,texture->gl_id);
 
-	if(g_modern_gl){
-		if(g_current_shaderprogram != &g_shader_texture_lighting_program || g_current_texture != texture->gl_id || g_vertex_buffer_ptr >= N_VERTEX_BUFFER - sizeof(VertexLightingTexture) * 4 || g_buffer_drawtype != GL_TRIANGLES){
+	if(modern_gl){
+		if(current_shaderprogram != &shader_texture_lighting_program || current_texture != texture->gl_id || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightingTexture) * 4 || buffer_drawtype != GL_TRIANGLES){
 			batchDraw();
-			g_current_texture = texture->gl_id;
-			g_current_shaderprogram = &g_shader_texture_lighting_program;
-			g_buffer_drawtype = GL_TRIANGLES;
+			current_texture = texture->gl_id;
+			current_shaderprogram = &shader_texture_lighting_program;
+			buffer_drawtype = GL_TRIANGLES;
 		}
 		float color_div = FIXED_ONE << 4;
-		if(g_hdr)
+		if(hdr)
 			color_div *= 0.33f;
-		VertexLightingTexture* vertex = g_vertex_buffer + g_vertex_buffer_ptr;
+		VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
 		vertex[0] = (VertexLightingTexture){
 			.pos = {-(float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE,1.0f},
 			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
@@ -741,7 +734,7 @@ void drawTexturePolygonGL(DrawSurface surface,Texture* texture,Vec2* texture_coo
 			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
 			.texture_pos = {(float)texture_coordinats[3].x / FIXED_ONE,(float)texture_coordinats[3].y / FIXED_ONE}
 		};
-		g_vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
+		vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
 	}
 	else{
 		GlEnable(GL_TEXTURE_2D);
@@ -770,17 +763,17 @@ void drawTexturePolygon3dGL(DrawSurface surface,Texture* texture,Vec2* texture_c
 	else
 		GlBindTexture(GL_TEXTURE_2D,texture->gl_id);
 	
-	if(g_modern_gl){
-		if(g_current_shaderprogram != &g_shader_texture_lighting_program || g_current_texture != texture->gl_id || g_vertex_buffer_ptr >= N_VERTEX_BUFFER - sizeof(VertexLightingTexture) * 4 || g_buffer_drawtype != GL_TRIANGLES){
+	if(modern_gl){
+		if(current_shaderprogram != &shader_texture_lighting_program || current_texture != texture->gl_id || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightingTexture) * 4 || buffer_drawtype != GL_TRIANGLES){
 			batchDraw();
-			g_current_texture = texture->gl_id;
-			g_current_shaderprogram = &g_shader_texture_lighting_program;
-			g_buffer_drawtype = GL_TRIANGLES;
+			current_texture = texture->gl_id;
+			current_shaderprogram = &shader_texture_lighting_program;
+			buffer_drawtype = GL_TRIANGLES;
 		}
 		float color_div = FIXED_ONE << 4;
-		if(g_hdr)
+		if(hdr)
 			color_div *= 0.33f;
-		VertexLightingTexture* vertex = g_vertex_buffer + g_vertex_buffer_ptr;
+		VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
 		vertex[0] = (VertexLightingTexture){
 			.pos = {-(float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE,(float)coordinats[0].z / FIXED_ONE},
 			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
@@ -801,7 +794,7 @@ void drawTexturePolygon3dGL(DrawSurface surface,Texture* texture,Vec2* texture_c
 			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
 			.texture_pos = {(float)texture_coordinats[3].x / FIXED_ONE,(float)texture_coordinats[3].y / FIXED_ONE}
 		};
-		g_vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
+		vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
 	}
 	else{
 		GlEnable(GL_TEXTURE_2D);
@@ -827,38 +820,38 @@ void drawTexturePolygon3dGL(DrawSurface surface,Texture* texture,Vec2* texture_c
 void drawColoredTexturePolygonGL(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3* color,int n_point){
 	if(!texture->gl_id)
 		textureUpload(texture);
-	if(g_modern_gl){
-		if(g_current_shaderprogram != &g_shader_texture_lighting_program || g_current_texture != texture->gl_id || g_vertex_buffer_ptr >= N_VERTEX_BUFFER - sizeof(VertexLightingTexture) * 4 || g_buffer_drawtype != GL_TRIANGLES){
+	if(modern_gl){
+		if(current_shaderprogram != &shader_texture_lighting_program || current_texture != texture->gl_id || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightingTexture) * 4 || buffer_drawtype != GL_TRIANGLES){
 			batchDraw();
-			g_current_texture = texture->gl_id;
-			g_current_shaderprogram = &g_shader_texture_lighting_program;
-			g_buffer_drawtype = GL_TRIANGLES;
+			current_texture = texture->gl_id;
+			current_shaderprogram = &shader_texture_lighting_program;
+			buffer_drawtype = GL_TRIANGLES;
 		}
 		float color_div = FIXED_ONE << 4;
-		if(g_hdr)
+		if(hdr)
 			color_div *= 0.33f;
-		VertexLightingTexture* vertex = g_vertex_buffer + g_vertex_buffer_ptr;
+		VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
 		vertex[0] = (VertexLightingTexture){
-			.pos = {-(float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE,1.0f},
+			.pos = {(float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE,1.0f},
 			.lighting = {(float)color[0].x / color_div,(float)color[0].y / color_div,(float)color[0].z / color_div},
 			.texture_pos = {(float)texture_coordinats[0].x / FIXED_ONE,(float)texture_coordinats[0].y / FIXED_ONE}
 		};
 		vertex[1] = (VertexLightingTexture){
-			.pos = {-(float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE,1.0f},
+			.pos = {(float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE,1.0f},
 			.lighting = {(float)color[1].x / color_div,(float)color[1].y / color_div,(float)color[1].z / color_div},
 			.texture_pos = {(float)texture_coordinats[1].x / FIXED_ONE,(float)texture_coordinats[1].y / FIXED_ONE}
 		};
 		vertex[2] = (VertexLightingTexture){
-			.pos = {-(float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE,1.0f},
+			.pos = {(float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE,1.0f},
 			.lighting = {(float)color[2].x / color_div,(float)color[2].y / color_div,(float)color[2].z / color_div},
 			.texture_pos = {(float)texture_coordinats[2].x / FIXED_ONE,(float)texture_coordinats[2].y / FIXED_ONE}
 		};
 		vertex[3] = (VertexLightingTexture){
-			.pos = {-(float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE,1.0f},
+			.pos = {(float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE,1.0f},
 			.lighting = {(float)color[3].x / color_div,(float)color[3].y / color_div,(float)color[3].z / color_div},
 			.texture_pos = {(float)texture_coordinats[3].x / FIXED_ONE,(float)texture_coordinats[3].y / FIXED_ONE}
 		};
-		g_vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
+		vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
 	}
 	else{
 		GlEnable(GL_TEXTURE_2D);
@@ -884,45 +877,41 @@ void drawColoredTexturePolygonGL(DrawSurface surface,Texture* texture,Vec2* text
 	}
 }
 
-static void coloredTexturePolygon3d(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,Vec3* fog_color,int* fog_strength,ShaderProgram* shader_program){
+static void coloredTexturePolygon3d(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,ShaderProgram* shader_program){
 	if(!texture->gl_id)
 		textureUpload(texture);
-	if(g_modern_gl){
-		if(g_current_shaderprogram != shader_program || g_current_texture != texture->gl_id || g_vertex_buffer_ptr >= N_VERTEX_BUFFER - sizeof(VertexLightingTexture) * 4 || g_buffer_drawtype != GL_TRIANGLES){
+	if(modern_gl){
+		if(current_shaderprogram != shader_program || current_texture != texture->gl_id || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightingTexture) * 4 || buffer_drawtype != GL_TRIANGLES){
 			batchDraw();
-			g_current_texture = texture->gl_id;
-			g_current_shaderprogram = shader_program;
-			g_buffer_drawtype = GL_TRIANGLES;
+			current_texture = texture->gl_id;
+			current_shaderprogram = shader_program;
+			buffer_drawtype = GL_TRIANGLES;
 		}
 		float color_div = FIXED_ONE << 4;
-		if(g_hdr)
+		if(hdr)
 			color_div *= 0.25f;
-		VertexLightingTexture* vertex = g_vertex_buffer + g_vertex_buffer_ptr;
+		VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
 		vertex[0] = (VertexLightingTexture){
 			.pos = {-(float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE,(float)coordinats[0].z / FIXED_ONE},
-			.lighting = {(float)color[0].x / color_div,(float)color[0].y / color_div,(float)color[0].z / color_div},
+			.lighting = {(float)color[0].z / color_div,(float)color[0].y / color_div,(float)color[0].x / color_div},
 			.texture_pos = {(float)texture_coordinats[0].x / FIXED_ONE,(float)texture_coordinats[0].y / FIXED_ONE},
-			.fog = {(float)fog_color[0].x / FIXED_ONE,(float)fog_color[0].y / FIXED_ONE,(float)fog_color[0].z / FIXED_ONE,(float)fog_strength[0] / FIXED_ONE},
 		};
 		vertex[1] = (VertexLightingTexture){
 			.pos = {-(float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE,(float)coordinats[1].z / FIXED_ONE},
-			.lighting = {(float)color[1].x / color_div,(float)color[1].y / color_div,(float)color[1].z / color_div},
+			.lighting = {(float)color[1].z / color_div,(float)color[1].y / color_div,(float)color[1].x / color_div},
 			.texture_pos = {(float)texture_coordinats[1].x / FIXED_ONE,(float)texture_coordinats[1].y / FIXED_ONE},
-			.fog = {(float)fog_color[1].x / FIXED_ONE,(float)fog_color[1].y / FIXED_ONE,(float)fog_color[1].z / FIXED_ONE,(float)fog_strength[1] / FIXED_ONE},
 		};
 		vertex[2] = (VertexLightingTexture){
 			.pos = {-(float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE,(float)coordinats[2].z / FIXED_ONE},
-			.lighting = {(float)color[2].x / color_div,(float)color[2].y / color_div,(float)color[2].z / color_div},
+			.lighting = {(float)color[2].z / color_div,(float)color[2].y / color_div,(float)color[2].x / color_div},
 			.texture_pos = {(float)texture_coordinats[2].x / FIXED_ONE,(float)texture_coordinats[2].y / FIXED_ONE},
-			.fog = {(float)fog_color[2].x / FIXED_ONE,(float)fog_color[2].y / FIXED_ONE,(float)fog_color[2].z / FIXED_ONE,(float)fog_strength[2] / FIXED_ONE},
 		};
 		vertex[3] = (VertexLightingTexture){
 			.pos = {-(float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE,(float)coordinats[3].z / FIXED_ONE},
-			.lighting = {(float)color[3].x / color_div,(float)color[3].y / color_div,(float)color[3].z / color_div},
+			.lighting = {(float)color[3].z / color_div,(float)color[3].y / color_div,(float)color[3].x / color_div},
 			.texture_pos = {(float)texture_coordinats[3].x / FIXED_ONE,(float)texture_coordinats[3].y / FIXED_ONE},
-			.fog = {(float)fog_color[3].x / FIXED_ONE,(float)fog_color[3].y / FIXED_ONE,(float)fog_color[3].z / FIXED_ONE,(float)fog_strength[3] / FIXED_ONE},
 		};
-		g_vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
+		vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
 	}
 	else{
 		GlEnable(GL_TEXTURE_2D);
@@ -948,32 +937,32 @@ static void coloredTexturePolygon3d(DrawSurface surface,Texture* texture,Vec2* t
 	}
 }
 
-void drawColoredTexturePolygon3dGL(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,Vec3* fog_color,int* fog_strength){
-	coloredTexturePolygon3d(surface,texture,texture_coordinats,coordinats,color,fog_color,fog_strength,&g_shader_texture_lighting_program);
+void drawColoredTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color){
+	coloredTexturePolygon3d(*surface,texture,texture_coordinats,coordinats,color,&shader_texture_lighting_program);
 }
 
-void drawColoredTextureSkyboxPolygon3dGL(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,Vec3* fog_color,int* fog_strength){
-	coloredTexturePolygon3d(surface,texture,texture_coordinats,coordinats,color,fog_color,fog_strength,&g_shader_skybox_program);
+void drawColoredTextureSkyboxPolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color){
+	coloredTexturePolygon3d(*surface,texture,texture_coordinats,coordinats,color,&shader_skybox_program);
 }
 
 void drawLineGL(DrawSurface surface,int x1,int y1,int x2,int y2,Vec3 color){
-	if(g_modern_gl){
-		if(g_current_shaderprogram != &g_shader_lighting_program || g_vertex_buffer_ptr >= N_VERTEX_BUFFER - sizeof(VertexLighting) * 2 || g_buffer_drawtype != GL_LINES){
+	if(modern_gl){
+		if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 2 || buffer_drawtype != GL_LINES){
 			batchDraw();
-			g_current_shaderprogram = &g_shader_lighting_program;
-			g_buffer_drawtype = GL_LINES;
+			current_shaderprogram = &shader_lighting_program;
+			buffer_drawtype = GL_LINES;
 		}
-		float color_div = 1.0f;
-		VertexLighting* vertex = g_vertex_buffer + g_vertex_buffer_ptr;
+		float color_div = FIXED_ONE << 4;
+		VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
 		vertex[0] = (VertexLighting){
 			.pos = {-(float)y1 / FIXED_ONE,-(float)x1 / FIXED_ONE,1.0f},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div}
+			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex[1] = (VertexLighting){
 			.pos = {-(float)y2 / FIXED_ONE,-(float)x2 / FIXED_ONE,1.0f},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div}
+			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
-		g_vertex_buffer_ptr += sizeof(VertexLighting) * 2;
+		vertex_buffer_ptr += sizeof(VertexLighting) * 2;
 	}
 	else{
 		GlBegin(GL_LINES);
@@ -985,39 +974,39 @@ void drawLineGL(DrawSurface surface,int x1,int y1,int x2,int y2,Vec3 color){
 }
 
 void drawSegmentGL(DrawSurface surface,int x1,int y1,int x2,int y2,int thickness,Vec3 color){
-	if(g_modern_gl){
-		if(g_current_shaderprogram != &g_shader_lighting_program || g_vertex_buffer_ptr >= N_VERTEX_BUFFER - sizeof(VertexLighting) * 4 || g_buffer_drawtype != GL_TRIANGLES){
+	if(modern_gl){
+		if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
 			batchDraw();
-			g_current_shaderprogram = &g_shader_lighting_program;
-			g_buffer_drawtype = GL_TRIANGLES;
+			current_shaderprogram = &shader_lighting_program;
+			buffer_drawtype = GL_TRIANGLES;
 		}
-		float color_div = 1;
-		VertexLighting* vertex = g_vertex_buffer + g_vertex_buffer_ptr;
-		Vec2 direction = vec2MulRS(vec2Direction((Vec2){x1,y1},(Vec2){x2,y2}),thickness);
+		float color_div = FIXED_ONE << 4;
+		VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
+		Vec2 direction = vec2Direction((Vec2){x1,y1},(Vec2){x2,y2});
 		//direction = (Vec2){-direction.y,direction.x};
 		Vec2 quad[] = {
-			vec2AddR((Vec2){x1,y1},vec2Rotate(direction,FIXED_ONE / 8 * 3)),
-			vec2AddR((Vec2){x1,y1},vec2Rotate(direction,FIXED_ONE / 8 * 5)),
-			vec2AddR((Vec2){x2,y2},vec2Rotate(direction,FIXED_ONE / 8 * 1)),
-			vec2AddR((Vec2){x2,y2},vec2Rotate(direction,FIXED_ONE / 8 * 7)),
+			vec2AddR((Vec2){x1,y1},vec2ShrR(vec2MulRS(vec2Rotate(direction,FIXED_ONE / 8 * 3),thickness << 8),8)),
+			vec2AddR((Vec2){x1,y1},vec2ShrR(vec2MulRS(vec2Rotate(direction,FIXED_ONE / 8 * 5),thickness << 8),8)),
+			vec2AddR((Vec2){x2,y2},vec2ShrR(vec2MulRS(vec2Rotate(direction,FIXED_ONE / 8 * 1),thickness << 8),8)),
+			vec2AddR((Vec2){x2,y2},vec2ShrR(vec2MulRS(vec2Rotate(direction,FIXED_ONE / 8 * 7),thickness << 8),8)),
 		};
 		vertex[0] = (VertexLighting){
-			.pos = {-(float)quad[0].y / FIXED_ONE,-(float)quad[0].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div}
+			.pos = {(float)quad[0].y / FIXED_ONE,-(float)quad[0].x / FIXED_ONE,1.0f},
+			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 		};
 		vertex[1] = (VertexLighting){
-			.pos = {-(float)quad[1].y / FIXED_ONE,-(float)quad[1].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div}
+			.pos = {(float)quad[1].y / FIXED_ONE,-(float)quad[1].x / FIXED_ONE,1.0f},
+			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex[2] = (VertexLighting){
-			.pos = {-(float)quad[3].y / FIXED_ONE,-(float)quad[3].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div}
+			.pos = {(float)quad[3].y / FIXED_ONE,-(float)quad[3].x / FIXED_ONE,1.0f},
+			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex[3] = (VertexLighting){
-			.pos = {-(float)quad[2].y / FIXED_ONE,-(float)quad[2].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div}
+			.pos = {(float)quad[2].y / FIXED_ONE,-(float)quad[2].x / FIXED_ONE,1.0f},
+			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
-		g_vertex_buffer_ptr += sizeof(VertexLighting) * 4;
+		vertex_buffer_ptr += sizeof(VertexLighting) * 4;
 	}
 	else{
 		GlBegin(GL_LINES);
@@ -1028,32 +1017,70 @@ void drawSegmentGL(DrawSurface surface,int x1,int y1,int x2,int y2,int thickness
 	}
 }
 
-void drawRectangleGL(DrawSurface surface,int x,int y,int size_x,int size_y,Vec3 color){
-	if(g_modern_gl){
-		if(g_current_shaderprogram != &g_shader_lighting_program || g_vertex_buffer_ptr >= N_VERTEX_BUFFER - sizeof(VertexLighting) * 4 || g_buffer_drawtype != GL_TRIANGLES){
+void drawSegment3dGL(DrawSurface surface,Vec3* coordinats,int thickness,Vec3 color){
+	if(modern_gl){
+		if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
 			batchDraw();
-			g_current_shaderprogram = &g_shader_lighting_program;
-			g_buffer_drawtype = GL_TRIANGLES;
+			current_shaderprogram = &shader_lighting_program;
+			buffer_drawtype = GL_TRIANGLES;
 		}
 		float color_div = FIXED_ONE << 4;
-		VertexLighting* vertex = g_vertex_buffer + g_vertex_buffer_ptr;
+		VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
 		vertex[0] = (VertexLighting){
-			.pos = {-(float)(y) / FIXED_ONE,-(float)(x) / FIXED_ONE,1.0f},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div}
+			.pos = {-(float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE,(float)coordinats[0].z / FIXED_ONE},
+			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 		};
 		vertex[1] = (VertexLighting){
-			.pos = {-(float)(y + size_y) / FIXED_ONE,-(float)(x) / FIXED_ONE,1.0f},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div}
+			.pos = {-(float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE,(float)coordinats[1].z / FIXED_ONE},
+			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 		};
 		vertex[2] = (VertexLighting){
-			.pos = {-(float)(y + size_y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div}
+			.pos = {-(float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE,(float)coordinats[2].z / FIXED_ONE},
+			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 		};
 		vertex[3] = (VertexLighting){
-			.pos = {-(float)(y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div}
+			.pos = {-(float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE,(float)coordinats[3].z / FIXED_ONE},
+			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 		};
-		g_vertex_buffer_ptr += sizeof(VertexLighting) * 4;
+		vertex_buffer_ptr += sizeof(VertexLighting) * 4;
+	}
+	else{
+		/*
+		GlBegin(GL_LINES);
+		GlColor3b(convertColor(color.x),convertColor(color.y),convertColor(color.z));
+		GlVertex2f((float)y1 / FIXED_ONE,-(float)x1 / FIXED_ONE);
+		GlVertex2f((float)y2 / FIXED_ONE,-(float)x2 / FIXED_ONE);
+		GlEnd();
+		*/
+	}
+}
+
+void drawRectangleGL(DrawSurface surface,int x,int y,int size_x,int size_y,Vec3 color){
+	if(modern_gl){
+		if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
+			batchDraw();
+			current_shaderprogram = &shader_lighting_program;
+			buffer_drawtype = GL_TRIANGLES;
+		}
+		float color_div = FIXED_ONE << 4;
+		VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
+		vertex[0] = (VertexLighting){
+			.pos = {(float)(y) / FIXED_ONE,-(float)(x) / FIXED_ONE,1.0f},
+			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
+		};
+		vertex[1] = (VertexLighting){
+			.pos = {(float)(y + size_y) / FIXED_ONE,-(float)(x) / FIXED_ONE,1.0f},
+			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
+		};
+		vertex[2] = (VertexLighting){
+			.pos = {(float)(y + size_y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
+			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
+		};
+		vertex[3] = (VertexLighting){
+			.pos = {(float)(y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
+			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
+		};
+		vertex_buffer_ptr += sizeof(VertexLighting) * 4;
 	}
 	else{
 		GlBegin(GL_QUADS);
@@ -1067,69 +1094,69 @@ void drawRectangleGL(DrawSurface surface,int x,int y,int size_x,int size_y,Vec3 
 }
 
 void drawEllipsesGL(DrawSurface surface,int x,int y,int size_x,int size_y,Vec3 color){
-	if(!g_modern_gl)
+	if(!modern_gl)
 		return;
-	if(g_current_shaderprogram != &g_shader_circle_program || g_vertex_buffer_ptr >= N_VERTEX_BUFFER - sizeof(VertexCircle) * 4 || g_buffer_drawtype != GL_TRIANGLES){
+	if(current_shaderprogram != &shader_circle_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexCircle) * 4 || buffer_drawtype != GL_TRIANGLES){
 		batchDraw();
-		g_current_shaderprogram = &g_shader_circle_program;
-		g_buffer_drawtype = GL_TRIANGLES;
+		current_shaderprogram = &shader_circle_program;
+		buffer_drawtype = GL_TRIANGLES;
 	}
 	float color_div = FIXED_ONE << 4;
-	VertexCircle* vertex = g_vertex_buffer + g_vertex_buffer_ptr;
+	VertexCircle* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
 	vertex[0] = (VertexCircle){
-		.pos = {-(float)(y - size_y) / FIXED_ONE,-(float)(x - size_x) / FIXED_ONE,1.0f},
+		.pos = {(float)(y - size_y) / FIXED_ONE,-(float)(x - size_x) / FIXED_ONE,1.0f},
 		.coordinates = {-1.0f,-1.0f},
-		.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
+		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 	};
 	vertex[1] = (VertexCircle){
-		.pos = {-(float)(y + size_y) / FIXED_ONE,-(float)(x - size_x) / FIXED_ONE,1.0f},
+		.pos = {(float)(y + size_y) / FIXED_ONE,-(float)(x - size_x) / FIXED_ONE,1.0f},
 		.coordinates = {1.0f,-1.0f},
-		.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
+		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 	};
 	vertex[2] = (VertexCircle){
-		.pos = {-(float)(y + size_y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
+		.pos = {(float)(y + size_y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
 		.coordinates = {1.0f,1.0f},
-		.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
+		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 	};
 	vertex[3] = (VertexCircle){
-		.pos = {-(float)(y - size_y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
+		.pos = {(float)(y - size_y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
 		.coordinates = {-1.0f,1.0f},
-		.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
+		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 	};
-	g_vertex_buffer_ptr += sizeof(VertexCircle) * 4;
+	vertex_buffer_ptr += sizeof(VertexCircle) * 4;
 }
 
 void drawCircle3dGL(DrawSurface surface,Vec3* coordinates,Vec3 color){
-	if(!g_modern_gl)
+	if(!modern_gl)
 		return;
-	if(g_current_shaderprogram != &g_shader_circle_program || g_vertex_buffer_ptr >= N_VERTEX_BUFFER - sizeof(VertexCircle) * 4 || g_buffer_drawtype != GL_TRIANGLES){
+	if(current_shaderprogram != &shader_circle_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexCircle) * 4 || buffer_drawtype != GL_TRIANGLES){
 		batchDraw();
-		g_current_shaderprogram = &g_shader_circle_program;
-		g_buffer_drawtype = GL_TRIANGLES;
+		current_shaderprogram = &shader_circle_program;
+		buffer_drawtype = GL_TRIANGLES;
 	}
 	float color_div = FIXED_ONE << 4;
-	VertexCircle* vertex = g_vertex_buffer + g_vertex_buffer_ptr;
+	VertexCircle* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
 	vertex[0] = (VertexCircle){
 		.pos = {-(float)(coordinates[0].y) / FIXED_ONE,-(float)(coordinates[0].x) / FIXED_ONE,(float)coordinates[0].z / FIXED_ONE},
 		.coordinates = {-1.0f,-1.0f},
-		.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
+		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 	};
 	vertex[1] = (VertexCircle){
 		.pos = {-(float)(coordinates[1].y) / FIXED_ONE,-(float)(coordinates[1].x) / FIXED_ONE,(float)coordinates[1].z / FIXED_ONE},
 		.coordinates = {1.0f,-1.0f},
-		.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
+		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 	};
 	vertex[2] = (VertexCircle){
 		.pos = {-(float)(coordinates[2].y) / FIXED_ONE,-(float)(coordinates[2].x) / FIXED_ONE,(float)coordinates[2].z / FIXED_ONE},
 		.coordinates = {1.0f,1.0f},
-		.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
+		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 	};
 	vertex[3] = (VertexCircle){
 		.pos = {-(float)(coordinates[3].y) / FIXED_ONE,-(float)(coordinates[3].x) / FIXED_ONE,(float)coordinates[3].z / FIXED_ONE},
 		.coordinates = {-1.0f,1.0f},
-		.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
+		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 	};
-	g_vertex_buffer_ptr += sizeof(VertexCircle) * 4;
+	vertex_buffer_ptr += sizeof(VertexCircle) * 4;
 }
 
 static void shaderProgramDelete(ShaderProgram shader_program){
@@ -1178,8 +1205,8 @@ static void modernGlInit(int pxf){
 
 	int vertex_size;
 
-	GlGenVertexArrays(1,&g_vao_lighting_texture);
-	GlBindVertexArray(g_vao_lighting_texture);
+	GlGenVertexArrays(1,&vao_lighting_texture);
+	GlBindVertexArray(vao_lighting_texture);
 
 	GlEnableVertexAttribArray(0);
 	GlEnableVertexAttribArray(1);
@@ -1189,26 +1216,25 @@ static void modernGlInit(int pxf){
 	GlVertexAttribPointer(0,3,GL_FLOAT,0,sizeof(VertexLightingTexture),(void*)offsetof(VertexLightingTexture,pos));
 	GlVertexAttribPointer(1,2,GL_FLOAT,0,sizeof(VertexLightingTexture),(void*)offsetof(VertexLightingTexture,texture_pos));
 	GlVertexAttribPointer(2,3,GL_FLOAT,0,sizeof(VertexLightingTexture),(void*)offsetof(VertexLightingTexture,lighting));
-	GlVertexAttribPointer(3,4,GL_FLOAT,0,sizeof(VertexLightingTexture),(void*)offsetof(VertexLightingTexture,fog));
 
-	g_shader_texture_lighting_program     = shaderProgramCreate(g_vertex_texture_lighting_source,g_fragment_texture_lighting_source);
-	g_shader_texture_lighting_program.vao = &g_vao_lighting_texture;
+	shader_texture_lighting_program     = shaderProgramCreate(vertex_texture_lighting_source,fragment_texture_lighting_source);
+	shader_texture_lighting_program.vao = &vao_lighting_texture;
 	
-	g_shader_skybox_program     = shaderProgramCreate(g_vertex_texture_lighting_source,g_fragment_texture_lighting_skybox_source);
-	g_shader_skybox_program.vao = &g_vao_lighting_texture;
+	shader_skybox_program     = shaderProgramCreate(vertex_texture_lighting_source,fragment_texture_lighting_skybox_source);
+	shader_skybox_program.vao = &vao_lighting_texture;
 	
 	vertex_size = sizeof(float) * 3;
 
-	GlGenVertexArrays(1,&g_vao);
-	GlBindVertexArray(g_vao);
+	GlGenVertexArrays(1,&vao);
+	GlBindVertexArray(vao);
 
 	GlEnableVertexAttribArray(0);
 	GlVertexAttribPointer(0,3,GL_FLOAT,0,vertex_size,(void*)0);
-	g_shader_program = shaderProgramCreate(g_vertex_source,g_fragment_source);
-	g_shader_program.vao = &g_vao;
+	shader_program = shaderProgramCreate(vertex_source,fragment_source);
+	shader_program.vao = &vao;
 
-	GlGenVertexArrays(1,&g_vao_lighting);
-	GlBindVertexArray(g_vao_lighting);
+	GlGenVertexArrays(1,&vao_lighting);
+	GlBindVertexArray(vao_lighting);
 
 	GlEnableVertexAttribArray(0);
 	GlEnableVertexAttribArray(1);
@@ -1216,13 +1242,12 @@ static void modernGlInit(int pxf){
 
 	GlVertexAttribPointer(0,3,GL_FLOAT,0,sizeof(VertexLighting),(void*)offsetof(VertexLighting,pos));
 	GlVertexAttribPointer(1,3,GL_FLOAT,0,sizeof(VertexLighting),(void*)offsetof(VertexLighting,lighting));
-	GlVertexAttribPointer(2,4,GL_FLOAT,0,sizeof(VertexLighting),(void*)offsetof(VertexLighting,fog));
 
-	g_shader_lighting_program = shaderProgramCreate(g_vertex_lighting_source,g_fragment_lighting_source);
-	g_shader_lighting_program.vao = &g_vao_lighting;
+	shader_lighting_program = shaderProgramCreate(vertex_lighting_source,fragment_lighting_source);
+	shader_lighting_program.vao = &vao_lighting;
 
-	GlGenVertexArrays(1,&g_vao_circle);
-	GlBindVertexArray(g_vao_circle);
+	GlGenVertexArrays(1,&vao_circle);
+	GlBindVertexArray(vao_circle);
 
 	GlEnableVertexAttribArray(0);
 	GlVertexAttribPointer(0,3,GL_FLOAT,0,sizeof(VertexCircle),(void*)0);
@@ -1231,22 +1256,22 @@ static void modernGlInit(int pxf){
 	GlEnableVertexAttribArray(2);
 	GlVertexAttribPointer(2,3,GL_FLOAT,0,sizeof(VertexCircle),(void*)(5 * sizeof(float)));
 
-	g_shader_circle_program     = shaderProgramCreate(g_vertex_circle_source,g_fragment_circle_source);
-	g_shader_circle_program.vao = &g_vao_circle;
+	shader_circle_program     = shaderProgramCreate(vertex_circle_source,fragment_circle_source);
+	shader_circle_program.vao = &vao_circle;
 
 	GlClearColor(0.5f,0.5f,0.5f,1.0f);
 
-	int quad_indices[] = {
+	int quad_indicess[] = {
 		0,1,2,
 		0,3,2   
 	};
 	   
-	for(int i = 0;i < N_VERTEX_BUFFER;i++)
-		g_quad_indices[i] = quad_indices[i % countof(quad_indices)] + i / countof(quad_indices) * 4;
+	for(int i = 0;i < countof(quad_indices);i++)
+		quad_indices[i] = quad_indicess[i % countof(quad_indicess)] + i / countof(quad_indicess) * 4;
 
-	GlGenBuffers(1,&g_ebo_quad);
-	GlBindBuffer(GL_ELEMENT_ARRAY_BUFFER,g_ebo_quad);
-	GlBufferData(GL_ELEMENT_ARRAY_BUFFER,sizeof g_quad_indices,g_quad_indices,GL_DYNAMIC_DRAW);
+	GlGenBuffers(1,&ebo_quad);
+	GlBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo_quad);
+	GlBufferData(GL_ELEMENT_ARRAY_BUFFER,sizeof quad_indices,quad_indices,GL_DYNAMIC_DRAW);
 }
 
 void vsyncSet(bool value){
@@ -1254,45 +1279,63 @@ void vsyncSet(bool value){
 		WglSwapIntervalEXT(value);
 }
 
-void createSurfaceGL(DrawSurface* surface){
+bool createSurfaceGL(DrawSurface* surface){
 	static void* gl_lib;
 	if(!gl_lib){
 		gl_lib = LoadLibraryA("opengl32");
+		if(!gl_lib){
+			print((String)STRING_LITERAL("opengl32 not found\n"));
+			return false;
+		}
+		struct{
+			char* name;
+			void (**fn_ptr)(void);
+		} functions[] =  {
+			{.name = "wglGetProcAddress",.fn_ptr = (void(**)(void))&WglGetProcAddress},
+			{.name = "wglCreateContext",.fn_ptr = (void(**)(void))&WglCreateContext},
+			{.name = "wglDeleteContext",.fn_ptr = (void(**)(void))&WglDeleteContext},
+			{.name = "wglMakeCurrent",.fn_ptr = (void(**)(void))&WglMakeCurrent},
 
-		*(FarProc*)&WglGetProcAddress = GetProcAddress(gl_lib,"wglGetProcAddress");
-		*(FarProc*)&WglCreateContext  = GetProcAddress(gl_lib,"wglCreateContext");
-		*(FarProc*)&WglDeleteContext  = GetProcAddress(gl_lib,"wglDeleteContext");
-		*(FarProc*)&WglMakeCurrent    = GetProcAddress(gl_lib,"wglMakeCurrent");
-		
-		*(FarProc*)&GlClear       = GetProcAddress(gl_lib,"glClear");
-		*(FarProc*)&GlClearColor  = GetProcAddress(gl_lib,"glClearColor");
-		*(FarProc*)&GlEnable      = GetProcAddress(gl_lib,"glEnable");
-		*(FarProc*)&GlDisable     = GetProcAddress(gl_lib,"glDisable");
-		*(FarProc*)&GlAlphaFunc   = GetProcAddress(gl_lib,"glAlphaFunc");
-		*(FarProc*)&GlGetError    = GetProcAddress(gl_lib,"glGetError");
-		*(FarProc*)&GlPolygonMode = GetProcAddress(gl_lib,"glPolygonMode");
+			{.name = "glClear",.fn_ptr = (void(**)(void))&GlClear},
+			{.name = "glClearColor",.fn_ptr = (void(**)(void))&GlClearColor},
+			{.name = "glEnable",.fn_ptr = (void(**)(void))&GlEnable},
+			{.name = "glDisable",.fn_ptr = (void(**)(void))&GlDisable},
+			{.name = "glAlphaFunc",.fn_ptr = (void(**)(void))&GlAlphaFunc},
+			{.name = "glGetError",.fn_ptr = (void(**)(void))&GlGetError},
+			{.name = "glPolygonMode",.fn_ptr = (void(**)(void))&GlPolygonMode},
+			{.name = "glBegin",.fn_ptr = (void(**)(void))&GlBegin},
+			{.name = "glEnd",.fn_ptr = (void(**)(void))&GlEnd},
 
-		*(FarProc*)&GlBegin = GetProcAddress(gl_lib,"glBegin");
-		*(FarProc*)&GlEnd   = GetProcAddress(gl_lib,"glEnd");
+			{.name = "glVertex2f",.fn_ptr = (void(**)(void))&GlVertex2f},
+			{.name = "glVertex4f",.fn_ptr = (void(**)(void))&GlVertex4f},
+			{.name = "glColor3b",.fn_ptr = (void(**)(void))&GlVertex4f},
+			{.name = "glTexCoord2f",.fn_ptr = (void(**)(void))&GlTexCoord2f},
 
-		*(FarProc*)&GlVertex2f   = GetProcAddress(gl_lib,"glVertex2f");
-		*(FarProc*)&GlVertex4f   = GetProcAddress(gl_lib,"glVertex4f");
-		*(FarProc*)&GlColor3b    = GetProcAddress(gl_lib,"glColor3b");
-		*(FarProc*)&GlTexCoord2f = GetProcAddress(gl_lib,"glTexCoord2f");
+			{.name = "glGenTextures",.fn_ptr = (void(**)(void))&GlGenTextures},
+			{.name = "glDeleteTextures",.fn_ptr = (void(**)(void))&GlDeleteTextures},
+			{.name = "glBindTexture",.fn_ptr = (void(**)(void))&GlBindTexture},
+			{.name = "glTexImage2D",.fn_ptr = (void(**)(void))&GlTexImage2D},
+			{.name = "glTexParameteri",.fn_ptr = (void(**)(void))&GlTexParameteri},
+			{.name = "glTexParameterf",.fn_ptr = (void(**)(void))&GlTexParameterf},
+			{.name = "glGetFloatv",.fn_ptr = (void(**)(void))&GlGetFloatv},
+			{.name = "glGetIntegerv",.fn_ptr = (void(**)(void))&GlGetIntegerv},
+			{.name = "glGetString",.fn_ptr = (void(**)(void))&GlGetString},
+			{.name = "glViewport",.fn_ptr = (void(**)(void))&GlViewport},
 
-		*(FarProc*)&GlGenTextures    = GetProcAddress(gl_lib,"glGenTextures");
-		*(FarProc*)&GlDeleteTextures = GetProcAddress(gl_lib,"glDeleteTextures");
-		*(FarProc*)&GlBindTexture    = GetProcAddress(gl_lib,"glBindTexture");
-		*(FarProc*)&GlTexImage2D     = GetProcAddress(gl_lib,"glTexImage2D");
-		*(FarProc*)&GlTexParameteri  = GetProcAddress(gl_lib,"glTexParameteri");
-		*(FarProc*)&GlTexParameterf  = GetProcAddress(gl_lib,"glTexParameterf");
-		*(FarProc*)&GlGetFloatv      = GetProcAddress(gl_lib,"glGetFloatv");
-		*(FarProc*)&GlGetIntegerv    = GetProcAddress(gl_lib,"glGetIntegerv");
-		*(FarProc*)&GlGetString      = GetProcAddress(gl_lib,"glGetString");
-		*(FarProc*)&GlViewport       = GetProcAddress(gl_lib,"glViewport");
-
-		*(FarProc*)&GlDrawArrays = GetProcAddress(gl_lib,"glDrawArrays");
-		*(FarProc*)&GlReadPixels = GetProcAddress(gl_lib,"glReadPixels");
+			{.name = "glDrawArrays",.fn_ptr = (void(**)(void))&GlDrawArrays},
+			{.name = "glDrawElements",.fn_ptr = (void(**)(void))&GlDrawElements},
+			{.name = "glReadPixels",.fn_ptr = (void(**)(void))&GlReadPixels},
+		};
+		for(int i = countof(functions);i--;){
+		    	*functions[i].fn_ptr = (void(*)(void))GetProcAddress(gl_lib,functions[i].name);
+			if(!*functions[i].fn_ptr){
+				debugPrint("function not found in opengl library: ");
+				printNL(stringMake(functions[i].name));
+				FreeLibrary(gl_lib);
+				gl_lib = 0;
+				return false;
+			}
+		}
 	}
 	PixelFormatDescriptor pfd = {
 		.size = sizeof(PixelFormatDescriptor),
@@ -1310,54 +1353,64 @@ void createSurfaceGL(DrawSurface* surface){
 
 	const char* gl_version = GlGetString(GL_VERSION);
 	if(gl_version[0] == '3' || gl_version[0] == '4')
-		g_modern_gl = true;
+		modern_gl = true;
 
-	if(!GlCreateBuffers){
-		*(Proc*)&GlCreateBuffers           = WglGetProcAddress("glCreateBuffers");
-		*(Proc*)&GlGenBuffers              = WglGetProcAddress("glGenBuffers");
-		*(Proc*)&GlDeleteBuffers           = WglGetProcAddress("glDeleteBuffers");
-		*(Proc*)&GlBindBuffer              = WglGetProcAddress("glBindBuffer");
-		*(Proc*)&GlEnableVertexAttribArray = WglGetProcAddress("glEnableVertexAttribArray");
-		*(Proc*)&GlVertexAttribPointer     = WglGetProcAddress("glVertexAttribPointer");
-		*(Proc*)&GlShaderSource            = WglGetProcAddress("glShaderSource");
-		*(Proc*)&GlCompileShader           = WglGetProcAddress("glCompileShader");
-		*(Proc*)&GlAttachShader            = WglGetProcAddress("glAttachShader");
-		*(Proc*)&GlDeleteShader            = WglGetProcAddress("glDeleteShader");
-		*(Proc*)&GlLinkProgram             = WglGetProcAddress("glLinkProgram");
-		*(Proc*)&GlUseProgram              = WglGetProcAddress("glUseProgram");
-		*(Proc*)&GlDeleteProgram           = WglGetProcAddress("glDeleteProgram");
+	static bool modern_gl_loaded;
+	if(!modern_gl_loaded){
+		debugPrint((void*)GlGetString(GL_EXTENSIONS));
+		struct{
+			char* name;
+			void (**fn_ptr)(void);
+		} functions[] =  {
+			{.name = "glCreateBuffers",.fn_ptr = (void(**)(void))&GlCreateBuffers},
+			{.name = "glGenBuffers",.fn_ptr = (void(**)(void))&GlGenBuffers},
+			{.name = "glDeleteBuffers",.fn_ptr = (void(**)(void))&GlDeleteBuffers},
+			{.name = "glBindBuffer",.fn_ptr = (void(**)(void))&GlBindBuffer},
 
-		*(Proc*)&GlCreateProgram = WglGetProcAddress("glCreateProgram");
-		*(Proc*)&GlCreateShader  = WglGetProcAddress("glCreateShader");
+			{.name = "glEnableVertexAttribArray",.fn_ptr = (void(**)(void))&GlEnableVertexAttribArray},
+			{.name = "glVertexAttribPointer",.fn_ptr = (void(**)(void))&GlVertexAttribPointer},
+			{.name = "glShaderSource",.fn_ptr = (void(**)(void))&GlShaderSource},
+			{.name = "glCompileShader",.fn_ptr = (void(**)(void))&GlCompileShader},
+			{.name = "glAttachShader",.fn_ptr = (void(**)(void))&GlAttachShader},
+			{.name = "glDeleteShader",.fn_ptr = (void(**)(void))&GlDeleteShader},
+			{.name = "glLinkProgram",.fn_ptr = (void(**)(void))&GlLinkProgram},
+			{.name = "glUseProgram",.fn_ptr = (void(**)(void))&GlUseProgram},
+			{.name = "glDeleteProgram",.fn_ptr = (void(**)(void))&GlDeleteProgram},
 
-		*(Proc*)&GlBufferData = WglGetProcAddress("glBufferData");
+			{.name = "glCreateProgram",.fn_ptr = (void(**)(void))&GlCreateProgram},
+			{.name = "glCreateShader",.fn_ptr = (void(**)(void))&GlCreateShader},
+			{.name = "glBufferData",.fn_ptr = (void(**)(void))&GlBufferData},
+			{.name = "wglSwapIntervalEXT",.fn_ptr = (void(**)(void))&WglSwapIntervalEXT},
 
-		*(Proc*)&WglSwapIntervalEXT         = WglGetProcAddress("wglSwapIntervalEXT");
-		*(Proc*)&WglChoosePixelFormatARB    = WglGetProcAddress("wglChoosePixelFormatARB");
-		*(Proc*)&WglCreateContextAttribsARB = WglGetProcAddress("wglCreateContextAttribsARB");
+			{.name = "wglChoosePixelFormatARB",.fn_ptr = (void(**)(void))&WglChoosePixelFormatARB},
+			{.name = "wglCreateContextAttribsARB",.fn_ptr = (void(**)(void))&WglCreateContextAttribsARB},
+			{.name = "glUniform1i",.fn_ptr = (void(**)(void))&GlUniform1i},
+			{.name = "glUniform3f",.fn_ptr = (void(**)(void))&GlUniform3f},
+			{.name = "glGetUniformLocation",.fn_ptr = (void(**)(void))&GlGetUniformLocation},
+			{.name = "glActiveTexture",.fn_ptr = (void(**)(void))&GlActiveTexture},
+			{.name = "glGenVertexArrays",.fn_ptr = (void(**)(void))&GlGenVertexArrays},
+			{.name = "glDeleteVertexArrays",.fn_ptr = (void(**)(void))&GlDeleteVertexArrays},
+			{.name = "glBindVertexArray",.fn_ptr = (void(**)(void))&GlBindVertexArray},
+			{.name = "glGenFramebuffers",.fn_ptr = (void(**)(void))&GlGenFramebuffers},
 
-		*(Proc*)&GlUniform1i = WglGetProcAddress("glUniform1i");
-		*(Proc*)&GlUniform3f = WglGetProcAddress("glUniform3f");
-
-		*(Proc*)&GlGetUniformLocation = WglGetProcAddress("glGetUniformLocation");
-		*(Proc*)&GlActiveTexture      = WglGetProcAddress("glActiveTexture");
-
-		*(Proc*)&GlGenVertexArrays    = WglGetProcAddress("glGenVertexArrays");
-		*(Proc*)&GlDeleteVertexArrays = WglGetProcAddress("glDeleteVertexArrays");
-		*(Proc*)&GlBindVertexArray    = WglGetProcAddress("glBindVertexArray");
-
-		*(Proc*)&GlGenFramebuffers      = WglGetProcAddress("glGenFramebuffers");
-		*(Proc*)&GlBindFramebuffer      = WglGetProcAddress("glBindFramebuffer");
-		*(Proc*)&GlFramebufferTexture2D = WglGetProcAddress("glFramebufferTexture2D");
-		*(Proc*)&GlGenRenderbuffers     = WglGetProcAddress("glGenRenderbuffers");
-		*(Proc*)&GlBlitFramebuffer      = WglGetProcAddress("glBlitFramebuffer");
-
-		*(Proc*)&GlGetStringi = WglGetProcAddress("glGetStringi");
-
-		*(Proc*)&GlDrawElements = WglGetProcAddress("glDrawElements");
+			{.name = "glBindFramebuffer",.fn_ptr = (void(**)(void))&GlBindFramebuffer},
+			{.name = "glFramebufferTexture2D",.fn_ptr = (void(**)(void))&GlFramebufferTexture2D},
+			{.name = "glGenRenderbuffers",.fn_ptr = (void(**)(void))&GlGenRenderbuffers},
+			{.name = "glBlitFramebuffer",.fn_ptr = (void(**)(void))&GlBlitFramebuffer},
+			{.name = "glGetStringi",.fn_ptr = (void(**)(void))&GlGetStringi},
+		};
+		for(int i = countof(functions);i--;){
+			*functions[i].fn_ptr = (void(*)(void))WglGetProcAddress(functions[i].name);
+			if(!*functions[i].fn_ptr){
+				debugPrint("extension function not found in opengl library: ");
+				printNL(stringMake(functions[i].name));		        
+				return false;
+			}
+		}
+		modern_gl_loaded = true;
 	}
 
-	if(g_modern_gl){
+	if(modern_gl){
 		//query max supported SMAA
 		int pxf;
 		unsigned numf;
@@ -1379,24 +1432,24 @@ void createSurfaceGL(DrawSurface* surface){
 				break;
 			g_smaa_max = i;
 		}
-		if(g_modern_gl){
+		if(modern_gl){
 			int n;
 			GlGetIntegerv(GL_NUM_EXTENSIONS,&n);
 			for(int i = 0;i < n;i++) {
 				const char* ext = GlGetStringi(GL_EXTENSIONS,i);
-				g_anisotropic = stringInString((char*)ext,"GL_EXT_texture_filter_anisotropic");
+				g_anisotropic = cstringInString((char*)ext,"GL_EXT_texture_filter_anisotropic");
 				if(g_anisotropic)
 					break;
 			}
 		}
 		else{
 			const char* ext = GlGetString(GL_EXTENSIONS);
-			g_anisotropic = stringInString((char*)ext,"GL_EXT_texture_filter_anisotropic");
+			g_anisotropic = cstringInString((char*)ext,"GL_EXT_texture_filter_anisotropic");
 		}
 		if(g_anisotropic)
 			GlGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT,&g_anisotropic_max);
 
-		if(g_hdr){
+		if(hdr){
 			int px[] = {
 				WGL_DRAW_TO_WINDOW_ARB,true,
 				WGL_SUPPORT_OPENGL_ARB,true,
@@ -1440,13 +1493,13 @@ void createSurfaceGL(DrawSurface* surface){
 
 static void contextGlExit(void){
 	GlDeleteBuffers(1,&g_vbo);
-	GlDeleteVertexArrays(1,&g_vao);
-	GlDeleteVertexArrays(1,&g_vao_lighting);
-	GlDeleteVertexArrays(1,&g_vao_lighting_texture);
-	shaderProgramDelete(g_shader_program);
-	shaderProgramDelete(g_shader_lighting_program);
-	shaderProgramDelete(g_shader_texture_lighting_program);
-	shaderProgramDelete(g_shader_lighting_program);
+	GlDeleteVertexArrays(1,&vao);
+	GlDeleteVertexArrays(1,&vao_lighting);
+	GlDeleteVertexArrays(1,&vao_lighting_texture);
+	shaderProgramDelete(shader_program);
+	shaderProgramDelete(shader_lighting_program);
+	shaderProgramDelete(shader_texture_lighting_program);
+	shaderProgramDelete(shader_lighting_program);
 	textureResetGL();
 
 	WglMakeCurrent(0,0);
@@ -1493,7 +1546,7 @@ void antiAliasingSetGL(int amount){
 	DestroyWindow(g_window);
 
 	createWindow();
-	if(g_hdr){
+	if(hdr){
 		int px[] = {
 			WGL_DRAW_TO_WINDOW_ARB,true,
 			WGL_SUPPORT_OPENGL_ARB,true,
@@ -1552,8 +1605,8 @@ void surfaceClearGL(DrawSurface* surface){
 	GlClear(GL_COLOR_BUFFER_BIT);
 }
 
-void changeSurfaceSizeGL(DrawSurface surface){
-	GlViewport(0,0,surface.window_width,surface.window_height);
+void changeSurfaceSizeGL(DrawSurface* surface,int width,int height){
+	GlViewport(0,0,surface->window_width,surface->window_height);
 }
 
 void antiAliasingEnableGL(bool enable){

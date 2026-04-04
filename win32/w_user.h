@@ -265,7 +265,7 @@ extern "C"{
 #endif
 
 DLLIMPORT(int) ShowCursor(int show);
-DLLIMPORT(uint16) RegisterClassA(WndClassA *g_windowclass);
+DLLIMPORT(uint16) RegisterClassA(WndClassA *windowclass);
 DLLIMPORT(int) SetWindowPos(void* window,void* window_insert_after,int x,int y,int cx,int cy,unsigned flags);
 DLLIMPORT(int) GetCursorPos(Point* point);
 DLLIMPORT(int) SetCursorPos(int x,int y);

@@ -11,20 +11,12 @@
 
 #define countof(ARRAY) (sizeof(ARRAY) / sizeof((ARRAY)[0]))
 
-#ifdef __POCC__
-#define loop for(;1;)
-#else
-#define loop for(;;)
-#endif
-
 #define thread_local _declspec(thread)
 
 #define forceinline __forceinline
 #define noinline _declspec(noinline)
 
 #define alignas(VALUE) _declspec(align(VALUE))
-
-#define repeat(AMOUNT) for(size_t I = AMOUNT;I--;)
 
 typedef int8_t   int8;
 typedef uint8_t  uint8;
@@ -37,8 +29,14 @@ typedef uint64_t uint64;
 
 #ifdef __wasm__
 #define stdcall 
+#elif defined(__linux__)
+#define stdcall __attribute__((stdcall))
 #else
 #define stdcall _stdcall
+#endif
+
+#if __STDC_VERSION__ < 202311
+#define nullptr NULL
 #endif
 
 #endif

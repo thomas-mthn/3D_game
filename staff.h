@@ -6,16 +6,6 @@
 
 structure(Voxel);
 
-enumeration(SpellType){
-	SPELL_BOLT,
-	SPELL_ORB,
-	SPELL_BOMB,
-	SPELL_ADJ_DAMAGE,
-	SPELL_ADJ_SPEED,
-	SPELL_ADJ_DOUBLER,
-	SPELL_ECOUNT,
-};
-
 structure(SpellStatic){
 	bool adjective;
 	int cost;

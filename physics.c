@@ -4,20 +4,22 @@
 #include "audio.h"
 
 void movementFly(void){
+    if(g_edit_voxelstring)
+        return;
 	int speed = keyDown(KEY_LCONTROL) ? 2 : 4;
-	if(keyDown('W')){
+	if(keyDown(KEY_W)){
 		g_position.x -= tCos(g_angle.x) >> speed;
 		g_position.y -= tSin(g_angle.x) >> speed;
 	}
-	if(keyDown('S')){
+	if(keyDown(KEY_S)){
 		g_position.x += tCos(g_angle.x) >> speed;
 		g_position.y += tSin(g_angle.x) >> speed;
 	}
-	if(keyDown('A')){
+	if(keyDown(KEY_A)){
 		g_position.x += tCos(g_angle.x + FIXED_ONE / 4) >> speed;
 		g_position.y += tSin(g_angle.x + FIXED_ONE / 4) >> speed;
 	}
-	if(keyDown('D')){
+	if(keyDown(KEY_D)){
 		g_position.x -= tCos(g_angle.x + FIXED_ONE / 4) >> speed;
 		g_position.y -= tSin(g_angle.x + FIXED_ONE / 4) >> speed;
 	}
@@ -118,8 +120,10 @@ Vec3 playerHitboxGet(void){
 #define WALK_SPEED (FIXED_ONE / 320)
 #define DIAGONAL 0x0000B53C
 #define BHOP_BONUS (FIXED_ONE / 128)
-#include "win32/w_console.h"
+
 void movementNormal(void){
+    if(g_edit_voxelstring)
+        return;
 	int max_height_x = 0;
 	int max_height_y = 0;
 	bool hit[3];
@@ -201,29 +205,29 @@ void movementNormal(void){
 	else{
 		moved = 0;
 	}
-	if(keyDown('W')){
-		int mod = keyDown('D') || keyDown('A') ? fixedMulR(WALK_SPEED,DIAGONAL) : WALK_SPEED;
+	if(keyDown(KEY_W)){
+		int mod = keyDown(KEY_D) || keyDown(KEY_A) ? fixedMulR(WALK_SPEED,DIAGONAL) : WALK_SPEED;
 		if(in_air)
 			fixedMul(&mod,FIXED_ONE / 16);
 		g_velocity.x -= fixedMulR(tCos(g_angle.x),mod * 2);
 		g_velocity.y -= fixedMulR(tSin(g_angle.x),mod * 2);
 	}
-	if(keyDown('S')){
-		int mod = keyDown('D') || keyDown('A') ? fixedMulR(WALK_SPEED,DIAGONAL) : WALK_SPEED;
+	if(keyDown(KEY_S)){
+		int mod = keyDown(KEY_D) || keyDown(KEY_A) ? fixedMulR(WALK_SPEED,DIAGONAL) : WALK_SPEED;
 		if(in_air)
 			fixedMul(&mod,FIXED_ONE / 16);
 		g_velocity.x += fixedMulR(tCos(g_angle.x),mod * 2);
 		g_velocity.y += fixedMulR(tSin(g_angle.x),mod * 2);
 	}
-	if(keyDown('D')){
-		int mod = keyDown('S') || keyDown('W') ? fixedMulR(WALK_SPEED,DIAGONAL) : WALK_SPEED;
+	if(keyDown(KEY_D)){
+		int mod = keyDown(KEY_S) || keyDown(KEY_W) ? fixedMulR(WALK_SPEED,DIAGONAL) : WALK_SPEED;
 		if(in_air)
 			fixedMul(&mod,FIXED_ONE / 16);
 		g_velocity.x -= fixedMulR(tCos(g_angle.x + FIXED_ONE / 4),mod * 2);
 		g_velocity.y -= fixedMulR(tSin(g_angle.x + FIXED_ONE / 4),mod * 2);
 	}
-	if(keyDown('A')){
-		int mod = keyDown('S') || keyDown('W') ? fixedMulR(WALK_SPEED,DIAGONAL) : WALK_SPEED;
+	if(keyDown(KEY_A)){
+		int mod = keyDown(KEY_S) || keyDown(KEY_W) ? fixedMulR(WALK_SPEED,DIAGONAL) : WALK_SPEED;
 		if(in_air)
 			fixedMul(&mod,FIXED_ONE / 16);
 		g_velocity.x += fixedMulR(tCos(g_angle.x + FIXED_ONE / 4),mod * 2);
@@ -241,17 +245,17 @@ void movementNormal(void){
 
 	delta_angle += (g_angle.x - prev_angle) * 0x10;
 	
-	bool key_a = keyDown('A');
-	bool key_d = keyDown('D');
+	bool key_a = keyDown(KEY_A);
+	bool key_d = keyDown(KEY_D);
 
-	if(!keyDown('W')){
+	if(!keyDown(KEY_W)){
 		if(delta_angle < 0 && key_a && !key_d && in_air){
 			int boost = tClamp(FIXED_ONE / 4 - tAbs(-delta_angle - FIXED_ONE),0,FIXED_ONE);
 
 			Vec2 angle = g_angle;
 			angle.x -= FIXED_ONE / 16;
 
-			if(!keyDown('W')){
+			if(!keyDown(KEY_W)){
 				g_velocity.x += fixedMulR(fixedMulR(getLookDirection(angle).x,BHOP_BONUS),boost << 2);
 				g_velocity.y += fixedMulR(fixedMulR(getLookDirection(angle).y,BHOP_BONUS),boost << 2);
 			}
@@ -262,7 +266,7 @@ void movementNormal(void){
 			Vec2 angle = g_angle;
 			angle.x += FIXED_ONE / 16;
 
-			if(!keyDown('W')){
+			if(!keyDown(KEY_W)){
 				g_velocity.x += fixedMulR(fixedMulR(getLookDirection(angle).x,BHOP_BONUS),boost << 2);
 				g_velocity.y += fixedMulR(fixedMulR(getLookDirection(angle).y,BHOP_BONUS),boost << 2);
 			}

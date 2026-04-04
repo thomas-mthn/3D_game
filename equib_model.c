@@ -2,6 +2,7 @@
 #include "octree.h"
 #include "main.h"
 #include "lighting.h"
+#include "draw.h"
 
 static struct{
 	Vec3 position;
@@ -17,8 +18,8 @@ static Vec3 modelPointToScreen(Vec3 point){
 	if(pos.x <= 0)	
 		return vec3Single(0);
 
-	screen_point.x = fixedDivR(fixedMulR(pos.z,g_fov.x),pos.x);
-	screen_point.y = fixedDivR(fixedMulR(pos.y,g_fov.y),pos.x);
+	screen_point.x = fixedDivR(fixedMulR(pos.z,g_options.fov.x),pos.x);
+	screen_point.y = fixedDivR(fixedMulR(pos.y,g_options.fov.y),pos.x);
 	if(screen_point.x > FIXED_ONE * 16 || screen_point.x < -FIXED_ONE * 16 || screen_point.y > FIXED_ONE * 16 || screen_point.y < -FIXED_ONE * 16)
 		return vec3Single(0);
 	screen_point.z = pos.x;
@@ -35,32 +36,32 @@ static void drawBlock(Voxel* voxel,Vec3 octree_position,Vec3* luminance,int bloc
 
 	Vec3 pos = vec3AddR(g_holdable.position,octree_position);
 
-	Vec3 vertex[8];
-	for(int i = 0;i < 8;i++){
+	Vec3 vertices[8];
+	for(int i = 0;i < countof(vertices);i++){
 		int x = i & 1 ? block_size >> 9 : 0;
 		int y = i & 2 ? block_size >> 9 : 0;
 		int z = i & 4 ? block_size >> 9 : 0;
 		Vec3 verticle_pos = vec3AddR(pos,(Vec3){x,y,z});
 
-		vertex[i] = modelPointToScreen(verticle_pos);
+		vertices[i] = modelPointToScreen(verticle_pos);
 	}
 
-	Vec2 vertices[][4] = {
-		{{vertex[0].x,vertex[0].y},{vertex[1].x,vertex[1].y},{vertex[3].x,vertex[3].y},{vertex[2].x,vertex[2].y}},
-		{{vertex[4].x,vertex[4].y},{vertex[5].x,vertex[5].y},{vertex[7].x,vertex[7].y},{vertex[6].x,vertex[6].y}},
+	Vec2 vertices_2d[][4] = {
+		{{vertices[0].x,vertices[0].y},{vertices[1].x,vertices[1].y},{vertices[3].x,vertices[3].y},{vertices[2].x,vertices[2].y}},
+		{{vertices[4].x,vertices[4].y},{vertices[5].x,vertices[5].y},{vertices[7].x,vertices[7].y},{vertices[6].x,vertices[6].y}},
 
-		{{vertex[0].x,vertex[0].y},{vertex[1].x,vertex[1].y},{vertex[5].x,vertex[5].y},{vertex[4].x,vertex[4].y}},
-		{{vertex[2].x,vertex[2].y},{vertex[3].x,vertex[3].y},{vertex[7].x,vertex[7].y},{vertex[6].x,vertex[6].y}},
+		{{vertices[0].x,vertices[0].y},{vertices[1].x,vertices[1].y},{vertices[5].x,vertices[5].y},{vertices[4].x,vertices[4].y}},
+		{{vertices[2].x,vertices[2].y},{vertices[3].x,vertices[3].y},{vertices[7].x,vertices[7].y},{vertices[6].x,vertices[6].y}},
 
-		{{vertex[0].x,vertex[0].y},{vertex[2].x,vertex[2].y},{vertex[6].x,vertex[6].y},{vertex[4].x,vertex[4].y}},
-		{{vertex[1].x,vertex[1].y},{vertex[3].x,vertex[3].y},{vertex[7].x,vertex[7].y},{vertex[5].x,vertex[5].y}},
+		{{vertices[0].x,vertices[0].y},{vertices[2].x,vertices[2].y},{vertices[6].x,vertices[6].y},{vertices[4].x,vertices[4].y}},
+		{{vertices[1].x,vertices[1].y},{vertices[3].x,vertices[3].y},{vertices[7].x,vertices[7].y},{vertices[5].x,vertices[5].y}},
 	};
 
 	VoxelStatic* voxel_s = g_voxel_static + voxel->type;
 
-	drawPolygon(g_surface,vertices[0],4,vec3MulR(voxel_s->color,luminance[0]));
-	drawPolygon(g_surface,vertices[3],4,vec3MulR(voxel_s->color,luminance[1]));
-	drawPolygon(g_surface,vertices[4],4,vec3MulR(voxel_s->color,luminance[2]));
+	drawPolygon(g_surface,vertices_2d[0],4,vec3MulR(voxel_s->color,luminance[0]));
+	drawPolygon(g_surface,vertices_2d[3],4,vec3MulR(voxel_s->color,luminance[1]));
+	drawPolygon(g_surface,vertices_2d[4],4,vec3MulR(voxel_s->color,luminance[2]));
 }
 
 static void guiOctreeDrawRecursive(Voxel* voxel,Vec3 octree_position,Vec3* luminance,int view){
@@ -88,13 +89,13 @@ static void guiOctreeDrawRecursive(Voxel* voxel,Vec3 octree_position,Vec3* lumin
 			{7,5,6,3,4,1,2,0},
 		};
 		Vec3 pos = vec3ShrR(voxelWorldPos(voxel),8);
-		for(int i = 0;i < 8;i++){
+		for(int i = 0;i < countof(voxel->child_s);i++){
 			int index = order[view][i];
 			guiOctreeDrawRecursive(voxel->child_s[index],octree_position,luminance,view);
 		}
 		return;
 	}
-	if(voxel->type == VOXEL_AIR || voxel->type == VOXEL_MIRROR || g_voxel_static[voxel->type].flags & VOXEL_FLAG_EMITER)
+	if(voxel->type == VOXEL_AIR || voxel->type == VOXEL_MIRROR || g_voxel_static[voxel->type].flags & VOXEL_EMITER)
 		return;
 	drawBlock(voxel,octree_position,luminance,block_size,vec3ShrR(pixelColorToColor(0x507090),4));
 }
@@ -116,26 +117,26 @@ static void drawBlockSelect(Vec3 octree_position,Vec3* luminance,int block_size,
 
 	Vec3 pos = g_holdable.position;
 
-	Vec3 vertex[8];
+	Vec3 vertices[8];
 	for(int i = 0;i < 8;i++){
 		int x = i & 1 ? block_size / 4 : 0;
 		int y = i & 2 ? block_size / 4 : 0;
 		int z = i & 4 ? block_size / 4 : 0;
 		Vec3 verticle_pos = vec3AddR(pos,(Vec3){x,y,z});
 
-		vertex[i] = modelPointToScreen(verticle_pos);
+		vertices[i] = modelPointToScreen(verticle_pos);
 	}
 	VoxelStatic* voxel_s = g_voxel_static + g_voxel_select;
 
-	Vec2 vertices[][4] = {
-		{{vertex[0].x,vertex[0].y},{vertex[1].x,vertex[1].y},{vertex[3].x,vertex[3].y},{vertex[2].x,vertex[2].y}},
-		{{vertex[4].x,vertex[4].y},{vertex[5].x,vertex[5].y},{vertex[7].x,vertex[7].y},{vertex[6].x,vertex[6].y}},
+	Vec2 vertices_2d[][4] = {
+		{{vertices[0].x,vertices[0].y},{vertices[1].x,vertices[1].y},{vertices[3].x,vertices[3].y},{vertices[2].x,vertices[2].y}},
+		{{vertices[4].x,vertices[4].y},{vertices[5].x,vertices[5].y},{vertices[7].x,vertices[7].y},{vertices[6].x,vertices[6].y}},
 
-		{{vertex[0].x,vertex[0].y},{vertex[1].x,vertex[1].y},{vertex[5].x,vertex[5].y},{vertex[4].x,vertex[4].y}},
-		{{vertex[2].x,vertex[2].y},{vertex[3].x,vertex[3].y},{vertex[7].x,vertex[7].y},{vertex[6].x,vertex[6].y}},
+		{{vertices[0].x,vertices[0].y},{vertices[1].x,vertices[1].y},{vertices[5].x,vertices[5].y},{vertices[4].x,vertices[4].y}},
+		{{vertices[2].x,vertices[2].y},{vertices[3].x,vertices[3].y},{vertices[7].x,vertices[7].y},{vertices[6].x,vertices[6].y}},
 
-		{{vertex[0].x,vertex[0].y},{vertex[2].x,vertex[2].y},{vertex[6].x,vertex[6].y},{vertex[4].x,vertex[4].y}},
-		{{vertex[1].x,vertex[1].y},{vertex[3].x,vertex[3].y},{vertex[7].x,vertex[7].y},{vertex[5].x,vertex[5].y}},
+		{{vertices[0].x,vertices[0].y},{vertices[2].x,vertices[2].y},{vertices[6].x,vertices[6].y},{vertices[4].x,vertices[4].y}},
+		{{vertices[1].x,vertices[1].y},{vertices[3].x,vertices[3].y},{vertices[7].x,vertices[7].y},{vertices[5].x,vertices[5].y}},
 	};
 
 	bool frontface[] = {
@@ -148,11 +149,11 @@ static void drawBlockSelect(Vec3 octree_position,Vec3* luminance,int block_size,
 	};
 
 	if(voxel_s->texture){
-		if(voxel_s->flags & VOXEL_FLAG_TEXTURE_FILL){
+		if(voxel_s->flags & VOXEL_TEXTUREFILL){
 			for(int i = 0;i < countof(frontface);i++){
 				if(!frontface[i])
 					continue;
- 				drawTexturePolygon(g_surface,voxel_s->texture,g_texture_coordinates_fill,vertices[i],luminance[i / 2],4);
+ 				drawTexturePolygon(g_surface,voxel_s->texture,g_texture_coordinates_fill,vertices_2d[i],luminance[i / 2],4);
 			}
 		}
 		else{
@@ -165,22 +166,22 @@ static void drawBlockSelect(Vec3 octree_position,Vec3* luminance,int block_size,
 			for(int i = 0;i < countof(frontface);i++){
 				if(!frontface[i])
 					continue;
- 				drawTexturePolygon(g_surface,voxel_s->texture,texture_coordinates_fill,vertices[i],luminance[i / 2],4);
+ 				drawTexturePolygon(g_surface,voxel_s->texture,texture_coordinates_fill,vertices_2d[i],luminance[i / 2],4);
 			}
 		}
 	}
-	else if(voxel_s->flags & VOXEL_FLAG_EMITER){
+	else if(voxel_s->flags & VOXEL_EMITER){
 		for(int i = 0;i < countof(frontface);i++){
 			if(!frontface[i])
 				continue;
-			drawPolygon(g_surface,vertices[i],4,voxel_s->color);
+			drawPolygon(g_surface,vertices_2d[i],4,voxel_s->color);
 		}
 	}
 	else{
 		for(int i = 0;i < countof(frontface);i++){
 			if(!frontface[i])
 				continue;
-			drawPolygon(g_surface,vertices[i],4,vec3MulR(voxel_s->color,luminance[i / 2]));
+			drawPolygon(g_surface,vertices_2d[i],4,vec3MulR(voxel_s->color,luminance[i / 2]));
 		}
 	}
 }

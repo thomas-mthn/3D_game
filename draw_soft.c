@@ -6,7 +6,9 @@
 #include "vec3.h"
 #include "main.h"
 
-#ifndef __wasm__
+#ifdef __linux__
+#include "linux/l_main.h"
+#elif !defined(__wasm__)
 #include "win32/w_gdi.h"
 #endif
 
@@ -23,13 +25,13 @@ static int numberStringLength(int number){
     return length;
 }
 
-void createSurfaceSoft(DrawSurface* surface){
+bool softSurfaceCreate(DrawSurface* surface){
     if(!surface->data)
-        surface->data = tMalloc(surface->height * surface->width * sizeof(int));
+        surface->data = tMalloc(surface->height * surface->width * sizeof(surface->data));
     surface->scanline = tMalloc(surface->height * sizeof(Vec2));
     surface->scanline_color = tMalloc(surface->height * sizeof(ScanlineColor));
     surface->scanline_texture = tMalloc(surface->height * sizeof(ScanlineTexture));
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
     surface->soft_bitmapinfo = (BitmapInfo){
 		.bmi_header = {
 			.size = sizeof(BitmapInfo),
@@ -42,19 +44,38 @@ void createSurfaceSoft(DrawSurface* surface){
 #endif
 }
 
-void destroySurfaceSoft(DrawSurface* surface){
-    tFree(surface->data);
+void softSurfaceDestroyMeta(DrawSurface* surface){
     tFree(surface->scanline);
     tFree(surface->scanline_color);
     tFree(surface->scanline_texture);
 }
 
-void surfaceClearSoft(DrawSurface* surface){
+void softSurfaceDestroy(DrawSurface* surface){
+    tFree(surface->data);
+    softSurfaceDestroyMeta(surface);
+}
+
+void softSurfaceClear(DrawSurface* surface){
     drawSquare(g_surface,-FIXED_ONE,-FIXED_ONE,FIXED_ONE * 2,vec3Single(0));
 }
 
-void blitSurfaceSoft(DrawSurface surface){
-#ifndef __wasm__
+void softSurfaceSizeChange(DrawSurface* surface,int width,int height){
+    surface->width = width;
+    surface->height = height;
+    tFree(surface->data);
+    tFree(surface->scanline);
+    tFree(surface->scanline_color);
+    tFree(surface->scanline_texture);
+    surface->scanline = tMalloc(surface->height * sizeof(Vec2));
+    surface->scanline_color = tMalloc(surface->height * sizeof(ScanlineColor));
+    surface->scanline_texture = tMalloc(surface->height * sizeof(ScanlineTexture));
+    surface->data = tMalloc(width * height * sizeof(surface->data));
+}
+
+void softSurfaceBlit(DrawSurface surface){
+#ifdef __linux__
+	linuxBlit(surface.data,surface.width,surface.height);
+#elif !defined(__wasm__)
     StretchDIBits(surface.window_context,0,0,surface.window_width,surface.window_height,0,0,surface.width,surface.height,surface.data,&surface.soft_bitmapinfo,0,0x00CC0020);
 #endif
 }
@@ -304,8 +325,6 @@ void drawSegmentSoft(DrawSurface surface,int x1,int y1,int x2,int y2,int thickne
 void drawPolygonSoft(DrawSurface surface,Vec2* coordinats,int n_point,Vec3 color){
     int pixel_color = colorToPixelColor(color);
     for(int i = 0;i < n_point;i++){
-        int v = transformDraw(surface.height,coordinats[i].x);
-        int v2 = transformDraw(surface.width ,coordinats[i].y);
         coordinats[i].x = transformDraw(surface.height,coordinats[i].x);
         coordinats[i].y = transformDraw(surface.width ,coordinats[i].y);
     }
@@ -329,7 +348,7 @@ void drawPolygonSoft(DrawSurface surface,Vec2* coordinats,int n_point,Vec3 color
 		surface.scanline[i].y = INT_MIN;
 	}
 
-    for(int i = 0;i < n_point;i++){
+    for(int i = 0;i < n_point;i += 1){
         Vec2 p1 = coordinats[i];
         Vec2 p2 = coordinats[(i + 1) % n_point];
         setScanline(surface.scanline,p1,p2,surface.height);
@@ -343,7 +362,7 @@ void drawPolygonSoft(DrawSurface surface,Vec2* coordinats,int n_point,Vec3 color
     }
 }
 
-void drawPolygon3dSoft(DrawSurface surface,Vec3* coordinats,Vec3* fog_color,int* fog_density,Vec3 color){
+void drawPolygon3dSoft(DrawSurface surface,Vec3* coordinats,Vec3 color){
     if(coordinats[0].z <= 0 || coordinats[1].z <= 0 || coordinats[2].z <= 0 || coordinats[3].z <= 0)
         return;
     Vec2 coords_2d[] = {
@@ -411,7 +430,7 @@ void drawColoredPolygonSoft(DrawSurface surface,Vec2* coordinats,Vec3* color,int
     }
 }
 
-void drawColoredPolygon3dSoft(DrawSurface surface,Vec3* coordinats,Vec3* color,Vec3* fog_color,int* fog_strength){
+void drawColoredPolygon3dSoft(DrawSurface surface,Vec3* coordinats,Vec3* color){
     if(coordinats[0].z <= 0 || coordinats[1].z <= 0 || coordinats[2].z <= 0 || coordinats[3].z <= 0)
         return;
     Vec2 coords_2d[] = {
@@ -604,7 +623,7 @@ void drawColoredTexturePolygonSoft(DrawSurface surface,Texture* texture,Vec2* te
     }
 }
 
-void drawColoredTexturePolygon3dSoft(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,Vec3* fog_color,int* fog_strength){
+void drawColoredTexturePolygon3dSoft(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color){
     if(coordinats[0].z <= 0 || coordinats[1].z <= 0 || coordinats[2].z <= 0 || coordinats[3].z <= 0)
         return;
     Vec2 coords_2d[] = {
@@ -617,27 +636,18 @@ void drawColoredTexturePolygon3dSoft(DrawSurface surface,Texture* texture,Vec2* 
 }
 
 void drawSegmentSoft(DrawSurface surface,int x1,int y1,int x2,int y2,int thickness,Vec3 color){
-    int pixel_color = colorToPixelColor(color);
     Vec2 p1 = {x1,y1};
     Vec2 p2 = {x2,y2};
 
-    x1 = transformDraw(surface.height,x1);
-    y1 = transformDraw(surface.width ,-y1);
-    x2 = transformDraw(surface.height,x2);
-    y2 = transformDraw(surface.width ,-y2);
+    Vec2 direction = vec2MulRS(vec2Direction((Vec2){x1,y1},(Vec2){x2,y2}),thickness);
+    Vec2 quad[] = {
+        vec2AddR((Vec2){x1,y1},vec2Rotate(direction,FIXED_ONE / 8 * 3)),
+        vec2AddR((Vec2){x2,y2},vec2Rotate(direction,FIXED_ONE / 8 * 1)),
+        vec2AddR((Vec2){x2,y2},vec2Rotate(direction,FIXED_ONE / 8 * 7)),
+        vec2AddR((Vec2){x1,y1},vec2Rotate(direction,FIXED_ONE / 8 * 5)),
+    };
 
-    int min_x = tMax(tMin(x1,x2) - scaleDraw(surface.height,thickness) * 2,0);
-    int min_y = tMax(tMin(y1,y2) - scaleDraw(surface.width ,thickness) * 2,0);
-    int max_x = tMin(tMax(x1,x2) + scaleDraw(surface.height,thickness) * 2,surface.height - 1);
-    int max_y = tMin(tMax(y1,y2) + scaleDraw(surface.width ,thickness) * 2,surface.width  - 1);
-
-    for(int i = min_x;i < max_x;i++){
-        for(int j = min_y;j < max_y;j++){
-            if(sdSegment((Vec2){(i << FIXED_PRECISION + 1) / surface.height - FIXED_ONE,(j << FIXED_PRECISION + 1) / surface.width - FIXED_ONE},p1,p2) > thickness)
-                continue;
-            surface.data[i * surface.width + j] = pixel_color;
-        }
-    }
+    drawPolygonSoft(surface,quad,4,color);
 }
 
 void drawLineSoft(DrawSurface surface,int x1,int y1,int x2,int y2,Vec3 color){
@@ -656,7 +666,7 @@ void drawLineSoft(DrawSurface surface,int x1,int y1,int x2,int y2,Vec3 color){
         x1 >= 0 && x1 < surface.height && x2 >= 0 && x2 < surface.height &&
         y1 >= 0 && y1 < surface.width && y2 >= 0 && y2 < surface.width
     ){
-        loop{
+        for(;;){
             surface.data[x1 * surface.width + y1] = pixel_color;
             if(x1 == x2 && y1 == y2)
                 return;
@@ -672,7 +682,7 @@ void drawLineSoft(DrawSurface surface,int x1,int y1,int x2,int y2,Vec3 color){
         }
     }
 
-    loop{
+    for(;;){
         if(x1 >= 0 && x1 < surface.height && y1 >= 0 && y1 < surface.width)
             surface.data[x1 * surface.width + y1] = pixel_color;
         if(x1 == x2 && y1 == y2)
@@ -740,7 +750,7 @@ void drawRingSoft(DrawSurface surface,int x,int y,int radius,int thickness,Vec3 
 void drawRectangleSoft(DrawSurface surface,int x,int y,int size_x,int size_y,Vec3 color){
     int pixel_color = colorToPixelColor(color);
     x = transformDraw(surface.height,x);
-    y = transformDraw(surface.width ,-y);
+    y = transformDraw(surface.width ,y);
     size_x = scaleDraw(surface.height,size_x);
     size_y = scaleDraw(surface.width ,size_y);
     int min_x = tMax(x,0);
@@ -752,3 +762,4 @@ void drawRectangleSoft(DrawSurface surface,int x,int y,int size_x,int size_y,Vec
             surface.data[i * surface.width + j] = pixel_color;
     }
 }
+

@@ -3,8 +3,17 @@
 
 #include "langext.h"
 
-enumeration(SpellType);
 structure(Staff);
+
+typedef enum{
+	SPELL_BOLT,
+	SPELL_ORB,
+	SPELL_BOMB,
+	SPELL_ADJ_DAMAGE,
+	SPELL_ADJ_SPEED,
+	SPELL_ADJ_DOUBLER,
+	SPELL_ECOUNT,
+} SpellType;
 
 structure(InventorySlot){
 	enum{

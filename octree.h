@@ -3,7 +3,6 @@
 
 #include "vec2.h"
 #include "vec3.h"
-#include "draw.h"
 #include "entity.h"
 #include "langext.h"
 #include "voxel_gui.h"
@@ -26,7 +25,7 @@ static Vec3 g_normal_table[] = {
 	{0,0,FIXED_ONE}
 };
 
-enumeration(VoxelType){
+typedef enum{
 	VOXEL_AIR = -2,
 	VOXEL_PARENT,
 	VOXEL_BLOCK,
@@ -59,8 +58,9 @@ enumeration(VoxelType){
 	VOXEL_WATER,
 	VOXEL_STONE2,
 	VOXEL_BOSS,
-	VOXEL_ECOUNT,
-};
+    VOXEL_STRING,
+    VOXEL_ECOUNT,
+} VoxelType;
 
 structure(Voxel){
 	VoxelType type;
@@ -69,6 +69,7 @@ structure(Voxel){
 	int16 position_y;
 	int16 position_z;
     int8 depth;
+    int emission;
 	union{
 		//parent
 		struct{
@@ -84,13 +85,18 @@ structure(Voxel){
 			Voxel* next_voxel_link;
 			Entity* entity_list;
 			int animation;
+
 			//water 
 			Vec2 splash_position;
 			unsigned splash_tick;
 			unsigned collision_tick;
 
+             //chest
 			bool chest_open;
 			bool opened;
+
+             //string
+             String string;
 		};
 	};
 	//TODO: move this in a temporary structure to safe memory
@@ -100,9 +106,10 @@ structure(Voxel){
 structure(VoxelStatic){
 	Vec3 color;
 	enum{
-		VOXEL_FLAG_EMITER         = 1 << 0,
-		VOXEL_FLAG_TEXTURE_FILL   = 1 << 1,
-		VOXEL_FLAG_NO_BLOCK_PLACE = 1 << 2,
+		VOXEL_EMITER        = 1 << 0,
+		VOXEL_TEXTUREFILL   = 1 << 1,
+		VOXEL_NO_BLOCKPLACE = 1 << 2,
+        VOXEL_TRANSLUCENT   = 1 << 3,
 	} flags;
 	Texture* texture;
 	int texture_size;
@@ -129,6 +136,12 @@ structure(VoxelSerialized){
 structure(VoxelSerializedButton){
 	VoxelSerialized voxel;
 	int linked;
+};
+
+structure(VoxelSerializedString){
+    VoxelSerialized voxel;
+    uint8 string_length;
+    char string_data[];
 };
 
 structure(VoxelSerializedParent){

@@ -1,68 +1,72 @@
 #include "voxel_gui.h"
+#include "draw.h"
 #include "main.h"
 #include "font.h"
+#include "span.h"
 
-static int tStrlen(char* str){
-	char* str_b = str;
-	while(*str++);
-	return str - str_b;
-}
-
-static void drawString3D(DrawSurface surface,Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,char* str,int str_length,int scale,bool mirror){
+void drawString3D(DrawSurface* surface,Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,String string,int scale,bool mirror,int thickness){
     int down_offset = 0;
     int offset = 0;
-	if(str_length == STRING_LENGTH_CSTRING)
-		str_length = tStrlen(str);
-    while(*str){
-        if(*str == '\n'){
-            down_offset += 1;
-            offset = 0;
+	for(int i = 0;i < string.size;i++){
+		char string_char = string.data[i];
+	        if(string_char == '\n'){
+	            down_offset += 1;
+	            offset = 0;
+	        }
+	        else{
+    			for(int i = 0;g_vector_font[string_char].position[i][0];i++){
+    				uint8* coords = &g_vector_font[string_char].position[i][0];
+    				int voxel_size = depthToSize(voxel->depth);
+    				Vec3 position = block_pos;
+    				int offset_f = mirror ? string.size - offset : offset;
+    				((int*)&position)[axis.x] += fixedMulR(voxel_size,uv.x + offset_f * scale);
+    				((int*)&position)[axis.y] += fixedMulR(voxel_size,uv.y);
+    				Vec3 points[] = {
+    					position,
+    					position,
+    				};
+                    
+    				((int*)&points[1])[axis.y] -= fixedMulR(coords[0] << 8,fixedMulR(scale,voxel_size));
+    				((int*)&points[1])[axis.x] += fixedMulR(coords[1] << 8,fixedMulR(scale,voxel_size)) * (!mirror * 2 - 1);
+    				((int*)&points[0])[axis.y] -= fixedMulR(coords[2] << 8,fixedMulR(scale,voxel_size));
+    				((int*)&points[0])[axis.x] += fixedMulR(coords[3] << 8,fixedMulR(scale,voxel_size)) * (!mirror * 2 - 1);
+
+    				((int*)&points[1])[axis.y] += fixedMulR(scale,voxel_size);
+    				((int*)&points[1])[axis.x] += fixedMulR(scale,voxel_size);
+    				((int*)&points[0])[axis.y] += fixedMulR(scale,voxel_size);
+    				((int*)&points[0])[axis.x] += fixedMulR(scale,voxel_size);
+
+    				Vec2 point_1 = {((int*)&points[0])[axis.x],((int*)&points[0])[axis.y]};
+    				Vec2 point_2 = {((int*)&points[1])[axis.x],((int*)&points[1])[axis.y]};
+
+    				Vec2 direction = vec2MulRS(vec2Direction(point_1,point_2),thickness);
+    				                                
+    				Vec3 quad[] = {points[0],points[1],points[0],points[1]};
+    				                
+    				Vec2 quad2d[] = {
+    				    vec2AddR(point_1,vec2Rotate(direction,FIXED_ONE / 8 * 3)),
+    				    vec2AddR(point_2,vec2Rotate(direction,FIXED_ONE / 8 * 1)),
+    				    vec2AddR(point_1,vec2Rotate(direction,FIXED_ONE / 8 * 5)),
+    				    vec2AddR(point_2,vec2Rotate(direction,FIXED_ONE / 8 * 7)),
+    				};
+
+    				if(points[0].z <= 0 || points[1].z <= 0)
+    					continue;
+    				for(int j = 0;j < 4;j++){
+    					((int*)(quad + j))[axis.x] = quad2d[j].x;
+    					((int*)(quad + j))[axis.y] = quad2d[j].y;
+    				}
+    				drawPolygon3d(*surface,quad,pixelColorToColor(0xFFFFFF));
+            	}
         }
-        else{
-            for(int i = 0;g_vector_font[*str][i][0];i++){
-                uint8* coords = &g_vector_font[*str][i][0];
-				int voxel_size = depthToSize(voxel->depth);
-				Vec3 position = block_pos;
-				int offset_f = mirror ? str_length - offset : offset;
-				((int*)&position)[axis.x] += fixedMulR(voxel_size,uv.x + offset_f * scale);
-				((int*)&position)[axis.y] += fixedMulR(voxel_size,uv.y);
-				Vec3 points[] = {
-					position,
-					position,
-				};
-				((int*)&points[1])[axis.y] -= fixedMulR(coords[0] << 8,fixedMulR(scale,voxel_size));
-				((int*)&points[1])[axis.x] += fixedMulR(coords[1] << 8,fixedMulR(scale,voxel_size)) * (!mirror * 2 - 1);
-				((int*)&points[0])[axis.y] -= fixedMulR(coords[2] << 8,fixedMulR(scale,voxel_size));
-				((int*)&points[0])[axis.x] += fixedMulR(coords[3] << 8,fixedMulR(scale,voxel_size)) * (!mirror * 2 - 1);
-
-				((int*)&points[1])[axis.y] += fixedMulR(scale,voxel_size);
-				((int*)&points[1])[axis.x] += fixedMulR(scale,voxel_size);
-				((int*)&points[0])[axis.y] += fixedMulR(scale,voxel_size);
-				((int*)&points[0])[axis.x] += fixedMulR(scale,voxel_size);
-
-				points[0] = pointToScreen(points[0]);
-				points[1] = pointToScreen(points[1]);
-
-				Vec2 d_point[] = {
-					{points[0].x,points[0].y},
-					{points[1].x,points[1].y},
-				};
-
-				if(points[0].z <= 0 || points[1].z <= 0)
-					continue;
-
-                drawLine(surface,d_point[0].x,d_point[0].y,d_point[1].x,d_point[1].y,pixelColorToColor(0xFFFFFF));
-            }
-        }
-        str += 1;
         offset += 1;
     }
 }
 
 static void drawNumber3D(DrawSurface surface,Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,int number,int scale,bool mirror){
 	char buffer[0x10];
-    intToString(buffer,number);
-	drawString3D(g_surface,voxel,axis,block_pos,uv,buffer,-1,scale,mirror);
+    String string = intToString(buffer,number);
+	drawString3D(&g_surface,voxel,axis,block_pos,uv,string,scale,mirror,0x300);
 }
 
 static void drawGuiRectangle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color){
@@ -81,22 +85,26 @@ static void drawGuiRectangle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 
 	((int*)&points[3])[axis.x] += fixedMulR(voxel_size,size.x);
 	((int*)&points[3])[axis.y] += fixedMulR(voxel_size,size.y);
 
-	points[0] = pointToScreen(points[0]);
+    if(g_surface.backend == RENDER_BACKEND_SOFTWARE){
+        spanQuad3dAdd(&g_surface,points,pixelColorToColor(color));
+        return;
+    }
+
+	if(points[0].z <= 0 || points[1].z <= 0 || points[2].z <= 0 || points[3].z <= 0)
+		return;
+    
+    points[0] = pointToScreen(points[0]);
 	points[1] = pointToScreen(points[1]);
 	points[2] = pointToScreen(points[2]);
 	points[3] = pointToScreen(points[3]);
-
+    
 	Vec2 d_point[] = {
 		{points[0].x,points[0].y},
 		{points[1].x,points[1].y},
 		{points[3].x,points[3].y},
 		{points[2].x,points[2].y}
 	};
-
-	if(points[0].z <= 0 || points[1].z <= 0 || points[2].z <= 0 || points[3].z <= 0)
-		return;
-
-	drawPolygon(g_surface,d_point,4,pixelColorToColor(color));
+    drawPolygon(g_surface,d_point,4,pixelColorToColor(color));
 }
 
 void drawGuiFrame(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,int thickness){
@@ -158,10 +166,10 @@ void drawGuiCircle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,int radius,int 
 	((int*)&points[3])[axis.x] += fixedMulR(voxel_size,radius);
 	((int*)&points[3])[axis.y] += fixedMulR(voxel_size,-radius);
 
-	points[0] = pointToScreenRenderer(points[0],g_tri,g_position,g_fov);
-	points[1] = pointToScreenRenderer(points[1],g_tri,g_position,g_fov);
-	points[2] = pointToScreenRenderer(points[2],g_tri,g_position,g_fov);
-	points[3] = pointToScreenRenderer(points[3],g_tri,g_position,g_fov);
+	points[0] = pointToScreenRenderer(points[0],g_tri,g_position,g_options.fov);
+	points[1] = pointToScreenRenderer(points[1],g_tri,g_position,g_options.fov);
+	points[2] = pointToScreenRenderer(points[2],g_tri,g_position,g_options.fov);
+	points[3] = pointToScreenRenderer(points[3],g_tri,g_position,g_options.fov);
 
 	drawCircle3d(g_surface,points,pixelColorToColor(color));
 }
@@ -217,15 +225,15 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 					} break;
 					case SPELL_ADJ_SPEED:{
 						Vec2 string_uv = vec2AddR(spell_uv,(Vec2){-0x1000,-0x400});
-						drawString3D(g_surface,voxel,g_axis_table[side],block_pos,string_uv,">>",-1,0x800,false);
+						drawString3D(&g_surface,voxel,g_axis_table[side],block_pos,string_uv,(String)STRING_LITERAL(">>"),0x800,false,0x300);
 					} break;
 					case SPELL_ADJ_DAMAGE:{
 						Vec2 string_uv = vec2AddR(spell_uv,(Vec2){-0x1000,-0x400});
-						drawString3D(g_surface,voxel,g_axis_table[side],block_pos,string_uv,"#+",-1,0x800,false);
+						drawString3D(&g_surface,voxel,g_axis_table[side],block_pos,string_uv,(String)STRING_LITERAL("#+"),0x800,false,0x300);
 					} break;
 					case SPELL_ADJ_DOUBLER:{
 						Vec2 string_uv = vec2AddR(spell_uv,(Vec2){-0x1000,-0x400});
-						drawString3D(g_surface,voxel,g_axis_table[side],block_pos,string_uv,"x2",-1,0x800,false);
+						drawString3D(&g_surface,voxel,g_axis_table[side],block_pos,string_uv,(String)STRING_LITERAL("x2"),0x800,false,0x300);
 					} break;
 					default:{
 						drawGuiCircle(voxel,g_axis_table[side],block_pos,spell_uv,0xA00,0xFF00FF);
@@ -242,7 +250,7 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 					if(*element->checkbox_state)
 						color = is_pointed ? 0x90C090 : 0x809080;
 					else
-						color = is_pointed ? 0x9090C0 : 0x808090;
+						color = is_pointed ? 0xC09090 : 0x908080;
 				}
 				else{
 					color = is_pointed ?  0xA0A0A0 : 0x808080;
@@ -256,7 +264,7 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 					color = 0x90C090;
 				else
 					color = 0x809080;
-				drawGuiRectangle(voxel,axis,block_pos,element->position,button_size,color);
+                drawGuiRectangle(voxel,axis,block_pos,element->position,button_size,color);
 			} break;
 			case VOXEL_GUI_STRING:{
 				int size = !element->size ? 0x800 : element->size;
@@ -268,7 +276,7 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 					false,
 					false,
 				};
-				drawString3D(g_surface,voxel,axis,block_pos,element->position,element->string,-1,size,mirror[side]);
+				drawString3D(&g_surface,voxel,axis,block_pos,element->position,element->string,size,mirror[side],0x300);
 			} break;
 			case VOXEL_GUI_NUMBER:{
 				int size = !element->size ? 0x800 : element->size;
@@ -306,9 +314,12 @@ bool voxelGuiOnClick(Voxel* voxel,int side){
 				}
 			} break;
 			case VOXEL_GUI_CHECKBOX:{
-				if(element->checkbox_state)
+                Vec2 button_size = element->size ? vec2Single(element->size) : vec2Single(0x1000);
+				if(rectInRect(element->position,button_size,g_voxel_pointed.uv,vec2Single(0x200)) && element->checkbox_state){
 					*element->checkbox_state ^= true;
-			} //falltrough
+                    return true;
+                }
+			} break;
 			case VOXEL_GUI_BUTTON:{
 				Vec2 button_size = element->size ? vec2Single(element->size) : vec2Single(0x1000);
 				if(rectInRect(element->position,button_size,g_voxel_pointed.uv,vec2Single(0x200)) && element->on_click){

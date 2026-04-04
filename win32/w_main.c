@@ -7,25 +7,31 @@
 #include "../main.h"
 #include "../memory.h"
 #include "../draw.h"
+#include "../equib_model.h"
 
 #define WINDOW_CLASS_NAME "a_class"
 
-static Msg g_msg;
-static WndClassA g_windowclass;
-static bool g_initialized;
-static bool g_cursor_out_window;
-static unsigned g_frequency;
+static Msg msg;
+static WndClassA windowclass;
+static bool initialized;
+static bool cursor_out_window;
+static unsigned frequency;
+
 void* g_window;
 
-int g_n_threads;
+static bool cursor_visible = true;
 
-static bool g_cursor_visible = true;
+void win32Print(String string){
+    if(!GetConsoleWindow())
+    	AllocConsole();
+    WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE),string.data,string.size,0,0);
+}
 
 void showCursor(bool show){
-	if(show != g_cursor_visible)
+	if(show != cursor_visible)
 		ShowCursor(show);
 
-	g_cursor_visible = show;
+	cursor_visible = show;
 }
 
 static Vec2 getCursorPosition(void){
@@ -38,7 +44,7 @@ static Vec2 getCursorPosition(void){
 static unsigned getTick(void){
     unsigned count[2];
     QueryPerformanceCounter(count);
-    count[0] /= (g_frequency / N_TICK_SECOND);
+    count[0] /= (frequency / N_TICK_SECOND);
     return count[0];
 }
 
@@ -109,14 +115,14 @@ static Lresult stdcall windowMessageHandler(void* window,unsigned msg,Wparam wpa
 		case WM_KEYDOWN:{
 			switch(wparam){
 				case KEY_ESCAPE:{
-					if(!g_cursor_out_window){
-						g_cursor_out_window = true;
+					if(!cursor_out_window){
+						cursor_out_window = true;
 						showCursor(true);
 						ClipCursor(0);
 					}
 				} break;
 				case KEY_F7:{
-					if(!g_editor)
+					if(!g_options.editor)
 						break;
 					Vec3 block_pos;
 					if(!blockOutlinePositionGet(&block_pos))
@@ -130,12 +136,12 @@ static Lresult stdcall windowMessageHandler(void* window,unsigned msg,Wparam wpa
 					CloseHandle(file);
 				} break;
 				case KEY_F8:{
-					if(!g_editor)
+					if(!g_options.editor)
 						break;
 					win32OctreeDeserialize();
 				} break;
 				case KEY_F9:{
-					if(!g_editor)
+					if(!g_options.editor)
 						break;
 					win32OctreeSerialize(&g_voxel);
 				} break;
@@ -152,8 +158,8 @@ static Lresult stdcall windowMessageHandler(void* window,unsigned msg,Wparam wpa
 			rButtonDown();
 		} break;
 		case WM_LBUTTONDOWN:{
-			if(g_cursor_out_window){
-				g_cursor_out_window = false;
+			if(cursor_out_window){
+				cursor_out_window = false;
 				cursorClipAndHide();
 				break;
 			}
@@ -163,7 +169,7 @@ static Lresult stdcall windowMessageHandler(void* window,unsigned msg,Wparam wpa
 			lButtonUp();
 		} break;
 		case WM_INPUT:{
-			if(g_cursor_out_window)
+			if(cursor_out_window)
 				break;
 			char data[sizeof(RawInput)];
 			unsigned size = sizeof(RawInput);
@@ -175,13 +181,13 @@ static Lresult stdcall windowMessageHandler(void* window,unsigned msg,Wparam wpa
 			}
 		} break;
 		case WM_SIZE:{
-			if(!g_initialized)
+			if(!initialized)
 				break;
 			Rect clientRect; 
 			GetClientRect(window, &clientRect);
 			int width  = clientRect.right - clientRect.left;
 			int height = clientRect.bottom - clientRect.top;
-			surfaceChangeSize(&g_surface,width,height);
+			//surfaceChangeSize(&g_surface,width,height);
 		} break;
 		case WM_ACTIVATE:{
 			Rect rect;
@@ -199,7 +205,6 @@ static Lresult stdcall windowMessageHandler(void* window,unsigned msg,Wparam wpa
 #define ICON_SIZE 16
 
 static void* iconGenerate(void){
-
     DrawSurface surface = {
 		.height = ICON_SIZE,
 		.width = ICON_SIZE,
@@ -260,7 +265,7 @@ static void* iconGenerate(void){
 	};
 
 	for(int i = 0;i < countof(polygon);i++)
-		drawPolygon3d(surface,polygon[i].coordinates,(Vec3[]){{0},{0},{0},{0}},(int[]){0,0,0,0},pixelColorToColor(polygon[i].color));
+		drawPolygon3d(surface,polygon[i].coordinates,pixelColorToColor(polygon[i].color));
 
     BitmapInfoHeader bitmap_header = {
         .size = sizeof(BitmapInfoHeader),
@@ -294,7 +299,7 @@ static void* iconGenerate(void){
 }
 
 void createWindow(void){
-	g_window = CreateWindowExA(0,WINDOW_CLASS_NAME,"3D C",WS_VISIBLE | WS_SYSMENU | WS_MINIMIZEBOX | WS_THICKFRAME | WS_MAXIMIZEBOX,0,0,g_surface.window_width,g_surface.window_height,0,0,g_windowclass.instance,0);
+	g_window = CreateWindowExA(0,WINDOW_CLASS_NAME,"3D C",WS_VISIBLE | WS_SYSMENU | WS_MINIMIZEBOX | WS_THICKFRAME | WS_MAXIMIZEBOX,0,0,g_surface.window_width,g_surface.window_height,0,0,windowclass.instance,0);
 
 	Rect client;
     GetClientRect(g_window,&client);
@@ -315,14 +320,14 @@ void createWindow(void){
 }
 
 static unsigned stdcall audioThread(void* arg){
-	loop{
+	for(;;){
 		audioDeviceBufferUpdate();
 		Sleep(1);
 	}
 	return 0;
 }
 
-unsigned* win32LoadImage(char* path){
+Texture win32LoadImage(char* path){
 	void* image_file = LoadImageA(0,path,IMAGE_BITMAP,0,0,LR_LOADFROMFILE | LR_CREATEDIBSECTION);
     Bitmap bmp;
     GetObjectA(image_file,sizeof(Bitmap),&bmp);
@@ -334,53 +339,67 @@ unsigned* win32LoadImage(char* path){
 		.bmi_header.planes = 1,
 		.bmi_header.bit_count = 32,
 	};
-    unsigned* image_data = tMalloc(size * size * sizeof(unsigned) * 2);
+    int* image_data = tMalloc(size * size * sizeof(unsigned) * 2);
     GetDIBits(GetDC(0),image_file,0,size,image_data,&bi,0);
 	DeleteObject(image_file);
-	for(int i = 0;i < size * size;i++)
-		image_data[i] = (image_data[i] >> 16 & 0x0000FF) | (image_data[i] << 16 & 0xFF0000) | (image_data[i] & 0x00FF00);
-	return image_data;
+	return (Texture){.pixel_data = image_data,.size = size};
 }
 
-#include "w_console.h"
+void win32SaveConfig(void){
+	void* config_file = CreateFileA("config.bin",GENERIC_WRITE,0,0,CREATE_ALWAYS,0,0);
+	WriteFile(config_file,&g_options,sizeof g_options,0,0);
+	CloseHandle(config_file);
+}
 
 int main(void){
-	g_windowclass = (WndClassA){
+	windowclass = (WndClassA){
 		.window_icon = iconGenerate(),
 		.wnd_proc    = windowMessageHandler,
 		.class_name  = WINDOW_CLASS_NAME
 	};
 
-	RegisterClassA(&g_windowclass);
+	RegisterClassA(&windowclass);
 
 	SystemInfo system_info;
 	GetSystemInfo(&system_info);
 	g_n_threads = system_info.number_of_processors;
 	createWindow();
 
-	g_initialized = true;
+	initialized = true;
 
+	void* config_file = CreateFileA("config.bin",GENERIC_READ,0,0,OPEN_EXISTING,0,0);
+	if(config_file == INVALID_HANDLE_VALUE){
+		win32SaveConfig();
+	}
+	else{
+		ReadFile(config_file,&g_options,sizeof g_options,0,0);
+		CloseHandle(config_file);
+	}
+        
 	if(!win32OctreeDeserialize())
 		worldDefaultGenerate();
 
 	initOpenCL();
 	mainInit();
+
+	g_hand_model = win32LoadModel("model/hand.octvxl");
+
 	audioInit();
 
-    unsigned frequency[2];
-    QueryPerformanceFrequency(frequency);
-	g_frequency = frequency[0];
+    unsigned frequency_buffer[2];
+    QueryPerformanceFrequency(frequency_buffer);
+	frequency = frequency_buffer[0];
 	int prev_tick = getTick();
 
 	CreateThread(0,0,audioThread,0,0,0);
 
-	loop{
-		while(PeekMessageA(&g_msg,g_window,0,0,0)){
-            GetMessageA(&g_msg,g_window,0,0);
-            DispatchMessageA(&g_msg);
+	for(;;){
+		while(PeekMessageA(&msg,g_window,0,0,0)){
+            GetMessageA(&msg,g_window,0,0);
+            DispatchMessageA(&msg);
         }
 		
-		if(g_cursor_visible){
+		if(cursor_visible){
 			Sleep(1);
 			continue;
 		}
@@ -401,7 +420,7 @@ int main(void){
 		unsigned time_post[2];
 		QueryPerformanceCounter(time_pre);
 
-        repeat(n_tick)
+        for(int i = n_tick;i--;)
             tickRun();
 
         prev_tick = tick;
@@ -414,10 +433,10 @@ int main(void){
 		static unsigned fps;
 		counter += 1;
 		if(counter % 0x20 == 0)
-			fps = g_frequency / (time_post[0] - time_pre[0]);
+			fps = frequency / (time_post[0] - time_pre[0]);
 
-		drawString(g_surface,-FIXED_ONE + 0x800,-FIXED_ONE + 0x4000,"fps",-1,0x800,pixelColorToColor(0xFFFFFF),0xC0);
-		drawNumber(g_surface,-FIXED_ONE + 0x800,-FIXED_ONE + 0x2000,fps,0x800);
+		drawString(g_surface,-FIXED_ONE + 0x800,FIXED_ONE - 0x4000,(String)STRING_LITERAL("fps"),0x800,pixelColorToColor(0xFFFFFF),0xC0);
+		drawNumber(g_surface,-FIXED_ONE + 0x800,FIXED_ONE - 0x2000,fps,0x800);
 
         surfaceBlit(g_surface);
 	}

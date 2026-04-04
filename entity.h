@@ -6,10 +6,11 @@
 #include "texture.h"
 #include "pathfinding.h"
 #include "staff.h"
+#include "string.h"
 
 structure(Voxel);
 
-enumeration(EntityType){
+typedef enum{
 	ENTITY_MONSTER,
 	ENTITY_SLIME,
 	ENTITY_ZOMBIE,
@@ -20,7 +21,7 @@ enumeration(EntityType){
 	ENTITY_BOMB,
 	ENTITY_STAFF,
 	ENTITY_BOSS,
-};
+} EntityType;
 
 structure(Entity){
 	Entity* next;
@@ -80,7 +81,7 @@ structure(Entity){
 	int attack_cooldown;
 	bool adj_speed;
 	bool adj_damage;
-	char* particle_string;
+	String particle_string;
 };
 
 structure(ModelSphere){

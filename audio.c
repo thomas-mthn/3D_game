@@ -1,17 +1,17 @@
 #include "audio.h"
 #include "octree.h"
 
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
 #include "win32/w_audio.h"
 #endif
 
-enumeration(AudioChannel){
+typedef enum {
 	AUDIO_CHANNEL_LEFT,
 	AUDIO_CHANNEL_RIGHT,
-};
+} AudioChannel;
 
 static void audioWriteBuffer(int index,int value,AudioChannel channel){
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
 	if(channel == AUDIO_CHANNEL_LEFT)
 		g_sound_buffer[(uint16)(g_sound_buffer_ptr + index)].left += value;
 	else

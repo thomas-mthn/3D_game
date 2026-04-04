@@ -22,7 +22,7 @@ static int fixedDivR(int value_1,int value_2){
         mov     result, eax
     }
 #elif !defined(_WIN64) && defined(__GNUC__) && !defined(__wasm__)
-    if(value_1 / value_2 >= FIXED_ONE)
+    if(((value_1 / value_2) < 0 ? -(value_1 / value_2) : (value_1 / value_2)) >= FIXED_ONE / 2)
         return INT_MAX;
     asm (
         "movl %1, %%eax\n\t"

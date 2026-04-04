@@ -105,33 +105,44 @@ int (stdcall *clGetDeviceInfo)(
     size_t* param_value_size_ret
 );
 
-static void* g_cl_context;
+void* g_cl_context;
 static void* cl_inference;
 static void* cl_inference_bf;
 static void* g_cl_command_queue;
 
-#include "w_console.h"
+bool g_opencl_loaded;
 
 void initOpenCL(void){
     void* opencl_dll = LoadLibraryA("OpenCL.dll");
+    if(!opencl_dll)
+        return;
 
-    clGetPlatformIDs                   = GetProcAddress(opencl_dll,"clGetPlatformIDs");
-    clGetDeviceIDs                     = GetProcAddress(opencl_dll,"clGetDeviceIDs");
-    clCreateCommandQueueWithProperties = GetProcAddress(opencl_dll,"clCreateCommandQueueWithProperties");
-    clCreateProgramWithSource          = GetProcAddress(opencl_dll,"clCreateProgramWithSource");
-    clCreateContext                    = GetProcAddress(opencl_dll,"clCreateContext");
-    clBuildProgram                     = GetProcAddress(opencl_dll,"clBuildProgram");
-    clCreateKernel                     = GetProcAddress(opencl_dll,"clCreateKernel");
-    clEnqueueNDRangeKernel             = GetProcAddress(opencl_dll,"clEnqueueNDRangeKernel");
-    clEnqueueReadBuffer                = GetProcAddress(opencl_dll,"clEnqueueReadBuffer");
-    clEnqueueWriteBuffer               = GetProcAddress(opencl_dll,"clEnqueueWriteBuffer");
-    clSetKernelArg                     = GetProcAddress(opencl_dll,"clSetKernelArg");
-    clCreateBuffer                     = GetProcAddress(opencl_dll,"clCreateBuffer");
-    clFinish                           = GetProcAddress(opencl_dll,"clFinish");
-    clReleaseMemObject                 = GetProcAddress(opencl_dll,"clReleaseMemObject");
-    clGetProgramBuildInfo              = GetProcAddress(opencl_dll,"clGetProgramBuildInfo");
-    clGetPlatformInfo                  = GetProcAddress(opencl_dll,"clGetPlatformInfo");
-    clGetDeviceInfo                    = GetProcAddress(opencl_dll,"clGetDeviceInfo");
+    struct{
+        char* name;
+        void (**fn_ptr)(void);
+    } functions[] =  {
+        {.name = "clGetPlatformIDs",.fn_ptr = (void(**)(void))&clGetPlatformIDs},
+        {.name = "clGetDeviceIDs",.fn_ptr = (void(**)(void))&clGetDeviceIDs},
+        {.name = "clCreateCommandQueueWithProperties",.fn_ptr = (void(**)(void))&clCreateCommandQueueWithProperties},
+        {.name = "clCreateProgramWithSource",.fn_ptr = (void(**)(void))&clCreateProgramWithSource},
+        {.name = "clCreateContext",.fn_ptr = (void(**)(void))&clCreateContext},
+        {.name = "clCreateKernel",.fn_ptr = (void(**)(void))&clCreateKernel},
+        {.name = "clEnqueueNDRangeKernel",.fn_ptr = (void(**)(void))&clEnqueueNDRangeKernel},
+        {.name = "clEnqueueReadBuffer",.fn_ptr = (void(**)(void))&clEnqueueReadBuffer},
+        {.name = "clEnqueueWriteBuffer",.fn_ptr = (void(**)(void))&clEnqueueWriteBuffer},
+        {.name = "clSetKernelArg",.fn_ptr = (void(**)(void))&clSetKernelArg},
+        {.name = "clCreateBuffer",.fn_ptr = (void(**)(void))&clCreateBuffer},
+        {.name = "clFinish",.fn_ptr = (void(**)(void))&clFinish},
+        {.name = "clReleaseMemObject",.fn_ptr = (void(**)(void))&clReleaseMemObject},
+        {.name = "clGetProgramBuildInfo",.fn_ptr = (void(**)(void))&clGetProgramBuildInfo},
+        {.name = "clGetPlatformInfo",.fn_ptr = (void(**)(void))&clGetPlatformInfo},
+        {.name = "clGetDeviceInfo",.fn_ptr = (void(**)(void))&clGetDeviceInfo},
+    };
+    for(int i = countof(functions);i--;){
+        *functions[i].fn_ptr = (void(*)(void))GetProcAddress(opencl_dll,functions[i].name);
+        if(!*functions[i].fn_ptr)
+            return;
+    }
 
     void* cl_file = CreateFileA("opencl/markov_texture.cl",GENERIC_READ,0,0,3,0,0);
     char* cl_source = tMalloc(GetFileSize(cl_file,0) + 1);
@@ -160,12 +171,12 @@ void initOpenCL(void){
         char *log = memoryScratchGet(MEMORY_SCRATCH_MAX_SIZE);
         clGetProgramBuildInfo(g_cl_program,devices[0],CL_PROGRAM_BUILD_LOG,log_size,log,NULL);
         log[log_size] = '\0';
-        print(log);
     }
     char name[128];
 
     clGetDeviceInfo(devices[0],CL_DEVICE_NAME,sizeof(name),name,0);
-    printNL(name);
+
+    g_opencl_loaded = true;
 }
 
 #include "../texture_markov.h"

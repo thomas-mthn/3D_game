@@ -1,6 +1,8 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
+#include <stdarg.h>
+
 #include "../langext.h"
 
 #if __GNUC__
@@ -16,9 +18,13 @@
 
 #define HEAP_ZERO_MEMORY    0x00000008
 
-#define CREATE_NEW 1
-#define CREATE_ALWAYS 2
-#define OPEN_EXISTING 3
+typedef enum{
+    CREATE_NEW = 1,
+    CREATE_ALWAYS,
+    OPEN_EXISTING,
+    OPEN_ALWAYS,
+    TRUNCATE_EXISTING,
+} CreationDisposition;
 
 #define INFINITE -1
 
@@ -52,37 +58,39 @@
 typedef int (stdcall *FarProc)();
 typedef unsigned (stdcall *ThreadStartRoutine)(void* lpThreadParameter);
 
-typedef union{
+structure(LargeInteger){
     struct{
         unsigned low_part;
         int      high_part;
     };
     long long quad_part;
-} LargeInteger;
+};
 
-typedef struct{
+structure(Coord){
 	short x;
 	short y;
-} Coord;
+};
 
-typedef struct{
+structure(SecurityAttributes){
 	unsigned length;
 	void* security_descriptor;
 	int   inherit_handle;
-} SecurityAttributes;
+};
 
-typedef struct{
+structure(CriticalSection){
     void* debug_info;
     long lock_count;
     long recursion_count;
     void* owning_thread;
     void* lock_semaphore;
     size_t* spin_count;
-} CriticalSection;
+};
 
-typedef struct{
-    unsigned* internal;
-    unsigned* internal_high;
+structure(Overlapped){
+    unsigned* _
+        
+        ;
+    unsigned* static_high;
     union{
         struct{
             uint16 offset;
@@ -91,14 +99,14 @@ typedef struct{
         void* pointer;
     };
     void* event;
-} Overlapped;
+};
 
-typedef struct{
+structure(FileTime){
     unsigned low_date_time;
     unsigned high_date_time;
-} FileTime;
+};
 
-typedef struct{
+structure(Win32FindDataA){
     unsigned file_attributes;
     FileTime creation_time;
     FileTime last_access_time;
@@ -112,9 +120,9 @@ typedef struct{
     unsigned file_type;
     unsigned creator_type;
     uint16 finder_flags;
-} Win32FindDataA;
+};
 
-typedef struct{
+structure(SystemInfo){
     union{
         unsigned oem_id;
         struct{
@@ -131,7 +139,7 @@ typedef struct{
     unsigned allocation_granularity;
     uint16 processor_level;
     uint16 processor_revision;
-} SystemInfo;
+};
 
 #ifdef __cplusplus
 extern "C"{
@@ -182,11 +190,11 @@ DLLIMPORT(void*) GetProcessHeap();
 
 DLLIMPORT(unsigned) GetFileSize(void* file,unsigned* file_size_high);
 DLLIMPORT(void*) CreateFileA(
-    const char* file_name,
+    char* file_name,
     unsigned desired_access,
     unsigned share_mode,
     void* security_attributes,
-    unsigned creation_disposition,
+    CreationDisposition creation_disposition,
     unsigned flags,
     void* template_file
 );

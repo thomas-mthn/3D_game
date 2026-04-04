@@ -1,6 +1,10 @@
 #ifndef LIGHTING_H
 #define LIGHTING_H
 
+#include "langext.h"
+#include "vec3.h"
+#include "main.h"
+
 #define LUXEL_MAX_MIPMAP 12
 
 #ifdef __wasm__
@@ -12,6 +16,7 @@
 structure(Luxel){
 	uint32 hash;
 	Vec3 luminance;
+    Vec3 luminance_direct;
 	uint16 n_sample;
 	uint16 tick_last_updated;
 };
@@ -30,7 +35,7 @@ static int surfaceAngle(Vec3 position,Vec3 normal){
 
 static int mipmapGet(Vec3 position,Vec3 normal,int distance,int angle){
 	int angle_distance = fixedMulR(angle,distance);
-	return leadingZeroCount(angle_distance);
+	return bitScanReverse(angle_distance);
 }
 
 Vec3 skyboxSample(Vec3 direction);

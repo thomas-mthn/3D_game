@@ -3,6 +3,11 @@
 
 #include "langext.h"
 
-extern uint8 g_vector_font[0x100][0x10][4];
+structure(FontChar){
+	uint8  position[0x10 - 1][4];
+	uint32 width;
+};
+
+extern FontChar g_vector_font[0x100];
 
 #endif

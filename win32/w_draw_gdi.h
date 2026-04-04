@@ -3,7 +3,7 @@
 
 #include "../draw.h"
 
-void createSurfaceGDI(DrawSurface* surface);
+bool createSurfaceGDI(DrawSurface* surface);
 void destroySurfaceGDI(DrawSurface* surface);
 void blitSurfaceGDI(DrawSurface surface);
 void drawLineGDI(DrawSurface surface,int x1,int y1,int x2,int y2,Vec3 color);

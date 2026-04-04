@@ -1,11 +1,14 @@
 #include "texture.h"
 #include "draw.h"
+#include "draw_soft.h"
 #include "main.h"
 #include "memory.h"
 #include "voxel_menu.h"
 #include "texture_markov.h"
 
-#ifndef __wasm__
+#ifdef __linux__
+#include "linux/l_main.h"
+#elif !defined(__wasm__)
 #include "win32/w_draw_opengl.h"
 #include "win32/w_main.h"
 #endif
@@ -48,7 +51,7 @@ TextureType g_skybox_textures[] = {
 	TEXTURE_SKYBOX_XY_DOWN,
 };
 
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
 void textureResetGL(void){
 	for(int i = 0;i < countof(g_textures);i++){
 		Texture* texture = g_textures + i;
@@ -101,7 +104,7 @@ int textureLookup(Texture* texture,int x,int y,int mipmap){
 	return texture->pixel_data[offset + y * (texture->size >> mipmap) + x];
 }
 
-static void textureAllocate(Texture* texture){
+void textureAllocate(Texture* texture){
 	texture->pixel_data = tMallocZero(texture->size * texture->size * 2 * sizeof(*texture->pixel_data));
 }
 
@@ -110,15 +113,51 @@ Texture textureCreate(int size){
 }
 
 void textureDestroy(Texture texture){
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
 	deleteTextureGL(texture.gl_id);
 #endif
 	tFree(texture.pixel_data);
 }
-#include "win32/w_console.h"
-void texturesGenerate(void){
-	int size = 0x100;
 
+static Texture textureDiskLoad(char* path){
+    Texture texture;
+#ifdef __linux__
+    texture = linuxLoadImage(path);
+#elif !defined(__wasm__)
+    texture = win32LoadImage(path);
+#else
+    return (Texture){0};
+#endif
+    if(texture.pixel_data)
+        return texture;
+    //fallback code 
+    int* pixel_data = tMalloc(0x400 * 2);
+    for(int i = 0;i < 0x100;i++){
+        int x = i / 0x10;
+        int y = i % 0x10;
+        pixel_data[i] = x ^ y ? 0xFF00FF : 0x000000;
+    }
+    return (Texture){.pixel_data = pixel_data,.size = 0x20};
+}
+
+static void textureGenerate(char* path,int size,TextureType type){
+    Texture texture = textureDiskLoad(path);
+    
+	generateMipmaps(&texture);
+g_textures[type] = texture;
+    if(g_options.fast_startup){
+        
+        
+    }
+    else{
+        markovInit();
+        markovTextureTrain(texture);
+        markovTextureGenerate(g_textures[type],texture);
+        markovFree();
+    }
+}
+
+void texturesGenerate(void){
 	for(int i = 0;i < countof(g_textures);i++)
 		textureAllocate(g_textures + i);
 	textureAllocate(&g_spinning_staff);
@@ -133,11 +172,12 @@ void texturesGenerate(void){
 		.height = texture->size,
 		.backend = RENDER_BACKEND_SOFTWARE,
 	};
+	surfaceInit(&surface);
 	drawSquare(surface,-FIXED_ONE,-FIXED_ONE,FIXED_ONE * 2,pixelColorToColor(0x3090F0));
-	drawString(surface,-FIXED_ONE + 0x2000,-FIXED_ONE + 0x2000,"wall",STRING_LENGTH_CSTRING,0x2000,pixelColorToColor(0xFFFFFF),0x800);
+	drawString(surface,-FIXED_ONE + 0x2000,-FIXED_ONE + 0x2000,(String)STRING_LITERAL("wall"),0x2000,pixelColorToColor(0xFFFFFF),0x800);
 
 	texture = g_textures + TEXTURE_GRASS;
-
+	softSurfaceDestroyMeta(&surface);
 	Texture grass_markov = {.size = 256};
 	textureAllocate(&grass_markov);
 
@@ -152,15 +192,7 @@ void texturesGenerate(void){
         grass_markov.pixel_data[i] = colorToPixelColor(luminance);
     }
 
-	Texture grass = {.size = 128,.pixel_data = win32LoadImage("img/grass.bmp")};
-
-	generateMipmaps(&grass);
-	
-	markovInit();
-	markovTextureTrain(grass);
-	markovTextureGenerate(g_textures[TEXTURE_GRASS],grass_markov);
-	markovFree();
-	
+    textureGenerate("img/grass.bmp",128,TEXTURE_GRASS);
 
 	texture = g_textures + TEXTURE_STONE;
 
@@ -174,7 +206,7 @@ void texturesGenerate(void){
 	for(int i = 0;i < texture->size * texture->size;i++){
 		int color;
 		if((i / texture->size + i % texture->size) % 0x10 < 0x0A)
-			color = 0x20A0A0;
+			color = 0xA0A020;
 		else
 			color = 0x606060;
 		texture->pixel_data[i] = color;
@@ -192,6 +224,7 @@ void texturesGenerate(void){
 		.width = texture->size,
 		.height = texture->size,
 	};
+	surfaceInit(&surface);
 	drawCircle(surface,0,0,FIXED_ONE,pixelColorToColor(0x606060));
 
 	drawCircle(surface,-0x8000,0x4000,0x4000,pixelColorToColor(0x20FF20));
@@ -199,7 +232,7 @@ void texturesGenerate(void){
 	drawCircle(surface,-0x8000,0x4000,0x2000,pixelColorToColor(0xA0A0A0));
 	drawCircle(surface,0x8000,0x4000,0x2000,pixelColorToColor(0xA0A0A0));
 	drawSegment(surface,-0x8000,-0x6000,0x8000,-0x6000,0x800,pixelColorToColor(0x20FF20));
-
+	softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_PLANKS;
 	surface = (DrawSurface){
 		.data = texture->pixel_data,
@@ -295,14 +328,8 @@ void texturesGenerate(void){
 			texture->pixel_data[i] = colorToPixelColor(vec3Mix(vec3Single(luminance),vec3Single(FIXED_ONE << 4),distance / 8));
 		}
 	}
-	Texture planks = {.size = 128,.pixel_data = win32LoadImage("img/planks.bmp")};
-	print("planks");
-	generateMipmaps(&planks);
-	
-	markovInit();
-	markovTextureTrain(planks);
-	markovTextureGenerate(g_textures[TEXTURE_PLANKS],g_textures[TEXTURE_PLANKS]);
-	markovFree();
+
+    textureGenerate("img/planks.bmp",128,TEXTURE_PLANKS);
 	
 	texture = g_textures + TEXTURE_STONE_BRICK;
 	surface = (DrawSurface){
@@ -310,6 +337,7 @@ void texturesGenerate(void){
 		.width = texture->size,
 		.height = texture->size,
 	};
+	surfaceInit(&surface);
 
 	for(int i = 0;i < texture->size * texture->size;i++){
 		int r = tRnd() & 0x1F | 0xC0;
@@ -343,22 +371,15 @@ void texturesGenerate(void){
 			}
 		}
 	}
-
-	Texture stone_brick = {.size = 256,.pixel_data = win32LoadImage("img/brick_alt2.bmp")};
-
-	generateMipmaps(&stone_brick);
-
-	markovInit();
-	markovTextureTrain(stone_brick);
-	markovTextureGenerate(g_textures[TEXTURE_STONE_BRICK],g_textures[TEXTURE_STONE_BRICK]);
-	markovFree();
-
+    textureGenerate("img/brick_alt2.bmp",128,TEXTURE_STONE_BRICK);
+    softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_CHEST;
 	surface = (DrawSurface){
 		.data = texture->pixel_data,
 		.width = texture->size,
 		.height = texture->size,
 	};
+	surfaceInit(&surface);
 	drawSquare(surface,-FIXED_ONE,-FIXED_ONE,FIXED_ONE * 2,pixelColorToColor(0xC0C0C0));
 	drawRectangle(surface,FIXED_ONE / 3,-FIXED_ONE,0x2000,FIXED_ONE * 2,pixelColorToColor(0x808080));
 	drawRectangle(surface,FIXED_ONE / 3 - 0x3000,-0x3000,0xA800,FIXED_ONE / 3 + 0xA00,pixelColorToColor(0xA0F0F0));
@@ -366,28 +387,30 @@ void texturesGenerate(void){
 	
 	drawRectangle(surface,FIXED_ONE - 0x9800,-FIXED_ONE + 0x2000,0x9800,FIXED_ONE / 3 - 0x400,pixelColorToColor(0x3070D0));
 	drawRectangle(surface,FIXED_ONE - 0x9800,FIXED_ONE - (FIXED_ONE / 3 - 0x400) - 0x2000,0x9800,FIXED_ONE / 3 - 0x400,pixelColorToColor(0x3070D0));
-
+	softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_PICKUP;
 	surface = (DrawSurface){
 		.data = texture->pixel_data,
 		.width = texture->size,
 		.height = texture->size,
 	};
+	surfaceInit(&surface);
 	for(int i = 0;i < texture->size * texture->size;i++)
 		texture->pixel_data[i] = 0xFF000000;
 	drawFrame(surface,0,0,FIXED_ONE,FIXED_ONE,pixelColorToColor(0xC0C0C0),0x2000);
-	drawString(surface,FIXED_ONE / 2 - FIXED_ONE / 8,FIXED_ONE / 2 - FIXED_ONE / 4,"x2",STRING_LENGTH_CSTRING,FIXED_ONE / 4,pixelColorToColor(0xFFFFFF),0x800);
-
+	drawString(surface,FIXED_ONE / 2 - FIXED_ONE / 8,FIXED_ONE / 2 - FIXED_ONE / 4,(String)STRING_LITERAL("x2"),FIXED_ONE / 4,pixelColorToColor(0xFFFFFF),0x800);
+	softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_BOLT;
 	surface = (DrawSurface){
 		.data = texture->pixel_data,
 		.width = texture->size,
 		.height = texture->size,
 	};
+	surfaceInit(&surface);
 	for(int i = 0;i < texture->size * texture->size;i++)
 		texture->pixel_data[i] = 0xFF000000;
 	drawCircle(surface,0,0,FIXED_ONE,pixelColorToColor(0xF08080));
-
+ 	softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_SMOKE;
 	surface = (DrawSurface){
 		.data = texture->pixel_data,
@@ -400,7 +423,6 @@ void texturesGenerate(void){
 		else
 			texture->pixel_data[i] = 0x00FFFFFF;
 	}
-
 	texture = g_textures + TEXTURE_STONE2;
 	Texture circle = {.size = 0x80};
 	textureAllocate(&circle);

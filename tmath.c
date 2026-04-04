@@ -77,7 +77,6 @@ int tCos(int angle){
     return tMix(v1,v2,angle % 0x100 << 8);
 }
 
-#include "win32/w_console.h"
 int tArcSin(int angle){
     angle >>= 1;
     angle += FIXED_ONE / 2;

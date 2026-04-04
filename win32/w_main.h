@@ -2,6 +2,8 @@
 #define WIN32_H
 
 #include "../langext.h"
+#include "../string.h"
+#include "../texture.h"
 
 structure(Voxel);
 
@@ -10,7 +12,9 @@ void createWindow(void);
 bool win32OctreeDeserialize(void);
 void win32OctreeSerialize(Voxel* root_voxel);
 Voxel* win32LoadModel(char* path);
-unsigned* win32LoadImage(char* path);
+Texture win32LoadImage(char* path);
+void win32SaveConfig(void);
+void win32Print(String string);
 
 extern int g_n_threads;
 extern void* g_window;

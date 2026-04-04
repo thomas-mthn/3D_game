@@ -1,8 +1,8 @@
 #ifndef TMATH_H
 #define TMATH_H
 
-#ifndef __wasm__
-#include "win32/w_x86.h"
+#if !defined(__wasm__)
+#include "x86.h"
 #endif
 #include "fixed.h"
 
@@ -48,18 +48,18 @@ static int tMix(int v1,int v2,int mix){
 }
 
 static int tSqrt(int value){
-#ifndef __wasm__
+#if !defined(__wasm__)
     return x86Sqrt((float)value / FIXED_ONE) * FIXED_ONE;
 #else
-    return sqrtf((float)value / FIXED_ONE) * FIXED_ONE;
+    return __builtin_sqrtf((float)value / FIXED_ONE) * FIXED_ONE;
 #endif
 }
 
 static int tInverseSqrt(int value){
-#ifndef __wasm__
+#if !defined(__wasm__)
     return x86InverseSqrt((float)value / FIXED_ONE) * FIXED_ONE;
 #else
-    return (1.0f / sqrtf((float)value / FIXED_ONE)) * FIXED_ONE;
+    return (1.0f / __builtin_sqrtf((float)value / FIXED_ONE)) * FIXED_ONE;
 #endif
 }
 

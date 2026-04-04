@@ -4,10 +4,11 @@
 
 #include "../main.h"
 
-void createSurfaceGDI(DrawSurface* surface){
+bool createSurfaceGDI(DrawSurface* surface){
 	surface->gdi_context = CreateCompatibleDC(surface->window_context);
     surface->gdi_bitmap = CreateCompatibleBitmap(surface->window_context,surface->width,surface->height);
     SelectObject(surface->gdi_context,surface->gdi_bitmap);
+	return true;
 }
 
 void destroySurfaceGDI(DrawSurface* surface){

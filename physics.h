@@ -11,10 +11,10 @@
 
 #define PLAYER_SIZE (Vec3){FIXED_ONE,FIXED_ONE,FIXED_ONE + FIXED_ONE / 2 + FIXED_ONE / 4}
 
-enumeration(CollisionFlags){
+typedef enum{
 	COLLISION_FLAG_LADDER = (1 << 0),
 	COLLISION_FLAG_WATER  = (1 << 1),
-};
+} CollisionFlags;
 
 void movementFly(void);
 void movementNormal(void);

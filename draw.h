@@ -1,21 +1,20 @@
 #ifndef DRAW_H
 #define DRAW_H
 
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
 #include "win32/w_gdi.h"
 #endif
 
 #include "vec2.h"
 #include "vec3.h"
 #include "texture.h"
+#include "string.h"
 
-#define STRING_LENGTH_CSTRING -1
-
-enumeration(RenderBackend){
+typedef enum{
 	RENDER_BACKEND_SOFTWARE,
 	RENDER_BACKEND_GDI,
 	RENDER_BACKEND_GL,
-};
+} RenderBackend;
 
 structure(ScanlineColor){
 	Vec3 begin;
@@ -43,7 +42,7 @@ structure(DrawSurface){
 	Vec2* scanline;
 	ScanlineColor* scanline_color;
 	ScanlineTexture* scanline_texture;
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
 	BitmapInfo soft_bitmapinfo;
 #endif
 };
@@ -60,21 +59,22 @@ void surfaceBlit(DrawSurface surface);
 
 void drawLine(DrawSurface surface,int x1,int y1,int x2,int y2,Vec3 color);
 void drawSegment(DrawSurface surface,int x1,int y1,int x2,int y2,int thickness,Vec3 color);
+void drawSegment3d(DrawSurface surface,Vec3* coordinats,int thickness,Vec3 color);
 void drawPolygon(DrawSurface surface,Vec2* coordinats,int n_point,Vec3 color);
-void drawPolygon3d(DrawSurface surface,Vec3* coordinats,Vec3* fog_color,int* fog_density,Vec3 color);
+void drawPolygon3d(DrawSurface surface,Vec3* coordinats,Vec3 color);
 void drawColoredPolygon(DrawSurface surface,Vec2* coordinats,Vec3* color,int n_point);
-void drawColoredPolygon3d(DrawSurface surface,Vec3* coordinats,Vec3* color,Vec3* fog_color,int* fog_strength);
+void drawColoredPolygon3d(DrawSurface surface,Vec3* coordinats,Vec3* color);
 void drawTexturePolygon(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3 color,int n_point);
 void drawTexturePolygon3d(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point);
 void drawColoredTexturePolygon(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3* color,int n_point);
-void drawColoredTexturePolygon3d(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,Vec3* fog_color,int* fog_strength);
+void drawColoredTexturePolygon3d(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color);
 void drawSkyboxPolygon3d(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color);
 void drawCircle(DrawSurface surface,int x,int y,int radius,Vec3 color);
 void drawEllipses(DrawSurface surface,int x,int y,int size_x,int size_y,Vec3 color);
 void drawCircle3d(DrawSurface surface,Vec3* coordinates,Vec3 color);
 void drawRing(DrawSurface surface,int x,int y,int radius,int thickness,Vec3 color);
 void drawRectangle(DrawSurface surface,int x,int y,int size_x,int size_y,Vec3 color);
-void drawString(DrawSurface surface,int x,int y,char* str,int str_length,int scale,Vec3 color,int thickness);
+void drawString(DrawSurface surface,int x,int y,String string,int scale,Vec3 color,int thickness);
 void drawNumber(DrawSurface surface,int x,int y,int number,int scale);
 
 static void drawSquare(DrawSurface surface,int x,int y,int size,Vec3 color){

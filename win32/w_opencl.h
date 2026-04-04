@@ -86,6 +86,8 @@ extern void* (stdcall *clCreateBuffer)(
 );
 extern int (stdcall *clFinish)(void* command_queue);
 
+extern bool g_opencl_loaded;
+
 void initOpenCL(void);
 
 void markovInferenceInitOpenCL(Texture texture,Graph* graph,int image_size);

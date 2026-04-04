@@ -2,7 +2,6 @@
 #include "octree.h"
 #include "memory.h"
 #include "main.h"
-#include "voxel_menu.h"
 #include "audio.h"
 
 int g_mana;
@@ -101,7 +100,7 @@ void staffSkip(void){
 		[SPELL_ADJ_SPEED] = {true,2},	
 	};
 	int cost = 0;
-	loop{
+	for(;;){
 		do
 			spell_slot = g_equipped.spell_array + (g_spell_index + i) % g_equipped.capacity;
 		while(i++ < 0x10 && spell_slot->type != INVENTORY_SPELL);
@@ -144,7 +143,7 @@ void staffFire(void){
 
 	int cost = 0;
 
-	loop{
+	for(;;){
 		do
 			spell_slot = g_equipped.spell_array + (g_spell_index + i) % g_equipped.capacity;
 		while(i++ < 0x10 && spell_slot->type != INVENTORY_SPELL);

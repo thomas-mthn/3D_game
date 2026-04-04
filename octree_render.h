@@ -1,6 +1,13 @@
 #ifndef OCTREE_RENDER_H
 #define OCTREE_RENDER_H
 
+#include "langext.h"
+#include "vec3.h"
+#include "vec2.h"
+
+structure(DrawSurface);
+structure(Voxel);
+
 extern bool g_render_lines;
 extern bool g_render_fog;
 

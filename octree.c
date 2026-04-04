@@ -7,15 +7,16 @@
 #include "voxel_menu.h"
 #include "geometry.h"
 #include "voxel_gui.h"
+#include "libc.h"
 
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
 #include "win32/w_draw_opengl.h"
 #endif
 
 Voxel g_voxel;
 Voxel* g_voxel_tick_list;
 
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
 static void toggleVsync(VoxelGuiElement* self){
 	g_vsync ^= true;
 	vsyncSet(false);
@@ -38,17 +39,17 @@ static void voxelButtonExecute(VoxelGuiElement* self){
 
 static VoxelGuiElement g_voxel_menu_gui[] = {
 	{.type = VOXEL_GUI_BUTTON,.on_click = toggleSmoothLighting,.position = {0x1000,FIXED_ONE - 0x2000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x1C00},.string = "toggle smooth lighting"},
+	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x1C00},.string = STRING_LITERAL("toggle smooth lighting")},
 	{.type = VOXEL_GUI_BUTTON,.on_click = changeRenderBackend,.position = {0x1000,FIXED_ONE - 0x4000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x3C00},.string = "render backend"},
-#ifndef __wasm__
+	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x3C00},.string = STRING_LITERAL("render backend")},
+#if !defined(__wasm__) && !defined(__linux__)
 	{.type = VOXEL_GUI_BUTTON,.on_click = antiAliasingLoadMenu,.position = {0x1000,FIXED_ONE - 0x6000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x5C00},.string = "anti aliasing"},
+	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x5C00},.string = STRING_LITERAL("anti aliasing")},
 	{.type = VOXEL_GUI_BUTTON,.on_click = toggleVsync,.position = {0x1000,FIXED_ONE - 0x8000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x7C00},.string = "toggle vsync"},
+	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x7C00},.string = STRING_LITERAL("toggle vsync")},
 #endif
 	{.type = VOXEL_GUI_BUTTON,.on_click = debugOptions,.position = {0x1000,FIXED_ONE - 0xA000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x9C00},.string = "debug options"},
+	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x9C00},.string = STRING_LITERAL("debug options")},
 };
 
 static VoxelGuiElement g_voxel_button_gui[] = {
@@ -56,11 +57,11 @@ static VoxelGuiElement g_voxel_button_gui[] = {
 };
 
 static VoxelGuiElement g_staff_inspector_gui[] = {
-	{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x1C00},.size = 0x1000,.string = "staff editor"},
+	{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x1C00},.size = 0x1000,.string = STRING_LITERAL("staff editor")},
 };
 
 VoxelGuiElement g_inventory_gui[31] = {
-	[30] = {.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x1C00},.size = 0x1000,.string = "inventory"},
+	[30] = {.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x1C00},.size = 0x1000,.string = STRING_LITERAL("inventory")},
 };
 
 void voxelMenuStaffEditorDefault(void){
@@ -88,31 +89,31 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 		.color = {0x0F00,0x0F00,0xF000},
 	},
 	[VOXEL_BLOCK_ORANGE] = {
-		.color = {0xAF00,0x6F00,0x3F00},
+		.color = {0x3F00,0x6F00,0xAF00},
 	},
 	[VOXEL_LIGHT] = {
 		.color = {0x0F0000,0x0F0000,0x0F0000},
-		.flags = VOXEL_FLAG_EMITER,
+		.flags = VOXEL_EMITER,
 	},
 	[VOXEL_HDR_TEST] = {
 		.color = {0x3F0000,0x3F0000,0x3F0000},
-		.flags = VOXEL_FLAG_EMITER,
+		.flags = VOXEL_EMITER,
 	},
 	[VOXEL_LIGHT_RED] = {
-		.color = {0xF000,0xF000,0x3F0000},
-		.flags = VOXEL_FLAG_EMITER,
+		.color = {0x3F0000,0xF000,0xF000},
+		.flags = VOXEL_EMITER,
 	},
 	[VOXEL_LIGHT_GREEN] = {
 		.color = {0xF000,0x3F0000,0xF000},
-		.flags = VOXEL_FLAG_EMITER,
+		.flags = VOXEL_EMITER,
 	},
 	[VOXEL_LIGHT_BLUE] = {
-		.color = {0x3F0000,0xF000,0xF000},
-		.flags = VOXEL_FLAG_EMITER,
+		.color = {0xF000,0xF000,0x3F0000},
+		.flags = VOXEL_EMITER,
 	},
 	[VOXEL_LIGHT_YELLOW] = {
-		.color = {0x3F0000,0x380000,0x1F000},
-		.flags = VOXEL_FLAG_EMITER,
+		.color = {0x1F000,0x380000,0x3F0000},
+		.flags = VOXEL_EMITER,
 	},
 	[VOXEL_WALL] = {
 		.color = {0xF000,0xF000,0xF000},
@@ -141,7 +142,7 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 		.color = {0x3000,0x3000,0x3000},
 		.n_gui = countof(g_voxel_menu_gui),
 		.gui = g_voxel_menu_gui,
-		.flags = VOXEL_FLAG_NO_BLOCK_PLACE,
+		.flags = VOXEL_NO_BLOCKPLACE,
 	},
 	[VOXEL_STONE_BRICK] = {
 		.texture = g_textures + TEXTURE_STONE_BRICK,
@@ -154,11 +155,11 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 	[VOXEL_UNDESTRUCTIBLE] = {
 		.texture = g_textures + TEXTURE_UNDESTRUCTIBLE,
 		.texture_size = FIXED_ONE,
-		.flags = VOXEL_FLAG_NO_BLOCK_PLACE,
+		.flags = VOXEL_NO_BLOCKPLACE,
 	},
 	[VOXEL_CHEST] = {
 		.texture = g_textures + TEXTURE_CHEST,
-		.flags = VOXEL_FLAG_TEXTURE_FILL,
+		.flags = VOXEL_TEXTUREFILL,
 		.side[VEC3_Z * 2 + 1] = {
 			.custom = true,
 			.color = {FIXED_ONE,FIXED_ONE,FIXED_ONE},
@@ -170,11 +171,11 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 	},
 	[VOXEL_MOVABLE] = {
 		.texture = g_textures + TEXTURE_UNDESTRUCTIBLE,
-		.flags = VOXEL_FLAG_TEXTURE_FILL,
+		.flags = VOXEL_TEXTUREFILL,
 	},
 	[VOXEL_BOSS] = {
 		.texture = g_textures + TEXTURE_UNDESTRUCTIBLE,
-		.flags = VOXEL_FLAG_TEXTURE_FILL,
+		.flags = VOXEL_TEXTUREFILL,
 	},
 	[VOXEL_BUTTON] = {
 		.color = {0xF000,0xF000,0xF000},
@@ -183,7 +184,7 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 	},
 	[VOXEL_STAFF_INSPECTOR] = {
 		.color = {0x0F00,0x0F00,0x2000},
-		.flags = VOXEL_FLAG_EMITER,
+		.flags = VOXEL_EMITER,
 		.side[VEC3_X * 2] = {
 			.custom = true,
 			.color = {0x0F00,0x0F00,0x2000},
@@ -193,7 +194,7 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 	},
 	[VOXEL_INVENTORY] = {
 		.color = {0x2000,0x2000,0x0F00},
-		.flags = VOXEL_FLAG_EMITER,
+		.flags = VOXEL_EMITER,
 		.gui = g_inventory_gui,
 		.n_gui = countof(g_inventory_gui),
 	},
@@ -201,6 +202,9 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 		.texture = g_textures + TEXTURE_PLANKS,
 		.texture_size = FIXED_ONE * 4,
 	},
+    [VOXEL_WATER] = {
+        .flags = VOXEL_TRANSLUCENT
+    },
 };
 
 static void octreeIndicesSet(VoxelSerialized* voxel_serial_array,int* voxel_serial_index,Voxel* voxel){
@@ -254,13 +258,13 @@ static void octreeSerializeRecursive(VoxelSerialized* voxel_serial_array,int* vo
 	if(!voxel)
 		return;
 
-	VoxelSerialized* voxel_serial = (VoxelSerialized*)((char*)voxel_serial_array + *voxel_serial_index);
+	VoxelSerialized* voxel_serial = (void*)((char*)voxel_serial_array + *voxel_serial_index);
 	voxel_serial->type = voxel->type;
 	
 	switch(voxel->type){
 		case VOXEL_PARENT:{
 			*voxel_serial_index += sizeof(VoxelSerializedParent);
-			VoxelSerializedParent* voxel_serial_parent = (VoxelSerializedParent*)voxel_serial;
+			VoxelSerializedParent* voxel_serial_parent = (void*)voxel_serial;
 			for(int i = 0;i < 8;i++){
 				if(voxel->child_s[i])
 					voxel_serial_parent->child_s[i] = *voxel_serial_index;
@@ -270,10 +274,16 @@ static void octreeSerializeRecursive(VoxelSerialized* voxel_serial_array,int* vo
 			}
 		} break;
 		case VOXEL_BUTTON:{
-			VoxelSerializedButton* voxel_serial = (VoxelSerializedButton*)((char*)voxel_serial_array + *voxel_serial_index);
+			VoxelSerializedButton* voxel_serial = (void*)((char*)voxel_serial_array + *voxel_serial_index);
 			voxel_serial->linked = voxel->linked ? voxel->linked->index : 0;
 			*voxel_serial_index += sizeof(VoxelSerializedButton);
 		} break;
+        case VOXEL_STRING:{
+            VoxelSerializedString* voxel_serial = (void*)((char*)voxel_serial_array + *voxel_serial_index);
+            voxel_serial->string_length = voxel->string.size;
+            tMemcpy(voxel_serial->string_data,voxel->string.data,voxel->string.size);
+            *voxel_serial_index += sizeof(VoxelSerializedString) + voxel->string.size;
+        } break;
 		default:{
 			*voxel_serial_index += sizeof(VoxelSerialized);
 		} break;
@@ -288,7 +298,7 @@ void octreeSerialize(VoxelSerialized* voxel_serial_array,Voxel* voxel){
 }
 
 Voxel* octreeDeserializeRecursive(VoxelSerializedParent* voxel_serial_array,int index,Voxel* parent,int depth,Vec3 position,Voxel** voxel_array,int* index_i){
-	VoxelSerialized* voxel_serial = (VoxelSerialized*)((char*)voxel_serial_array + index);
+	VoxelSerialized* voxel_serial = (void*)((char*)voxel_serial_array + index);
 	Voxel* voxel    = tMallocZero(sizeof(Voxel));
 	voxel->position_x = position.x;
 	voxel->position_y = position.y;
@@ -300,10 +310,16 @@ Voxel* octreeDeserializeRecursive(VoxelSerializedParent* voxel_serial_array,int 
 	if(voxel_array)
 		voxel_array[(*index_i)++] = voxel;
 
+    if(voxel->type == VOXEL_STRING){
+        VoxelSerializedString* voxel_serial = (void*)voxel_serial;
+        voxel->string.data = tMalloc(voxel_serial->string_length);
+        tMemcpy(voxel->string.data,voxel_serial->string_data,voxel_serial->string_length);
+    }
+    
 	if(voxel->type != VOXEL_PARENT)
 		return voxel;
 
-	VoxelSerializedParent* voxel_serial_parent = (VoxelSerializedParent*)voxel_serial;
+	VoxelSerializedParent* voxel_serial_parent = (void*)voxel_serial;
 
 	for(int i = 0;i < 8;i++){
 		Vec3 child_position = {
@@ -317,10 +333,10 @@ Voxel* octreeDeserializeRecursive(VoxelSerializedParent* voxel_serial_array,int 
 }
 
 void octreeDeserializeLink(VoxelSerializedParent* voxel_serial_array,int index,int depth,Vec3 position,Voxel** voxel_array,int* index_i){
-	VoxelSerialized* voxel_serial = (VoxelSerialized*)((char*)voxel_serial_array + index);
+	VoxelSerialized* voxel_serial = (void*)((char*)voxel_serial_array + index);
 
 	if(voxel_serial->type == VOXEL_BUTTON){
-		VoxelSerializedButton* voxel_serial_button = (VoxelSerializedButton*)voxel_serial;
+		VoxelSerializedButton* voxel_serial_button = (void*)voxel_serial;
 		Voxel* button = voxel_array[*index_i];
 		button->linked = voxel_array[voxel_serial_button->linked];
 		button->next_voxel_link = g_voxel_link_list;
@@ -332,7 +348,7 @@ void octreeDeserializeLink(VoxelSerializedParent* voxel_serial_array,int index,i
 	if(voxel_serial->type != VOXEL_PARENT)
 		return;
 
-	VoxelSerializedParent* voxel_serial_parent = (VoxelSerializedParent*)voxel_serial;
+	VoxelSerializedParent* voxel_serial_parent = (void*)voxel_serial;
 
 	for(int i = 0;i < 8;i++){
 		Vec3 child_position = {
@@ -368,6 +384,9 @@ int voxelMemoryCountRecursive(Voxel* voxel){
 				count += voxelMemoryCountRecursive(voxel->child_s[i]);
 			return count + sizeof(VoxelSerializedParent);
 		}
+        case VOXEL_STRING:{
+            return sizeof(VoxelSerializedString) + voxel->string.size;
+        } 
 		case VOXEL_BUTTON:{
 			return sizeof(VoxelSerializedButton);
 		}
@@ -620,6 +639,14 @@ static void voxelFreeRecursive(Voxel* voxel){
 		for(int i = 0;i < 8;i++)
 			voxelFreeRecursive(voxel->child_s[i]);
 	}
+    
+    if(g_voxel_static[voxel->type].flags & VOXEL_EMITER){
+        int emission = tMax(tMax(g_voxel_static[voxel->type].color.x,g_voxel_static[voxel->type].color.y),g_voxel_static[voxel->type].color.z) << 8;
+        emission >>= voxel->depth * 2;
+        for(Voxel* v = voxel;v;v = v->parent)
+            v->emission -= emission;
+    }
+    
 	tFree(voxel);
 }
 
@@ -650,7 +677,7 @@ void voxelSet(Voxel* voxel,Vec3 pos,int depth,VoxelType type){
 		node->type = VOXEL_PARENT;
 		node = child;
 	}
-	loop{
+	for(;;){
 		Voxel* parent = node->parent;
 		for(int i = 0;i < 8;i++){
 			Voxel* child = parent->child_s[i];
@@ -667,6 +694,12 @@ void voxelSet(Voxel* voxel,Vec3 pos,int depth,VoxelType type){
 				node->next_voxel_link = g_voxel_link_list;
 				g_voxel_link_list = node;
 			}
+            if(g_voxel_static[type].flags & VOXEL_EMITER){
+                int emission = tMax(tMax(g_voxel_static[type].color.x,g_voxel_static[type].color.y),g_voxel_static[type].color.z) << 8;
+                emission >>= depth * 2;
+                for(Voxel* v = node;v;v = v->parent)
+                    v->emission += emission;
+            }
 			return;
 		}
 		if(!node->depth)

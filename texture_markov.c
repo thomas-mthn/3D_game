@@ -3,22 +3,35 @@
 #include "texture.h"
 #include "memory.h"
 #include "main.h"
+#include "thread.h"
 
+#if !defined(__wasm__) && !defined(__linux__)
 #include "win32/w_kernel.h"
 #include "win32/w_main.h"
+#include "win32/w_opencl.h"
+#include <immintrin.h>
+#endif
 
 #define COLOR_RANGE 0x100
+
+static int weights[] = {
+    FIXED_ONE / 2,FIXED_ONE / 2,FIXED_ONE / 2,FIXED_ONE / 2,
+    FIXED_ONE - FIXED_ONE / 10 * 2,FIXED_ONE - FIXED_ONE / 10 * 2,FIXED_ONE - FIXED_ONE / 10 * 2,FIXED_ONE - FIXED_ONE / 10 * 2,
+    FIXED_ONE,FIXED_ONE,FIXED_ONE,FIXED_ONE,
+    FIXED_ONE / 4,FIXED_ONE,FIXED_ONE,FIXED_ONE,
+    /*
+    FIXED_ONE * 8,FIXED_ONE * 8,FIXED_ONE * 8,FIXED_ONE * 8,
+    /*
+    FIXED_ONE / 2,FIXED_ONE / 2,FIXED_ONE / 2,FIXED_ONE / 2,
+    FIXED_ONE - FIXED_ONE / 10 * 2,FIXED_ONE - FIXED_ONE / 10 * 2,FIXED_ONE - FIXED_ONE / 10 * 2,FIXED_ONE - FIXED_ONE / 10 * 2,
+    */
+};
 
 static int mipmapOffset(int width,int height,int mipmap){
     int offset = 0;
     for(int i = 0;i < mipmap;i++)
         offset += (width >> i) * (height >> i);
     return offset;
-}
-
-static bool probabilityCompare(Graph* graph,GraphNode* node,uint8* position){
-    int difference = getProbabilityDistance(graph,node,position);
-    return difference <= graph->n_difference_threshold;
 }
 
 static int getProbabilityProbabilityDistance(Graph* graph,GraphNode* probability_1,GraphNode* probability_2){
@@ -33,10 +46,10 @@ static int getProbabilityProbabilityDistance(Graph* graph,GraphNode* probability
 #else
     __m128i acc = _mm_setzero_si128();
     for(int k = 0;k < DIMENSIONS;k += 4){
-        __m128i prob1 = _mm_cvtepu8_epi32(_mm_loadu_si128(probability_1->position + k));
-        __m128i prob2 = _mm_cvtepu8_epi32(_mm_loadu_si128(probability_2->position + k));
+        __m128i prob1 = _mm_cvtepu8_epi32(_mm_loadu_si128((__m128i*)(probability_1->position + k)));
+        __m128i prob2 = _mm_cvtepu8_epi32(_mm_loadu_si128((__m128i*)(probability_2->position + k)));
         __m128i rel = _mm_abs_epi32(_mm_sub_epi32(prob1,prob2));
-        rel = _mm_srai_epi32(_mm_mullo_epi32(rel,_mm_loadu_si128(graph->weights_inverse + k)),8); 
+        rel = _mm_srai_epi32(_mm_mullo_epi32(rel,_mm_loadu_si128((__m128i*)(graph->weights_inverse + k))),8); 
         acc = _mm_add_epi32(acc,rel);
     }
     __m128i sum1 = _mm_hadd_epi32(acc, acc); 
@@ -58,10 +71,10 @@ static int getProbabilityDistance(Graph* graph,GraphNode* probability,uint8* pos
 #else
     __m128i acc = _mm_setzero_si128();
     for(int k = 0;k < DIMENSIONS;k += 4){
-        __m128i prob = _mm_cvtepu8_epi32(_mm_loadu_si128(probability->position + k));
-        __m128i positions = _mm_cvtepu8_epi32(_mm_loadu_si128(position + k));
+        __m128i prob = _mm_cvtepu8_epi32(_mm_loadu_si128((__m128i*)(probability->position + k)));
+        __m128i positions = _mm_cvtepu8_epi32(_mm_loadu_si128((__m128i*)(position + k)));
         __m128i rel = _mm_abs_epi32(_mm_sub_epi32(positions,prob));
-        rel = _mm_srai_epi32(_mm_mullo_epi32(rel,_mm_loadu_si128(graph->weights_inverse + k)),8);
+        rel = _mm_srai_epi32(_mm_mullo_epi32(rel,_mm_loadu_si128((__m128i*)(graph->weights_inverse + k))),8);
         acc = _mm_add_epi32(acc,rel);
     }
     __m128i sum1 = _mm_hadd_epi32(acc, acc); 
@@ -70,6 +83,11 @@ static int getProbabilityDistance(Graph* graph,GraphNode* probability,uint8* pos
     int distance = _mm_cvtsi128_si32(sum2);
     return distance;
 #endif
+}
+
+static bool probabilityCompare(Graph* graph,GraphNode* node,uint8* position){
+    int difference = getProbabilityDistance(graph,node,position);
+    return difference <= graph->n_difference_threshold;
 }
 
 static GraphNode* graphGet(Graph* graph,GraphNode* node,uint8* position){
@@ -295,7 +313,7 @@ static void connectToGraph(Graph* graph,GraphNode* node,uint8* position){
                 int n_neighbour_neighbours = getNumberOfNeighbours(graph->entry + candidate_list[i].node->neighbours[m]);
                 if(n_neighbour_neighbours == 1)
                     continue;
-                int distance = getProbabilityDistance(graph,candidate_list[i].node,graph->entry + candidate_list[i].node->neighbours[m]);
+                int distance = getProbabilityProbabilityDistance(graph,candidate_list[i].node,graph->entry + candidate_list[i].node->neighbours[m]);
                 if(distance > max_distance){
                     max_distance = distance;
                     max_index = m;
@@ -327,7 +345,7 @@ static void setGraph(Graph* graph,GraphNode* node,uint8* position){
     connectToGraph(graph,node,position);
 }
 
-static Graph g_graph_color[0x10];
+static Graph graph_color[0x10];
 
 #define MARGIN 4
 
@@ -339,6 +357,12 @@ static void extractImageColor(int* data,int width,int height,int mipmap,int offs
     for(int i = 0;i < amount;i++){
         int x = (offset + i) / mipmap_width;
         int y = (offset + i) % mipmap_height;
+
+        int color = data[mipmap_offset + x * mipmap_width + y];
+        int d_index = (color >> 4 & 0xF) << 0 | (color >> 12 & 0xF) << 4 | (color >> 20 & 0xF) << 8;
+
+        graph_color[mipmap].n_color_distribution[d_index] += 1;
+
         if(x < MARGIN || x >= mipmap_height - MARGIN || y < MARGIN || y >= mipmap_width - MARGIN)
             continue;
         uint8 position[DIMENSIONS] = {0};
@@ -353,9 +377,9 @@ static void extractImageColor(int* data,int width,int height,int mipmap,int offs
             for(int c = 0;c < 3;c++)
                 position[countof(offsets) * 3 + k * 3 + c] = (color >> c * 8 & 0xFF);
         }
-        GraphNode* graph_node = graphInference(g_graph_color + mipmap,position);
-        if(!graph_node || !probabilityCompare(g_graph_color + mipmap,graph_node,position)){
-            GraphNode* graph_node = g_graph_color[mipmap].entry + g_graph_color[mipmap].n_nodes++;
+        GraphNode* graph_node = graphInference(graph_color + mipmap,position);
+        if(!graph_node || !probabilityCompare(graph_color + mipmap,graph_node,position)){
+            GraphNode* graph_node = graph_color[mipmap].entry + graph_color[mipmap].n_nodes++;
             for(int j = 0;j < DIMENSIONS;j++)
                 graph_node->position[j] = position[j];
 
@@ -366,7 +390,7 @@ static void extractImageColor(int* data,int width,int height,int mipmap,int offs
             for(int j = 0;j < countof(graph_node->neighbours);j++)
                 graph_node->neighbours[j] = -1;
 
-            setGraph(g_graph_color + mipmap,graph_node,position);
+            setGraph(graph_color + mipmap,graph_node,position);
         }
         else{
             int color = data[mipmap_offset + x * mipmap_width + y];
@@ -379,6 +403,12 @@ static void extractImageColor(int* data,int width,int height,int mipmap,int offs
             }
         }
     }
+    int index = 0; 
+    for(int i = 0;i < countof(graph_color[mipmap].n_color_distribution);i++){ 
+        index += graph_color[mipmap].n_color_distribution[i]; 
+        graph_color[mipmap].color_randindex[i] = index;
+    } 
+    graph_color[mipmap].n_color_randrange = index;
 }
 
 static void shuffle(int* arr,int size){
@@ -399,7 +429,7 @@ structure(PixelFillThreadInfo){
     int n_threads;
 };
 
-static unsigned stdcall generateColorThread(void* arg){
+static THREAD_ENTRY generateColorThread(void* arg){
     PixelFillThreadInfo* info = arg;
 
     int mipmap_offset = 0;
@@ -412,7 +442,6 @@ static unsigned stdcall generateColorThread(void* arg){
         int x = info->indices[i] / mipmap_size;
         int y = info->indices[i] % mipmap_size;
 
-        int luminance[3];
         GraphNode* graph_node;
 
         uint8 position[DIMENSIONS] = {0};
@@ -423,6 +452,14 @@ static unsigned stdcall generateColorThread(void* arg){
 
             int color = info->data[mipmap_offset + offset_x * mipmap_size + offset_y];
 
+            if(color >> 24 & 0x02){
+                for(int c = 0;c < 3;c++)
+                    graph_color[info->mipmap].weights_inverse[k * 3 + c] = 0;
+            }
+            else{
+                for(int c = 0;c < 3;c++)
+                    graph_color[info->mipmap].weights_inverse[k * 3 + c] = fixedDivR(FIXED_ONE,weights[k]) >> 4;
+            }
             for(int c = 0;c < 3;c++)
                 position[k * 3 + c] = (color >> c * 8 & 0xFF);
         }
@@ -435,7 +472,7 @@ static unsigned stdcall generateColorThread(void* arg){
             for(int c = 0;c < 3;c++)
                 position[countof(offsets) * 3 + k * 3 + c] = (color >> c * 8 & 0xFF);
         }
-        graph_node = graphInference(g_graph_color + info->mipmap,position);
+        graph_node = graphInference(graph_color + info->mipmap,position);
 
         if(!graph_node)
             continue;
@@ -500,9 +537,9 @@ static unsigned stdcall generateColorBruteForceThread(void* arg){
         int m_score = INT_MAX;
         GraphNode* selected = 0;
 
-        for(int i = 0;i < g_graph_color[info->mipmap].n_nodes;i++){
-            GraphNode* node = g_graph_color[info->mipmap].entry + i;
-            int score = getProbabilityDistance(g_graph_color + info->mipmap,node,position);
+        for(int i = 0;i < graph_color[info->mipmap].n_nodes;i++){
+            GraphNode* node = graph_color[info->mipmap].entry + i;
+            int score = getProbabilityDistance(graph_color + info->mipmap,node,position);
             if(score < m_score){
                 selected = node;
                 m_score = score;
@@ -540,34 +577,53 @@ static unsigned stdcall generateColorBruteForceThread(void* arg){
     return 0;
 }
 
-
-#include "win32/w_opencl.h"
-
 static int g_indices[4096 * 4096];
 
-static int bias(int value,int bias){
-    return fixedDivR(value,(fixedMulR((fixedDivR(FIXED_ONE,bias) - FIXED_ONE * 2),(FIXED_ONE - value)) + FIXED_ONE));
+static int binarySearch(int* A,int n,int T){
+    int L = 0;
+    int R = n - 1;
+    while(L < R){
+        int m = (L + R) >> 1;
+        if(A[m] > T)
+            R = m;
+        else
+            L = m + 1;
+    }
+    return L;
 }
 
 static void generateColorInit(int* data,int mipmap,int image_size){
-    int mipmap_size = image_size >> mipmap;
-    if(!mipmap_size)
+    int mipmap_offset = mipmapOffset(image_size,image_size,mipmap);
+
+    for(int i = 0;i < (image_size >> mipmap) * (image_size >> mipmap);i++){
+        if(data[mipmap_offset + i] >> 24 & 0x01)
+            continue;
+        int r = tRnd() % tMax(graph_color[mipmap].n_color_randrange,1); 
+        int color_index = binarySearch(graph_color[mipmap].color_randindex,countof(graph_color[mipmap].color_randindex),r); 
+        int color = (color_index >> 0 & 0xF) << 4 | (color_index >> 4 & 0xF) << 12 | (color_index >> 8 & 0xF) << 20; 
+        data[mipmap_offset + i] = color;
+    }
+}
+
+void generateColorInitLayer(int* data,int* indices,int mipmap,int image_size){
+    int mipmap_width = image_size >> mipmap;
+    int mipmap_height = image_size >> mipmap;
+    int mipmap_size = mipmap_width * mipmap_height;
+    if(!mipmap_width || !mipmap_height)
         return;
     int mipmap_offset = mipmapOffset(image_size,image_size,mipmap);
 
-    for(int i = 0;i < mipmap_size * mipmap_size;i++){
-        int x = i / mipmap_size;
-        int y = i % mipmap_size;
-        if(data[mipmap_offset + i] >> 24)   
+    for(int i = 0;i < mipmap_size;i++){
+        int x = i / mipmap_width;
+        int y = i % mipmap_width;
+        if(data[mipmap_offset + i] >> 24 & 0x01)
             continue;
-        Vec3 up = pixelColorToColor(data[mipmap_offset + (x / 2) * (mipmap_size / 2) + y / 2 + mipmap_size * mipmap_size]);
-        Vec3 rnd = {tRnd() % (FIXED_ONE << 4),tRnd() % (FIXED_ONE << 4),tRnd() % (FIXED_ONE << 4)};
-        int weight = bias(tRnd() % FIXED_ONE,FIXED_ONE / 100 * 99);
-        data[mipmap_offset + i] = colorToPixelColor(vec3Mix(up,rnd,weight));
+        data[mipmap_offset + i] = data[mipmap_offset + (x / 2) * (mipmap_width / 2) + y / 2 + mipmap_size] & 0xFFFFFF;
+        data[mipmap_offset + i] |= 0x02000000;
     }
-    for(int i = 0;i < mipmap_size * mipmap_size;i++)
-        g_indices[i] = i;
-    shuffle(g_indices,mipmap_size * mipmap_size);
+    for(int i = 0;i < mipmap_size;i++)
+        indices[i] = i; 
+    shuffle(indices,mipmap_size);
 }
 
 static void generateColor(int* data,int mipmap,int image_size){
@@ -575,11 +631,17 @@ static void generateColor(int* data,int mipmap,int image_size){
         int mipmap_size = image_size >> mipmap;
         if(!mipmap_size)
             return;
-        int mipmap_offset = mipmapOffset(image_size,image_size,mipmap);
 
         PixelFillThreadInfo thread_info[0x10];
-        void* threads[0x10];
-
+        thread_t threads[0x10];
+#if defined(__wasm__)
+        thread_info->indices = g_indices + mipmap_size * mipmap_size;
+        thread_info->mipmap = mipmap;
+        thread_info->image_size = image_size;
+        thread_info->data = data;
+        thread_info->n_threads = 1;
+        generateColorThread(thread_info);
+#else
         int n_threads = tMin(g_n_threads,0x10);
         for(int j = 0;j < n_threads;j++){
             thread_info[j].indices = g_indices + mipmap_size * mipmap_size / n_threads * j;
@@ -587,73 +649,63 @@ static void generateColor(int* data,int mipmap,int image_size){
             thread_info[j].image_size = image_size;
             thread_info[j].data = data;
             thread_info[j].n_threads = n_threads;
-            threads[j] = CreateThread(0,0,generateColorThread,thread_info + j,0,0);
+            threads[j] = threadCreate(generateColorThread,thread_info + j);
         }
-        WaitForMultipleObjects(n_threads,threads,true,-1);
-        for(int j = 0;j < n_threads;j++)
-            CloseHandle(threads[j]);
+        threadWait(threads,n_threads);
+#endif
     }
 }
-#include "win32/w_console.h"
+
 void markovTextureTrain(Texture texture){
-#if defined(_DEBUG_FAST) || defined(RELEASE_FASTSTARTUP)
-    return;
-#endif
-    int t = __rdtsc() >> 24;
- 
-    int weights[] = {
-        FIXED_ONE,FIXED_ONE,FIXED_ONE,FIXED_ONE,
-        FIXED_ONE + FIXED_ONE / 10 * 2,FIXED_ONE + FIXED_ONE / 10 * 2,FIXED_ONE + FIXED_ONE / 10 * 2,FIXED_ONE + FIXED_ONE / 10 * 2,
-        FIXED_ONE,FIXED_ONE,FIXED_ONE,FIXED_ONE,
-        FIXED_ONE + FIXED_ONE / 10 * 2,FIXED_ONE + FIXED_ONE / 10 * 2,FIXED_ONE + FIXED_ONE / 10 * 2,FIXED_ONE + FIXED_ONE / 10 * 2,
-    };
+    if(g_options.fast_startup)
+        return;
+    //int t = __rdtsc() >> 24;
+
     for(int i = 0;i < 0x10;i++){
         for(int j = 0;j < countof(weights);j++){
             for(int c = 0;c < 3;c++)
-                g_graph_color[i].weights_inverse[j * 3 + c] = fixedDivR(FIXED_ONE,weights[j]) >> 4;
+                graph_color[i].weights_inverse[j * 3 + c] = fixedDivR(FIXED_ONE,weights[j]) >> 4;
         }
-        g_graph_color[i].n_candidates_inference = 0x10;
-        g_graph_color[i].n_search_inference = 0x10;
-        g_graph_color[i].n_neighbours = 16;
-        g_graph_color[i].n_difference_threshold = 0x400;
+        graph_color[i].n_candidates_inference = 0x10;
+        graph_color[i].n_search_inference = 0x10;
+        graph_color[i].n_neighbours = 16;
+        graph_color[i].n_difference_threshold = 0x400;
     }
     for(int mipmap = 0;mipmap < 0x10;mipmap++)
         extractImageColor(texture.pixel_data,texture.size,texture.size,mipmap,0,(texture.size >> mipmap) * (texture.size >> mipmap));
-    print("training time: ");
-    printNumberNL((__rdtsc() >> 24) - t);
-
+    /*
     int n_neighbours = 0;
 
-    for(int i = 0;i < g_graph_color[0].n_nodes;i++){
+    for(int i = 0;i < graph_color[0].n_nodes;i++){
         bool connections = false; 
         for(int j = 0;j < 0x10;j++){
-            if(g_graph_color[0].entry[i].neighbours[j] == -1)
+            if(graph_color[0].entry[i].neighbours[j] == -1)
                 continue;
             connections = true;
             bool bidirectional = false;
 
             for(int k = 0;k < 0x10;k++){
-                if(g_graph_color[0].entry[g_graph_color[0].entry[i].neighbours[j]].neighbours[k] == i){
+                if(graph_color[0].entry[graph_color[0].entry[i].neighbours[j]].neighbours[k] == i){
                     bidirectional = true;
                 }
             }
 
             if(!bidirectional){
-                print("not bidirectional\n");
+                //print("not bidirectional\n");
             }
             n_neighbours += 1;
         }
         if(!connections){
-            print("not connected\n");
+            //print("not connected\n");
         }
     }
-    
-    print("nodes = ");
-    printNumberNL(g_graph_color[0].n_nodes);
-    print("neigbours = ");
+    print((String)STRING_LITERAL("nodes = "));
+    printNumberNL(graph_color[0].n_nodes);
+    print((String)STRING_LITERAL("neigbours = "));
     printNumberNL(n_neighbours);
-    print("avg neigbours = ");
-    printNumberNL(n_neighbours / g_graph_color[0].n_nodes);
+    print((String)STRING_LITERAL("avg neigbours = "));
+    printNumberNL(n_neighbours / graph_color[0].n_nodes);
+    */
 }
 
 static void markovRandomSampler(Texture texture,Texture sampler){
@@ -672,82 +724,88 @@ static void markovRandomSampler(Texture texture,Texture sampler){
 }
 
 void markovTextureGenerate(Texture texture,Texture sampler){
-#if defined(_DEBUG_FAST) || defined(RELEASE_FASTSTARTUP)
-    return;
+    if(g_options.fast_startup)
+        return;
+
+    //int t = __rdtsc() >> 24;
+#if !defined(__wasm__) && !defined(__linux__)
+    if(g_opencl_loaded)
+        markovInferenceInitOpenCL(texture,graph_color,texture.size);
 #endif
-    for(int i = 0;i < texture.size * texture.size * 2;i++)
-        texture.pixel_data[i] = tRnd();
-
-    int t = __rdtsc() >> 24;
-    markovInferenceInitOpenCL(texture,g_graph_color,texture.size);
-
     for(int i = 0;i < 0x10;i++){
-        g_graph_color[i].n_candidates_inference = 0x100;
-        g_graph_color[i].n_search_inference = 16;
+        graph_color[i].n_candidates_inference = 0x100;
+        graph_color[i].n_search_inference = 16;
     }
+
+    generateColorInit(texture.pixel_data,0x10 - 1,texture.size);
 
     for(int mipmap = 0x10;mipmap--;){
         int mipmap_size = texture.size >> mipmap;
         if(mipmap_size < 4)
             continue;
-        generateColorInit(texture.pixel_data,mipmap,texture.size);
+        generateColorInitLayer(texture.pixel_data,g_indices,mipmap,texture.size);
         /*
         if(texture.size >> mipmap >= 256)
             markovInferenceOpenCL(texture,g_graph_color,g_indices,mipmap,texture.size,16,g_graph_color[mipmap].n_nodes);
         else
         */
             //generateColor(texture.pixel_data,mipmap,texture.size);
-        
-        if(texture.size >> mipmap >= 256)
-            markovInferenceOpenCL(texture,g_graph_color,g_indices,mipmap,texture.size,16,g_graph_color[mipmap].n_nodes);
+#if !defined(__wasm__) && !defined(__linux__)
+        if(texture.size >> mipmap >= 256 && g_opencl_loaded)
+            markovInferenceOpenCL(texture,graph_color,g_indices,mipmap,texture.size,16,graph_color[mipmap].n_nodes);
         else
+#endif
             generateColor(texture.pixel_data,mipmap,texture.size);
-       
+
         //markovInferenceOpenCL(texture,g_graph_color,g_indices,mipmap,texture.size,16,g_graph_color[mipmap].n_nodes);
     }
-    printNumberNL((__rdtsc() >> 24) - t);
+    //printNumberNL((__rdtsc() >> 24) - t);
 }
 
 void markovTextureRemix(Texture texture,int remix_mipmap){
-#if defined(_DEBUG_FAST) || defined(RELEASE_FASTSTARTUP)
-    return;
-#endif 
-    int t = __rdtsc() >> 24;
-    markovInferenceInitOpenCL(texture,g_graph_color,texture.size);
-
+    if(g_options.fast_startup)
+        return;
+    //int t = __rdtsc() >> 24;
+#if !defined(__wasm__) && !defined(__linux__)
+    if(g_opencl_loaded)
+        markovInferenceInitOpenCL(texture,graph_color,texture.size);
+#endif
     for(int mipmap = remix_mipmap;mipmap--;){
-        g_graph_color[mipmap].n_candidates_inference = 16;
-        g_graph_color[mipmap].n_search_inference = 16;
+        graph_color[mipmap].n_candidates_inference = 16;
+        graph_color[mipmap].n_search_inference = 16;
         generateColorInit(texture.pixel_data,mipmap,texture.size);
 
         //markovInferenceBruteforceOpenCL(texture,g_graph_color,g_indices,mipmap,texture.size,g_graph_color[mipmap].n_nodes);
-        
-        if(texture.size >> mipmap >= 256)
-            markovInferenceOpenCL(texture,g_graph_color,g_indices,mipmap,texture.size,16,g_graph_color[mipmap].n_nodes);
+#if !defined(__wasm__) && !defined(__linux__)
+        if(texture.size >> mipmap >= 256 && g_opencl_loaded)
+            markovInferenceOpenCL(texture,graph_color,g_indices,mipmap,texture.size,16,graph_color[mipmap].n_nodes);
         else
+#endif
             generateColor(texture.pixel_data,mipmap,texture.size);
-            
     }
-    printNumberNL((__rdtsc() >> 24) - t);
+    //printNumberNL((__rdtsc() >> 24) - t);
+#if !defined(__wasm__) && !defined(__linux__)
     markovInferenceDeInitOpenCL();
+#endif
 }
 
 void markovInit(void){
-#if defined(_DEBUG_FAST) || defined(RELEASE_FASTSTARTUP)
-    return;
-#endif
+    if(g_options.fast_startup)
+        return;
     for(int i = 0;i < 0x10;i++)
-        g_graph_color[i].entry = tMallocZero((sizeof(GraphNode) * 0x1000000) >> i * 2);
+        graph_color[i].entry = memoryArenaGet();
 }
 
 void markovFree(void){
-#if defined(_DEBUG_FAST) || defined(RELEASE_FASTSTARTUP)
-    return;
-#endif
+    if(g_options.fast_startup)
+        return;
     for(int i = 0;i < 0x10;i++){
-        tFree(g_graph_color[i].entry);
-        g_graph_color[i].entry = 0;
-        g_graph_color[i].n_nodes = 0;
+        memoryArenaFree(graph_color[i].entry);
+        graph_color[i].entry = 0;
+        graph_color[i].n_nodes = 0;
     }
-    markovInferenceDeInitOpenCL();
+#if !defined(__wasm__) && !defined(__linux__)
+    if(g_opencl_loaded)
+        markovInferenceDeInitOpenCL();
+#endif
 }

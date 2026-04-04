@@ -53,6 +53,10 @@ structure(Graph){
     int weights[DIMENSIONS];
     int weights_inverse[DIMENSIONS];
     GraphNode* entry;
+
+    int color_randindex[4096];
+    int n_color_distribution[4096];
+    int n_color_randrange;
 };
 
 void markovTextureTrain(Texture texture);

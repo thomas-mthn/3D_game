@@ -3,7 +3,8 @@
 
 #include "texture.h"
 
-typedef struct VoxelGuiElement VoxelGuiElement;
+structure(VoxelGuiElement);
+
 struct Staff;
 
 void toggleSmoothLighting(VoxelGuiElement* self);

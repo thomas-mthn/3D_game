@@ -3,7 +3,7 @@
 
 #include "vec2.h"
 
-enumeration(TextureType){
+typedef enum {
 	TEXTURE_WALL,
 	TEXTURE_GRASS,
 	TEXTURE_STONE,
@@ -22,10 +22,10 @@ enumeration(TextureType){
 	TEXTURE_SKYBOX_XY_UP,
 	TEXTURE_SKYBOX_XY_DOWN,
 	TEXTURE_STONE2,
-};
+} TextureType;
 
 structure(Texture){
-	unsigned* pixel_data;
+	int* pixel_data;
 	int size;
 	unsigned gl_id;
 };
@@ -41,7 +41,7 @@ void generateMipmaps(Texture* texture);
 Texture textureCreate(int size);
 void textureDestroy(Texture texture);
 
-#ifndef __wasm__
+#if !defined(__wasm__) && !defined(__linux__)
 void textureResetGL(void);
 #endif
 
