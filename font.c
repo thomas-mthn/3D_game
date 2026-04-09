@@ -2,7 +2,9 @@
 #include "fixed.h"
 
 FontChar g_vector_font[0x100] = {
-    ['0'] = {.position = {
+    [' '] = {.width = FIXED_ONE},
+    ['0'] = {
+        .position = {
             {0x40,0x00,0xC0,0x00},
             {0x40,0x40,0xC0,0x40},
             {0x40,0x00,0x40,0x40},
@@ -10,12 +12,14 @@ FontChar g_vector_font[0x100] = {
         },
         .width = FIXED_ONE,
     },
-    ['1'] = {.position = {
+    ['1'] = {
+        .position = {
             {0x40,0x00,0xC0,0x00},
         },
         .width = FIXED_ONE,
     },
-    ['2'] = {.position = {
+    ['2'] = {
+        .position = {
             {0xC0,0x00,0xC0,0x80},
             {0xC0,0x00,0x60,0x80},
             {0x60,0x80,0x40,0x80},
@@ -23,7 +27,8 @@ FontChar g_vector_font[0x100] = {
         },
         .width = FIXED_ONE,
     },
-    ['3'] = {.position = {
+    ['3'] = {
+        .position = {
             {0x40,0x00,0x40,0x80},
             {0x40,0x80,0xC0,0x80},
             {0xC0,0x00,0xC0,0x80},
@@ -31,14 +36,16 @@ FontChar g_vector_font[0x100] = {
         },
         .width = FIXED_ONE,
     },
-    ['4'] = {.position = {
+    ['4'] = {
+        .position = {
             {0xA0,0x00,0xA0,0x80},
             {0xC0,0x60,0x40,0x60},
             {0xA0,0x00,0x40,0x60},
         },
         .width = FIXED_ONE,
     },
-    ['5'] = {.position = {
+    ['5'] = {
+        .position = {
             {0x40,0x00,0x40,0x40},
             {0x40,0x00,0x80,0x00},
             {0x80,0x00,0x80,0x40},
@@ -47,7 +54,8 @@ FontChar g_vector_font[0x100] = {
         },
         .width = FIXED_ONE,
     },
-    ['6'] = {.position = {
+    ['6'] = {
+        .position = {
             {0x40,0x40,0x80,0x00},
             {0x80,0x00,0x80,0x40},
             {0x80,0x40,0xC0,0x40},
@@ -56,13 +64,15 @@ FontChar g_vector_font[0x100] = {
         },
         .width = FIXED_ONE,
     },
-    ['7'] = {.position = {
+    ['7'] = {
+        .position = {
             {0x40,0x00,0x40,0x40},
             {0x40,0x40,0xC0,0x00}
         },
         .width = FIXED_ONE,
     },
-    ['8'] = {.position = {
+    ['8'] = {
+        .position = {
             {0x40,0x00,0x40,0x40},
             {0x40,0x40,0x80,0x40},
             {0x80,0x40,0x80,0x00},
@@ -73,7 +83,8 @@ FontChar g_vector_font[0x100] = {
         },
         .width = FIXED_ONE,
     },
-    ['9'] = {.position = {
+    ['9'] = {
+        .position = {
             {0x80,0x40,0xC0,0x00},
             {0x80,0x00,0x80,0x40},
             {0x80,0x40,0x40,0x40},
@@ -82,30 +93,34 @@ FontChar g_vector_font[0x100] = {
         },
         .width = FIXED_ONE,
     },
-    ['a'] = {.position = {
+    ['a'] = {
+        .position = {
             {0xC0,0x00,0x40,0x40},
             {0xC0,0x80,0x40,0x40},
             {0x90,0x18,0x90,0x68},
         },
-        .width = FIXED_ONE - FIXED_ONE / 4,
+        .width = FIXED_ONE - 0x2000,
     },
-    ['b'] = {.position = {
+    ['b'] = {
+        .position = {
             {0x80,0x00,0x80,0x40},
             {0x80,0x40,0xC0,0x40},
             {0xC0,0x40,0xC0,0x00},
             {0xC0,0x00,0x80,0x00},
             {0x40,0x00,0x80,0x00},
         },
-        .width = FIXED_ONE,
+        .width = FIXED_ONE / 2 + 0x2000,
     },
-    ['c'] = {.position = {
+    ['c'] = {
+        .position = {
             {0x40,0x00,0xC0,0x00},
             {0xC0,0x00,0xC0,0x80},
             {0x40,0x00,0x40,0x80},
         },
         .width = FIXED_ONE,
     },
-    ['d'] = {.position = {
+    ['d'] = {
+        .position = {
             {0x40,0x00,0xC0,0x00},
             {0xC0,0x00,0xC0,0x60},
             {0x40,0x00,0x40,0x60},
@@ -113,24 +128,27 @@ FontChar g_vector_font[0x100] = {
             {0x40,0x60,0x60,0x80},
             {0x60,0x80,0xA0,0x80},
         },
-        .width = FIXED_ONE,
+        .width = FIXED_ONE - 0x2000,
     },
-    ['e'] = {.position = {
+    ['e'] = {
+        .position = {
             {0x40,0x00,0x40,0x80},
             {0x40,0x00,0xC0,0x00},
             {0xC0,0x00,0xC0,0x80},
             {0x80,0x00,0x80,0x40},
         },
-        .width = FIXED_ONE - FIXED_ONE / 4,
+        .width = FIXED_ONE - 0x2000,
     },
-    ['f'] = {.position = {
+    ['f'] = {
+        .position = {
             {0x40,0x00,0xC0,0x00},
             {0x80,0x00,0x80,0x40},
             {0x40,0x00,0x40,0x60},
         },
-        .width = FIXED_ONE,
+        .width = FIXED_ONE - 0x4000,
     },
-    ['g'] = {.position = {
+    ['g'] = {
+        .position = {
             {0x80,0x40,0xA0,0x40},
             {0xA0,0x40,0xC0,0x20},
             {0xC0,0x20,0xC0,0x00},
@@ -139,35 +157,40 @@ FontChar g_vector_font[0x100] = {
             {0x40,0x40,0x40,0x00},
             {0x40,0x00,0x80,0x00},
         },
-        .width = FIXED_ONE,
+        .width = FIXED_ONE - 0x4000,
     },
-    ['h'] = {.position = {
+    ['h'] = {
+        .position = {
             {0x40,0x00,0xC0,0x00},
             {0x40,0x80,0xC0,0x80},
             {0x80,0x00,0x80,0x80},
         },
         .width = FIXED_ONE - FIXED_ONE / 4,
     },
-    ['i'] = {.position = {
+    ['i'] = {
+        .position = {
             {0xC0,0x00,0x60,0x00},
             {0x40,0x00,0x40,0x00},
         },
-        .width = FIXED_ONE,
+        .width = FIXED_ONE / 3,
     },
-    ['k'] = {.position = {
+    ['k'] = {
+        .position = {
             {0x40,0x00,0xC0,0x00},
             {0x80,0x00,0xC0,0x60},
             {0x80,0x00,0x40,0x60},
         },
-        .width = FIXED_ONE,
+        .width = FIXED_ONE - 0x4000,
     },
-    ['l'] = {.position = {
+    ['l'] = {
+        .position = {
             {0x40,0x00,0xC0,0x00},
             {0xC0,0x00,0xC0,0x60},
         },
-        .width = FIXED_ONE / 2,
+        .width = FIXED_ONE / 2 + 0x2000,
     },
-    ['m'] = {.position = {
+    ['m'] = {
+        .position = {
             {0x40,0x00,0xC0,0x00},
             {0x40,0x40,0xC0,0x40},
             {0x40,0x80,0xC0,0x80},
@@ -175,66 +198,85 @@ FontChar g_vector_font[0x100] = {
         },
         .width = FIXED_ONE,
     },
-    ['n'] = {.position = {
+    ['n'] = {
+        .position = {
             {0x40,0x00,0xC0,0x00},
             {0x40,0x80,0xC0,0x80},
             {0x40,0x00,0x40,0x80},
         },
         .width = FIXED_ONE,
     },
-    ['o'] = {.position = {
+    ['o'] = {
+        .position = {
             {0x40,0x00,0xC0,0x00},
-            {0x40,0x40,0xC0,0x40},
-            {0x40,0x00,0x40,0x40},
-            {0xC0,0x00,0xC0,0x40},
+            {0x40,0x80,0xC0,0x80},
+            {0x40,0x00,0x40,0x80},
+            {0xC0,0x00,0xC0,0x80},
         },
         .width = FIXED_ONE,
     },
-    ['p'] = {.position = {
+    ['p'] = {
+        .position = {
             {0x40,0x00,0x40,0x40},
             {0x40,0x40,0x80,0x40},
             {0x80,0x40,0x80,0x00},
             {0x80,0x00,0x40,0x00},
             {0x80,0x00,0xC0,0x00},
         },
-        .width = FIXED_ONE,
+        .width = FIXED_ONE - 0x2000,
     },
-    ['r'] = {.position = {
+    ['q'] = {
+        .position = {
+            {0x40,0x00,0x40,0x40},
+            {0x40,0x40,0x80,0x40},
+            {0x80,0x40,0x80,0x00},
+            {0x80,0x00,0x40,0x00},
+            {0x80,0x40,0xC0,0x40},
+        },
+        .width = FIXED_ONE - 0x2000,
+    },
+    ['r'] = {
+        .position = {
             {0x40,0x00,0xC0,0x00},
             {0x80,0x00,0x40,0x30},
             {0x40,0x30,0x40,0x80},
         },
         .width = FIXED_ONE,
     },
-    ['s'] = {.position = {
+    ['s'] = {
+        .position = {
             {0xC0,0x00,0xC0,0x40},
             {0x40,0x00,0x80,0x00},
             {0x80,0x00,0x80,0x40},
             {0x80,0x40,0xC0,0x40},
             {0x40,0x00,0x40,0x40},
         },
-        .width = FIXED_ONE,
+        .width = FIXED_ONE - 0x4000,
     },
-    ['t'] = {.position = {
+    ['t'] = {
+        .position = {
             {0x40,0x40,0xC0,0x40},
             {0x40,0x00,0x40,0x80},
         },
-        .width = FIXED_ONE - FIXED_ONE / 3,
+        .width = FIXED_ONE - 0x4000,
     },
-    ['u'] = {.position = {
+    ['u'] = {
+        .position = {
             {0x40,0x00,0xC0,0x00},
             {0x40,0x80,0xC0,0x80},
             {0xC0,0x00,0xC0,0x80},
         },
         .width = FIXED_ONE,
     },
-    ['v'] = {.position = {
+    ['v'] = {
+        .position = {
             {0x40,0x00,0xC0,0x40},
             {0x40,0x80,0xC0,0x40},
         },
         .width = FIXED_ONE,
     },
-    ['w'] = {.position = {
+    ['w'] = {
+        .position = {
             {0xC0,0x20,0x40,0x00},
             {0xC0,0x20,0x40,0x40},
             {0xC0,0x60,0x40,0x40},
@@ -242,38 +284,44 @@ FontChar g_vector_font[0x100] = {
         },
         .width = FIXED_ONE,
     },
-    ['x'] = {.position = {
+    ['x'] = {
+        .position = {
             {0x40,0x00,0xC0,0x80},
             {0x40,0x80,0xC0,0x00},
         },
         .width = FIXED_ONE,
     },
-    ['y'] = {.position = {
+    ['y'] = {
+        .position = {
             {0x40,0x00,0x80,0x40},
             {0x40,0x80,0x80,0x40},
             {0x80,0x40,0xC0,0x40},
         },
-        .width = FIXED_ONE,
+        .width = FIXED_ONE - 0x2000,
     },
-    [':'] = {.position = {
+    [':'] = {
+        .position = {
             {0xC0,0x00,0xC0,0x00},
             {0x40,0x00,0x40,0x00},
         },
         .width = FIXED_ONE,
     },
-    ['<'] = {.position = {
+    ['<'] = {
+        .position = {
             {0x40,0x80,0x80,0x00},
             {0xC0,0x80,0x80,0x00},
         },
         .width = FIXED_ONE,
     },
-    ['>'] = {.position = {
+    ['>'] = {
+        .position = {
             {0x40,0x00,0x80,0x80},
             {0xC0,0x00,0x80,0x80},
         },
         .width = FIXED_ONE,
     },
-    ['#'] = {.position = {
+    ['#'] = {
+        .position = {
             {0x40,0x20,0xC0,0x20},
             {0x40,0x60,0xC0,0x60},
             {0x60,0x00,0x60,0x80},
@@ -281,17 +329,20 @@ FontChar g_vector_font[0x100] = {
         },
         .width = FIXED_ONE,
     },
-    ['-'] = {.position = {
+    ['-'] = {
+        .position = {
             {0x80,0x00,0x80,0x80},
         },
         .width = FIXED_ONE,
     },
-    ['_'] = {.position = {
+    ['_'] = {
+        .position = {
             {0x40,0x00,0x40,0x80},
         },
         .width = FIXED_ONE,
     },
-    ['='] = {.position = {
+    ['='] = {
+        .position = {
             {0x60,0x00,0x60,0x80},
             {0xA0,0x00,0xA0,0x80},
         },

@@ -1,5 +1,4 @@
 #include "libc.h"
-#include "main.h"
 
 #pragma function(strlen)
 size_t strlen(const char* str){
@@ -9,6 +8,9 @@ size_t strlen(const char* str){
     return ptr - str;
 }
 
+#ifdef __GNUC__
+__attribute__((optimize("no-tree-loop-distribute-patterns")))
+#endif
 #pragma function(memset)
 void* memset(void *s,int c,size_t n){
     char *p = s;
@@ -39,7 +41,7 @@ void* memmove(void* dest,const void* src,size_t count){
             d[i] = s[i];
     } 
 	else{
-		for(size_t i = 0;i < count;i++)
+        for(size_t i = count; i > 0; i--)
             d[i - 1] = s[i - 1];
     }
     return dest;

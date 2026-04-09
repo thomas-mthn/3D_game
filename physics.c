@@ -4,7 +4,7 @@
 #include "audio.h"
 
 void movementFly(void){
-    if(g_edit_voxelstring)
+    if(g_voxel_interact)
         return;
 	int speed = keyDown(KEY_LCONTROL) ? 2 : 4;
 	if(keyDown(KEY_W)){
@@ -122,7 +122,7 @@ Vec3 playerHitboxGet(void){
 #define BHOP_BONUS (FIXED_ONE / 128)
 
 void movementNormal(void){
-    if(g_edit_voxelstring)
+    if(g_voxel_interact)
         return;
 	int max_height_x = 0;
 	int max_height_y = 0;

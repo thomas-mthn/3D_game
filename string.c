@@ -13,7 +13,7 @@ static int numberStringLength(int number){
     return length;
 }
 
-static bool stringCompareSizeInsensitive(String string,String compare){
+bool stringCompareSizeInsensitive(String string,String compare){
     if(string.size < compare.size)
         return false;
     for(int i = compare.size;i--;){

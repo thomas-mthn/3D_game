@@ -5,6 +5,7 @@
 #include "main.h"
 #include "langext.h"
 #include "span.h"
+#include "opengl.h"
 
 #if !defined(__wasm__) && !defined(__linux__)
 #include "win32/w_draw_gdi.h"
@@ -21,17 +22,17 @@ DrawSurface g_surface = {
 
 static void (*destroySurface[])(DrawSurface*) = {
 	[RENDER_BACKEND_SOFTWARE] = softSurfaceDestroy,
+    [RENDER_BACKEND_GL] = destroySurfaceGL,
 #if !defined(__wasm__) && !defined(__linux__)
 	[RENDER_BACKEND_GDI] = destroySurfaceGDI,
-    [RENDER_BACKEND_GL] = destroySurfaceGL,
 #endif
 };
 
 static bool (*createSurface[])(DrawSurface*) = {
 	[RENDER_BACKEND_SOFTWARE] = softSurfaceCreate,
+    [RENDER_BACKEND_GL] = createSurfaceGL,
 #if !defined(__wasm__) && !defined(__linux__)
 	[RENDER_BACKEND_GDI] = createSurfaceGDI,
-    [RENDER_BACKEND_GL] = createSurfaceGL,
 #endif
 };
 
@@ -78,8 +79,9 @@ void surfaceChangeSize(DrawSurface* surface,int width,int height){
     surface->window_height = height;
     void (*vtable[])(DrawSurface*,int,int) = {
         [RENDER_BACKEND_SOFTWARE] = softSurfaceSizeChange,
-#if !defined(__wasm__) && !defined(__linux__)
         [RENDER_BACKEND_GL] = changeSurfaceSizeGL,
+#if !defined(__wasm__) && !defined(__linux__)
+        
 #endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
@@ -96,215 +98,229 @@ void surfaceChangeSize(DrawSurface* surface,int width,int height){
 	surfaceInit(surface);
 }
 
-void surfaceBlit(DrawSurface surface){
-    void (*blit[])(DrawSurface) = {
+void surfaceBlit(DrawSurface* surface){
+    void (*blit[])(DrawSurface*) = {
 		[RENDER_BACKEND_SOFTWARE] = softSurfaceBlit,
+        [RENDER_BACKEND_GL] = blitSurfaceGL,
 #if !defined(__wasm__) && !defined(__linux__)
 	    [RENDER_BACKEND_GDI] = softSurfaceBlit,
-        [RENDER_BACKEND_GL] = blitSurfaceGL,
+        
 #endif
 	};
-    if(surface.backend >= countof(blit) || !blit[surface.backend])
+    if(surface->backend >= countof(blit) || !blit[surface->backend])
         return;
     
-    blit[surface.backend](surface);
+    blit[surface->backend](surface);
 }
 
-void drawLine(DrawSurface surface,int x1,int y1,int x2,int y2,Vec3 color){
-	void (*vtable[])(DrawSurface,int,int,int,int,Vec3) = {
+void drawLine(DrawSurface* surface,int x1,int y1,int x2,int y2,Vec3 color){
+	void (*vtable[])(DrawSurface*,int,int,int,int,Vec3) = {
 		[RENDER_BACKEND_SOFTWARE] = drawLineSoft,
+        [RENDER_BACKEND_GL] = drawLineGL,
 #if !defined(__wasm__) && !defined(__linux__)
 	    [RENDER_BACKEND_GDI] = drawLineGDI,
-        [RENDER_BACKEND_GL] = drawLineGL,
 #endif
 	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface.backend](surface,x1,y1,x2,y2,color);
+	vtable[surface->backend](surface,x1,y1,x2,y2,color);
 }
 
-void drawSegment(DrawSurface surface,int x1,int y1,int x2,int y2,int thickness,Vec3 color){
-	void (*vtable[])(DrawSurface,int,int,int,int,int,Vec3) = {
+void drawSegment(DrawSurface* surface,int x1,int y1,int x2,int y2,int thickness,Vec3 color){
+	void (*vtable[])(DrawSurface*,int,int,int,int,int,Vec3) = {
 		[RENDER_BACKEND_SOFTWARE] = drawSegmentSoft,
-#if !defined(__wasm__) && !defined(__linux__)
         [RENDER_BACKEND_GL] = drawSegmentGL,
+#if !defined(__wasm__) && !defined(__linux__)
 	    [RENDER_BACKEND_GDI] = drawSegmentGDI,
 #endif
 	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface.backend](surface,x1,y1,x2,y2,thickness,color);
+	vtable[surface->backend](surface,x1,y1,x2,y2,thickness,color);
 }
 
-void drawSegment3d(DrawSurface surface,Vec3* coordinats,int thickness,Vec3 color){
-	void (*vtable[])(DrawSurface,Vec3*,int,Vec3) = {
-#if !defined(__wasm__) && !defined(__linux__)
+void drawSegment3d(DrawSurface* surface,Vec3* coordinats,int thickness,Vec3 color){
+	void (*vtable[])(DrawSurface*,Vec3*,int,Vec3) = {
         [RENDER_BACKEND_GL] = drawSegment3dGL,
-#endif
-	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
-        return;
-	vtable[surface.backend](surface,coordinats,thickness,color);
-}
-
-void drawPolygon(DrawSurface surface,Vec2* coordinats,int n_point,Vec3 color){
-    void (*vtable[])(DrawSurface,Vec2*,int,Vec3) = {
-		[RENDER_BACKEND_SOFTWARE] = drawPolygonSoft,
 #if !defined(__wasm__) && !defined(__linux__)
-        [RENDER_BACKEND_GL] = drawPolygonGL,
+        
 #endif
 	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface.backend](surface,coordinats,n_point,color);
+	vtable[surface->backend](surface,coordinats,thickness,color);
 }
 
-void drawPolygon3d(DrawSurface surface,Vec3* coordinats,Vec3 color){
+void drawPolygon(DrawSurface* surface,Vec2* coordinats,int n_point,Vec3 color){
+    void (*vtable[])(DrawSurface*,Vec2*,int,Vec3) = {
+		[RENDER_BACKEND_SOFTWARE] = drawPolygonSoft,
+        [RENDER_BACKEND_GL] = drawPolygonGL,
+#if !defined(__wasm__) && !defined(__linux__)
+        
+#endif
+	};
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
+        return;
+	vtable[surface->backend](surface,coordinats,n_point,color);
+}
+
+void drawPolygon3d(DrawSurface* surface,Vec3* coordinats,Vec3 color){
     void (*vtable[])(DrawSurface*,Vec3*,Vec3) = {
 		[RENDER_BACKEND_SOFTWARE] = spanQuad3dAdd,
-#if !defined(__wasm__) && !defined(__linux__)
         [RENDER_BACKEND_GL] = drawPolygon3dGL,
-#endif
-	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
-        return;
-	vtable[surface.backend](&surface,coordinats,color);
-}
-
-void drawColoredPolygon(DrawSurface surface,Vec2* coordinats,Vec3* color,int n_point){
-    void (*vtable[])(DrawSurface,Vec2*,Vec3*,int) = {
-		[RENDER_BACKEND_SOFTWARE] = drawColoredPolygonSoft,
 #if !defined(__wasm__) && !defined(__linux__)
-        [RENDER_BACKEND_GL] = drawColoredPolygonGL,
+        
 #endif
 	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface.backend](surface,coordinats,color,n_point);
+	vtable[surface->backend](surface,coordinats,color);
 }
 
-void drawColoredPolygon3d(DrawSurface surface,Vec3* coordinats,Vec3* color){
+void drawColoredPolygon(DrawSurface* surface,Vec2* coordinats,Vec3* color,int n_point){
+    void (*vtable[])(DrawSurface*,Vec2*,Vec3*,int) = {
+		[RENDER_BACKEND_SOFTWARE] = drawColoredPolygonSoft,
+        [RENDER_BACKEND_GL] = drawColoredPolygonGL,
+#if !defined(__wasm__) && !defined(__linux__)
+        
+#endif
+	};
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
+        return;
+	vtable[surface->backend](surface,coordinats,color,n_point);
+}
+
+void drawColoredPolygon3d(DrawSurface* surface,Vec3* coordinats,Vec3* color){
     void (*vtable[])(DrawSurface*,Vec3*,Vec3*) = {
 		[RENDER_BACKEND_SOFTWARE] = spanQuad3dLightingAdd,
-#if !defined(__wasm__) && !defined(__linux__)
         [RENDER_BACKEND_GL] = drawColoredPolygon3dGL,
+#if !defined(__wasm__) && !defined(__linux__)
+        
 #endif
 	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface.backend](&surface,coordinats,color);
+	vtable[surface->backend](surface,coordinats,color);
 }
 
-void drawTexturePolygon(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3 color,int n_point){
-    void (*vtable[])(DrawSurface,Texture*,Vec2*,Vec2*,Vec3,int) = {
+void drawTexturePolygon(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3 color,int n_point){
+    void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec2*,Vec3,int) = {
 		[RENDER_BACKEND_SOFTWARE] = drawTexturePolygonSoft,
-#if !defined(__wasm__) && !defined(__linux__)
         [RENDER_BACKEND_GL] = drawTexturePolygonGL,
+#if !defined(__wasm__) && !defined(__linux__)
+        
 #endif
 	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface.backend](surface,texture,texture_coordinats,coordinats,color,n_point);
+	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color,n_point);
 }
 
-void drawTexturePolygon3d(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point){
-    void (*vtable[])(DrawSurface,Texture*,Vec2*,Vec3*,Vec3,int) = {
+void drawTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point){
+    void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec3*,Vec3,int) = {
 		[RENDER_BACKEND_SOFTWARE] = drawTexturePolygon3dSoft,
-#if !defined(__wasm__) && !defined(__linux__)
         [RENDER_BACKEND_GL] = drawTexturePolygon3dGL,
+#if !defined(__wasm__) && !defined(__linux__)
+       
 #endif
 	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface.backend](surface,texture,texture_coordinats,coordinats,color,n_point);
+	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color,n_point);
 }
 
-void drawColoredTexturePolygon(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3* color,int n_point){
-    void (*vtable[])(DrawSurface,Texture*,Vec2*,Vec2*,Vec3*,int) = {
+void drawColoredTexturePolygon(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3* color,int n_point){
+    void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec2*,Vec3*,int) = {
 		[RENDER_BACKEND_SOFTWARE] = drawColoredTexturePolygonSoft,
-#if !defined(__wasm__) && !defined(__linux__)
         [RENDER_BACKEND_GL] = drawColoredTexturePolygonGL,
+#if !defined(__wasm__) && !defined(__linux__)
+        
 #endif
 	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface.backend](surface,texture,texture_coordinats,coordinats,color,n_point);
+	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color,n_point);
 }
 
-void drawColoredTexturePolygon3d(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color){
+void drawColoredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color){
     void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec3*,Vec3*) = {
 		[RENDER_BACKEND_SOFTWARE] = spanQuad3dLightingTextureAdd,
-#if !defined(__wasm__) && !defined(__linux__)
         [RENDER_BACKEND_GL] = drawColoredTexturePolygon3dGL,
+#if !defined(__wasm__) && !defined(__linux__)
+       
 #endif
 	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface.backend](&surface,texture,texture_coordinats,coordinats,color);
+	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color);
 }
 
-void drawSkyboxPolygon3d(DrawSurface surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color){
+void drawSkyboxPolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color){
     void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec3*,Vec3*) = {
 		[RENDER_BACKEND_SOFTWARE] = spanQuad3dLightingTextureAdd,
-#if !defined(__wasm__) && !defined(__linux__)
         [RENDER_BACKEND_GL] = drawColoredTextureSkyboxPolygon3dGL,
-#endif
-	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
-        return;
-	vtable[surface.backend](&surface,texture,texture_coordinats,coordinats,color);
-}
-
-void drawEllipses(DrawSurface surface,int x,int y,int size_x,int size_y,Vec3 color){
-	void (*vtable[])(DrawSurface,int,int,int,int,Vec3) = {
-		[RENDER_BACKEND_SOFTWARE] = drawEllipsesSoft,
 #if !defined(__wasm__) && !defined(__linux__)
-        [RENDER_BACKEND_GL] = drawEllipsesGL,
+        
 #endif
 	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface.backend](surface,x,y,size_x,size_y,color);
+	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color);
 }
 
-void drawCircle(DrawSurface surface,int x,int y,int radius,Vec3 color){
+void drawEllipses(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color){
+	void (*vtable[])(DrawSurface*,int,int,int,int,Vec3) = {
+		[RENDER_BACKEND_SOFTWARE] = drawEllipsesSoft,
+        [RENDER_BACKEND_GL] = drawEllipsesGL,
+#if !defined(__wasm__) && !defined(__linux__)
+        
+#endif
+	};
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
+        return;
+	vtable[surface->backend](surface,x,y,size_x,size_y,color);
+}
+
+void drawCircle(DrawSurface* surface,int x,int y,int radius,Vec3 color){
     drawEllipses(surface,x,y,radius,radius,color);
 }
 
-void drawCircle3d(DrawSurface surface,Vec3* coordinates,Vec3 color){
-	void (*vtable[])(DrawSurface,Vec3*,Vec3) = {
-#if !defined(__wasm__) && !defined(__linux__)
+void drawCircle3d(DrawSurface* surface,Vec3* coordinates,Vec3 color){
+	void (*vtable[])(DrawSurface*,Vec3*,Vec3) = {
         [RENDER_BACKEND_GL] = drawCircle3dGL,
+#if !defined(__wasm__) && !defined(__linux__)
+        
 #endif
 	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface.backend](surface,coordinates,color);
+	vtable[surface->backend](surface,coordinates,color);
 }
 
-void drawRing(DrawSurface surface,int x,int y,int radius,int thickness,Vec3 color){
-	void (*vtable[])(DrawSurface,int,int,int,int,Vec3) = {
+void drawRing(DrawSurface* surface,int x,int y,int radius,int thickness,Vec3 color){
+	void (*vtable[])(DrawSurface*,int,int,int,int,Vec3) = {
 		[RENDER_BACKEND_SOFTWARE] = drawRingSoft,
 	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface.backend](surface,x,y,radius,thickness,color);
+	vtable[surface->backend](surface,x,y,radius,thickness,color);
 }
 
-void drawRectangle(DrawSurface surface,int x,int y,int size_x,int size_y,Vec3 color){
-	void (*vtable[])(DrawSurface,int,int,int,int,Vec3) = {
+void drawRectangle(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color){
+	void (*vtable[])(DrawSurface*,int,int,int,int,Vec3) = {
 		[RENDER_BACKEND_SOFTWARE] = drawRectangleSoft,
+        [RENDER_BACKEND_GL] = drawRectangleGL,
 #if !defined(__wasm__) && !defined(__linux__)
 	    [RENDER_BACKEND_GDI] = drawRectangleGDI,
-        [RENDER_BACKEND_GL] = drawRectangleGL,
+        
 #endif
 	};
-    if(surface.backend >= countof(vtable) || !vtable[surface.backend])
+    if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface.backend](surface,x,y,size_x,size_y,color);
+	vtable[surface->backend](surface,x,y,size_x,size_y,color);
 }
 
-void drawString(DrawSurface surface,int x,int y,String string,int scale,Vec3 color,int thickness){
+void drawString(DrawSurface* surface,int x,int y,String string,int scale,Vec3 color,int thickness){
     int down_offset = 0;
     int offset = 0;
     for(int j = 0;j < string.size;j++){
@@ -329,7 +345,7 @@ void drawString(DrawSurface surface,int x,int y,String string,int scale,Vec3 col
     }
 }
 
-void drawNumber(DrawSurface surface,int x,int y,int number,int scale){
+void drawNumber(DrawSurface* surface,int x,int y,int number,int scale){
 	char buffer[0x10];
     String string = intToString(buffer,number);
     drawString(surface,x,y,string,scale,pixelColorToColor(0xFFFFFF),0xC0);

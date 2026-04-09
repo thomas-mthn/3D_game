@@ -14,6 +14,8 @@ Texture linuxLoadImage(char* path);
 void linuxPrint(String string);
 void linuxSaveConfig(void);
 
+void linuxWindowInit(void);
+
 int* linuxThreadCreate(void (*entry_point)(void*),void* parameters);
 void linuxThreadWait(int** thread_handles,int n_thread);
 

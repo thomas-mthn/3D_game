@@ -18,9 +18,12 @@
 #include "audio.h"
 #include "span.h"
 #include "libc.h"
+#include "thread.h"
+#include "console.h"
 
 #ifdef __linux__
 #include "linux/l_main.h"
+#include "linux/l_syscall.h"
 #elif !defined(__wasm__)
 #include "win32/w_main.h"
 #include "win32/w_draw_opengl.h"
@@ -33,86 +36,22 @@
 int _fltused = 0;
 #endif
 
-void print(String string){
-#ifdef __linux__
-    linuxPrint(string);
-#elif !defined(__wasm__)
-    win32Print(string);
-#endif
-}
-
-void debugPrint(char* string){
-	print(stringMake(string));
-}
-
-void printNumber(int number){
-	int length = 0;
-	int length_copy;
-	char buffer[0x10];
-    bool negative = false;
-	int number_copy;
-
-    if(number < 0){
-        length++;
-        negative = true;
-        number = -number;
-    }
-	number_copy = number;
-
-    if(!number)
-        length = 1;
-    else{
-        while(number_copy){
-            number_copy /= 10;
-            length++;
-        }
-    }
-	length_copy = length;
-
-    while(length--){
-        buffer[length] = number % 10 + '0';
-        number /= 10;
-    }
-    if(negative)
-        buffer[0] = '-';
-    buffer[length_copy] = 0;
-    print((String){.data = buffer,.size = length_copy});
-}
-
-void printNumberNL(int number){
-    printNumber(number);
-    print((String)STRING_LITERAL("\n"));
-}
-
-void printVec3(Vec3 v){
-    printNumber(v.x);
-    print((String)STRING_LITERAL(","));
-    printNumber(v.y);
-    print((String)STRING_LITERAL(","));
-    printNumberNL(v.z);
-}
-
-void printNL(String string){
-    print(string);
-    print((String)STRING_LITERAL("\n"));
-}
-
 InventorySlot g_inventory[6 * 5];
 
 GameOptions g_options = {
+    .multi_sample = 0,
+    .multi_thread = true,
 	.editor = true,
 	.fast_startup = false,
 	.fov = {FIXED_ONE / 2,FIXED_ONE / 3},
 	.render_backend = RENDER_BACKEND_SOFTWARE,
 };
 
-int g_n_threads = 1;
-
 bool g_movement_fly;
 bool g_voxel_placement;
 int g_edit_depth = 10;
 
-VoxelType g_voxel_select = VOXEL_STRING;
+VoxelType g_voxel_select = VOXEL_CONSOLE;
 
 #define PLAYER_SPAWN_POSITION {(FIXED_ONE << 8) - FIXED_ONE * 20 - FIXED_ONE * 2,(FIXED_ONE << 8) - FIXED_ONE * 20 - FIXED_ONE * 2,(FIXED_ONE << 8) + FIXED_ONE * 4}
 #define PLAYER_SPAWN_ANGLE {FIXED_ONE / 2,FIXED_ONE / 2}
@@ -478,38 +417,76 @@ static void addSubVoxel(Vec3 vpos,Vec3 pos,int depth,int remove_depth,VoxelType 
 
 bool g_test_bool;
 static bool in_settings;
-static Voxel* string_edit;
 
-bool g_edit_voxelstring;
+Voxel* g_voxel_interact;
 
-static char key_char_table[] = {
-    [KEY_A] = 'a',[KEY_B] = 'b',[KEY_C] = 'c',[KEY_D] = 'd',[KEY_E] = 'e',[KEY_F] = 'f',
-    [KEY_G] = 'g',[KEY_H] = 'h',[KEY_I] = 'i',[KEY_J] = 'j',[KEY_K] = 'k',[KEY_L] = 'l',
-    [KEY_M] = 'm',[KEY_N] = 'n',[KEY_O] = 'o',[KEY_P] = 'p',[KEY_Q] = 'q',[KEY_R] = 'r',
-    [KEY_S] = 's',[KEY_T] = 't',[KEY_U] = 'u',[KEY_V] = 'w',[KEY_W] = 'w',[KEY_X] = 'x',
-    [KEY_Y] = 'y',[KEY_Z] = 'z',[KEY_SPACE] = ' ',
-};
+void applicationQuit(void){
+#ifdef __linux__
+    systemProcessExit(0);
+#elif _MSC_VER
+    ExitProcess(0);
+#endif
+}
+
+static char keyTranslate(char key){
+    char key_char_table[] = {
+        [KEY_A] = 'a',[KEY_B] = 'b',[KEY_C] = 'c',[KEY_D] = 'd',[KEY_E] = 'e',[KEY_F] = 'f',
+        [KEY_G] = 'g',[KEY_H] = 'h',[KEY_I] = 'i',[KEY_J] = 'j',[KEY_K] = 'k',[KEY_L] = 'l',
+        [KEY_M] = 'm',[KEY_N] = 'n',[KEY_O] = 'o',[KEY_P] = 'p',[KEY_Q] = 'q',[KEY_R] = 'r',
+        [KEY_S] = 's',[KEY_T] = 't',[KEY_U] = 'u',[KEY_V] = 'w',[KEY_W] = 'w',[KEY_X] = 'x',
+        [KEY_Y] = 'y',[KEY_Z] = 'z',
+        [KEY_1] = '1',[KEY_2] = '2',[KEY_3] = '3',[KEY_4] = '4',[KEY_5] = '5',
+        [KEY_6] = '6',[KEY_7] = '7',[KEY_8] = '8',[KEY_9] = '9',[KEY_0] = '0',
+        [KEY_SPACE] = ' ',[KEY_RETURN] = '\n',
+        [KEY_OEM_7] = '`',[KEY_OEM_4] = '-',[KEY_OEM_2] = '=',[KEY_OEM_6] = '[',[KEY_OEM_1] = ']',
+        [KEY_OEM_PLUS] = ';',[KEY_OEM_5] = '\\',[KEY_OEM_3] = '\'',[KEY_OEM_COMMA] = ',',
+        [KEY_OEM_PERIOD] = '.',[KEY_OEM_MINUS] = '/',[KEY_RETURN] = '\n',[KEY_BACK] = KEYTRANSLATE_BACK,
+    };
+    char key_char_shift_table[] = {
+        [KEY_1] = '!',[KEY_2] = '@',[KEY_3] = '#',[KEY_4] = '$',[KEY_5] = '%',
+        [KEY_6] = '^',[KEY_7] = '&',[KEY_8] = '*',[KEY_9] = '(',[KEY_0] = ')',
+        [KEY_OEM_7] = '~',[KEY_OEM_4] = '_',[KEY_OEM_2] = '+',[KEY_OEM_6] = '{',[KEY_OEM_1] = '}',
+        [KEY_OEM_PLUS] = ':',[KEY_OEM_5] = '|',[KEY_OEM_3] = '"',[KEY_OEM_COMMA] = '<',
+        [KEY_OEM_PERIOD] = '>',[KEY_OEM_MINUS] = '?'
+    };
+    if(key >= countof(key_char_table) || !key_char_table[key])
+        return 0;
+                
+    bool shift = keyDown(KEY_LSHIFT) && key < countof(key_char_shift_table); 
+    return shift ? key_char_shift_table[key] : key_char_table[key];
+}
+
+void configSave(void){
+#ifdef _MSC_VER
+    win32SaveConfig();
+#elif defined(__linux__)
+    linuxSaveConfig();
+#endif
+}
 
 void keyPress(int key){
-    if(string_edit){
-        if(keyDown(KEY_RETURN))
-            debugPrint("enter");
-        printNL((String){.data = key_char_table + key,.size = 1});
-        debugPrint("hello\n");
-        print(string_edit->string);
-        if(keyDown(KEY_RETURN))
-            string_edit = 0;
-        if(keyDown(KEY_BACK) && string_edit->string.size > 0)
-            string_edit->string.size -= 1;
-        if(key < countof(key_char_table) && key_char_table[key]){
-            char* str = tMalloc(string_edit->string.size + 1);
-            tMemcpy(str,string_edit->string.data,string_edit->string.size);
-            str[string_edit->string.size] = key_char_table[key];
-            string_edit->string.size += 1;
-            tFree(string_edit->string.data);
-            string_edit->string.data = str;
+    if(g_voxel_interact){
+        if(g_voxel_interact->type == VOXEL_CONSOLE){
+            consoleInput(keyTranslate(key));
+            return;
         }
-        return;
+        if(g_voxel_interact->type == VOXEL_STRING){
+            key = keyTranslate(key);
+            switch(key){
+                case KEY_BACK:{ 
+                    if(g_voxel_interact->string.size > 0)
+                        g_voxel_interact->string.size -= 1;
+                } break;
+                default:{
+                    char* str = tMalloc(g_voxel_interact->string.size + 1);
+                    tMemcpy(str,g_voxel_interact->string.data,g_voxel_interact->string.size);
+                    str[g_voxel_interact->string.size] = key;
+                    g_voxel_interact->string.size += 1;
+                    tFree(g_voxel_interact->string.data);
+                    g_voxel_interact->string.data = str;
+                } break;
+            }
+        }
     }
 	switch(key){
 		case KEY_G:{
@@ -545,11 +522,7 @@ void keyPress(int key){
 				
 				g_position = pre_settings_position;
 
-#ifdef _MSC_VER
-				win32SaveConfig();
-#elif defined(__linux__)
-                linuxSaveConfig();
-#endif
+                configSave();
 			}
 			else{
 				pre_settings_position = g_position;
@@ -774,9 +747,13 @@ void lButtonDown(void){
 	Vec3 octree_position;
 	if(!blockOutlinePositionGet(&octree_position))
 		return;
-    if(keyDown(KEY_LALT)){
-        if(voxel->type == VOXEL_STRING)
-            string_edit = voxel;
+    if(keyDown(KEY_LMENU)){
+        if(voxel->type == VOXEL_CONSOLE || voxel->type == VOXEL_STRING)
+            g_voxel_interact = voxel;
+        return;
+    }
+    if(g_voxel_interact){
+        g_voxel_interact = 0;
         return;
     }
 	if(keyDown(KEY_LCONTROL)){
@@ -920,7 +897,7 @@ void boxQuadWireframeDraw(Vec3 position,Vec3 size,int color){
 	for(int i = 0;i < 6;i++){
 		for(int j = 0;j < (4);j++){
 			if(points[table[i][j]].z && points[table[i][(j + 1) % 4]].z)
-				drawLine(g_surface,points[table[i][j]].x,points[table[i][j]].y,points[table[i][(j + 1) % 4]].x,points[table[i][(j + 1) % 4]].y,pixelColorToColor(color));
+				drawLine(&g_surface,points[table[i][j]].x,points[table[i][j]].y,points[table[i][(j + 1) % 4]].x,points[table[i][(j + 1) % 4]].y,pixelColorToColor(color));
 		}
 	}
 }
@@ -989,6 +966,7 @@ void worldDefaultGenerate(void){
 char g_voxel_lighting_tree[0x100000];
 
 void mainInit(void){
+    threadInit();
 	if(g_options.editor){
 		g_movement_fly = true;
 		g_voxel_placement = true;
@@ -1057,7 +1035,7 @@ static THREAD_ENTRY rayTracePixels(void* args_void){
 }
 */
 static void nextSpellDraw(void){
-	drawString(g_surface,FIXED_ONE - FIXED_ONE / 8 - 0x1A00,FIXED_ONE - FIXED_ONE / 8 + 0x1000,(String)STRING_LITERAL("next spell"),0x800,pixelColorToColor(0xFFFFFF),0x800);
+	drawString(&g_surface,FIXED_ONE - FIXED_ONE / 8 - 0x1A00,FIXED_ONE - FIXED_ONE / 8 + 0x1000,(String)STRING_LITERAL("next spell"),0x800,pixelColorToColor(0xFFFFFF),0x800);
 
 	int i = 0;
 		
@@ -1087,41 +1065,41 @@ static void nextSpellDraw(void){
 		if(g_spell_static[spell_slot->spell_type].adjective)
 			color = 0xA02020;
 
-		drawFrame(g_surface,x,y,fixedMulR(FIXED_ONE / 4,g_options.fov.x),fixedMulR(FIXED_ONE / 4,g_options.fov.y),pixelColorToColor(color),0x100);
+		drawFrame(&g_surface,x,y,fixedMulR(FIXED_ONE / 4,g_options.fov.x),fixedMulR(FIXED_ONE / 4,g_options.fov.y),pixelColorToColor(color),0x100);
 
 		x += 0x1000;
 		y += 0x0B00;
 
 		switch(spell_slot->spell_type){
 			case SPELL_BOLT:{
-				drawEllipses(g_surface,x,y,fixedMulR(FIXED_ONE / 10,g_options.fov.x),fixedMulR(FIXED_ONE / 10,g_options.fov.y),pixelColorToColor(0xFF0000));
+				drawEllipses(&g_surface,x,y,fixedMulR(FIXED_ONE / 10,g_options.fov.x),fixedMulR(FIXED_ONE / 10,g_options.fov.y),pixelColorToColor(0xFF0000));
 			} break;
 			case SPELL_BOMB:{
 				int size = 0x600;
-				drawEllipses(g_surface,x,y,fixedMulR(size * 4,g_options.fov.x),fixedMulR(size * 4,g_options.fov.y),vec3Single(1 << 14));
-				drawEllipses(g_surface,x - size / 2,y + size / 2,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),vec3Single(1 << 18));
-				drawRectangle(g_surface,x - size * 2 - size / 4,y - size / 8 - size / 2,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y) * 4,vec3Single(1 << 16));
+				drawEllipses(&g_surface,x,y,fixedMulR(size * 4,g_options.fov.x),fixedMulR(size * 4,g_options.fov.y),vec3Single(1 << 14));
+				drawEllipses(&g_surface,x - size / 2,y + size / 2,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),vec3Single(1 << 18));
+				drawRectangle(&g_surface,x - size * 2 - size / 4,y - size / 8 - size / 2,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y) * 4,vec3Single(1 << 16));
 				int fuse = 0x800;
-				drawRectangle(g_surface,x - size * 2 - size / 4 - fuse / 2,y,fixedMulR(fuse,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x83B2EB));
-				drawRectangle(g_surface,x - size * 2 - size / 4 - fuse / 2 - size / 2,y,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x1050FF));
+				drawRectangle(&g_surface,x - size * 2 - size / 4 - fuse / 2,y,fixedMulR(fuse,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x83B2EB));
+				drawRectangle(&g_surface,x - size * 2 - size / 4 - fuse / 2 - size / 2,y,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x1050FF));
 			} break;
 			case SPELL_ORB:{
-				drawEllipses(g_surface,x,y,fixedMulR(FIXED_ONE / 10,g_options.fov.x),fixedMulR(FIXED_ONE / 10,g_options.fov.y),pixelColorToColor(0x00FF00));
+				drawEllipses(&g_surface,x,y,fixedMulR(FIXED_ONE / 10,g_options.fov.x),fixedMulR(FIXED_ONE / 10,g_options.fov.y),pixelColorToColor(0x00FF00));
 			} break;
 			case SPELL_ADJ_SPEED:{
 				Vec2 string_uv = vec2AddR((Vec2){x,y},(Vec2){-0x600,-0x600});
-				drawString(g_surface,string_uv.x,string_uv.y,(String)STRING_LITERAL(">>"),0x800,pixelColorToColor(0xFFFFFF),0xC0);
+				drawString(&g_surface,string_uv.x,string_uv.y,(String)STRING_LITERAL(">>"),0x800,pixelColorToColor(0xFFFFFF),0xC0);
 			} break;
 			case SPELL_ADJ_DAMAGE:{
 				Vec2 string_uv = vec2AddR((Vec2){x,y},(Vec2){-0x600,-0x600});
-				drawString(g_surface,string_uv.x,string_uv.y,(String)STRING_LITERAL("#+"),0x800,pixelColorToColor(0xFFFFFF),0xC0);
+				drawString(&g_surface,string_uv.x,string_uv.y,(String)STRING_LITERAL("#+"),0x800,pixelColorToColor(0xFFFFFF),0xC0);
 			} break;
 			case SPELL_ADJ_DOUBLER:{
 				Vec2 string_uv = vec2AddR((Vec2){x,y},(Vec2){-0x600,-0x600});
-				drawString(g_surface,string_uv.x,string_uv.y,(String)STRING_LITERAL("x2"),0x800,pixelColorToColor(0xFFFFFF),0xC0);
+				drawString(&g_surface,string_uv.x,string_uv.y,(String)STRING_LITERAL("x2"),0x800,pixelColorToColor(0xFFFFFF),0xC0);
 			} break;
 			default:{
-				drawEllipses(g_surface,x,y,fixedMulR(FIXED_ONE / 10,g_options.fov.x),fixedMulR(FIXED_ONE / 10,g_options.fov.y),pixelColorToColor(0xFF00FF));
+				drawEllipses(&g_surface,x,y,fixedMulR(FIXED_ONE / 10,g_options.fov.x),fixedMulR(FIXED_ONE / 10,g_options.fov.y),pixelColorToColor(0xFF00FF));
 			} break;
 		}
 
@@ -1192,7 +1170,7 @@ void frameRender(void){
 				{x + size,y + size},
 				{x,y + size},
 			};
-            drawSkyboxPolygon3d(g_surface,g_textures + g_skybox_textures[k],texture_coordinates,coordinates,color);
+            drawSkyboxPolygon3d(&g_surface,g_textures + g_skybox_textures[k],texture_coordinates,coordinates,color);
 		}
 	}
 #if !defined(__wasm__) && !defined(__linux__)
@@ -1221,7 +1199,7 @@ void frameRender(void){
 			Vec3 color = vec3ShlR(rayLuminance(g_position,vec3Normalize(direction)),4);
 
 			c[i] = colorToPixelColor(color);
-			drawRectangle(g_surface,n_x,n_y,FIXED_ONE / 64,FIXED_ONE / 64,color);
+			drawRectangle(&g_surface,n_x,n_y,FIXED_ONE / 64,FIXED_ONE / 64,color);
 		}
 	}
 	else{
@@ -1343,7 +1321,7 @@ void frameRender(void){
 
 			Vec3 color = vec3ShlR(rayLuminance(g_position,screenRayDirection(g_tri,n_x,n_y,g_options.fov.x,g_options.fov.y)),4);
 
-			drawRectangle(g_surface,n_x / 4 - FIXED_ONE + FIXED_ONE / 4,n_y / 4 - FIXED_ONE + FIXED_ONE / 4,FIXED_ONE / 128,FIXED_ONE / 128,color);
+			drawRectangle(&g_surface,n_x / 4 - FIXED_ONE + FIXED_ONE / 4,n_y / 4 - FIXED_ONE + FIXED_ONE / 4,FIXED_ONE / 128,FIXED_ONE / 128,color);
 		}
 	}
 	if(g_options.editor){
@@ -1354,7 +1332,7 @@ void frameRender(void){
 			Vec3 p2 = pointToScreen(vec3AddRS(voxelWorldPos(voxel->linked),depthToSize(voxel->linked->depth) / 2));
 			if(p1.z <= 0 || p2.z <= 0)
 				continue;
-			drawLine(g_surface,p1.x,p1.y,p2.x,p2.y,pixelColorToColor(0xFF00FF));
+			drawLine(&g_surface,p1.x,p1.y,p2.x,p2.y,pixelColorToColor(0xFF00FF));
 		}
 		entityDrawHitbox();
 	}
@@ -1366,36 +1344,36 @@ void frameRender(void){
 	if(g_equipped_staff){
 		int progress = (fixedDivR(g_mana,g_equipped.mana_max)) / 4;
 		
-		drawRectangle(g_surface,-FIXED_ONE + FIXED_ONE / 8,0xA000,FIXED_ONE / 24,progress,pixelColorToColor(0xA060FF));
-		drawFrame(g_surface,-FIXED_ONE + FIXED_ONE / 8,0xA000,FIXED_ONE / 24,FIXED_ONE / 3,pixelColorToColor(0x808080),0x100);
+		drawRectangle(&g_surface,-FIXED_ONE + FIXED_ONE / 8,0xA000,FIXED_ONE / 24,progress,pixelColorToColor(0xA060FF));
+		drawFrame(&g_surface,-FIXED_ONE + FIXED_ONE / 8,0xA000,FIXED_ONE / 24,FIXED_ONE / 3,pixelColorToColor(0x808080),0x100);
 
-		drawString(g_surface,-FIXED_ONE + FIXED_ONE / 8 + 0x200,0xA300,(String)STRING_LITERAL("mana"),0x800,pixelColorToColor(0xFFFFFF),0xF0);
+		drawString(&g_surface,-FIXED_ONE + FIXED_ONE / 8 + 0x200,0xA300,(String)STRING_LITERAL("mana"),0x800,pixelColorToColor(0xFFFFFF),0xF0);
 	}
 
 	int progress = (fixedDivR(g_health,FIXED_ONE)) / 3;
 		
-	drawRectangle(g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,0xA000,FIXED_ONE / 24,progress,pixelColorToColor(0xFF3030));
-	drawFrame(g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,0xA000,FIXED_ONE / 24,FIXED_ONE / 3,pixelColorToColor(0x808080),0x100);
+	drawRectangle(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,0xA000,FIXED_ONE / 24,progress,pixelColorToColor(0xFF3030));
+	drawFrame(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,0xA000,FIXED_ONE / 24,FIXED_ONE / 3,pixelColorToColor(0x808080),0x100);
 
-	drawString(g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,0xA300,(String)STRING_LITERAL("health"),0xB00,pixelColorToColor(0x401010),0xF0);
+	drawString(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,0xA300,(String)STRING_LITERAL("health"),0xB00,pixelColorToColor(0x401010),0xF0);
     
 	if(button_link){
 		Vec3 p1 = (Vec3){0};
 		Vec3 p2 = pointToScreen(vec3AddRS(voxelWorldPos(button_link),depthToSize(button_link->depth) / 2));
 		if(p2.z > 0)
-			drawLine(g_surface,p1.x,p1.y,p2.x,p2.y,pixelColorToColor(0xFF00FF));
+			drawLine(&g_surface,p1.x,p1.y,p2.x,p2.y,pixelColorToColor(0xFF00FF));
 	}
 
 	if(g_spell_hold){
 		switch(g_spell_hold){
 			case SPELL_BOLT:{
-				drawCircle(g_surface,0,0,0x800,pixelColorToColor(0xFF0000));
+				drawCircle(&g_surface,0,0,0x800,pixelColorToColor(0xFF0000));
 			} break;
 			case SPELL_BOMB:{
-				drawCircle(g_surface,0,0,0x800,pixelColorToColor(0x0000FF));
+				drawCircle(&g_surface,0,0,0x800,pixelColorToColor(0x0000FF));
 			} break;
 			case SPELL_ORB:{
-				drawCircle(g_surface,0,0,0x800,pixelColorToColor(0x00FF00));
+				drawCircle(&g_surface,0,0,0x800,pixelColorToColor(0x00FF00));
 			} break;
 		}
 	}
@@ -1406,14 +1384,14 @@ void frameRender(void){
 
 	if(g_boss){
 		int progress = (fixedDivR(g_boss->health,g_entity_static[ENTITY_BOSS].health)) / 2;
-		drawRectangle(g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,-(progress) + FIXED_ONE / 4,FIXED_ONE / 16,progress,pixelColorToColor(0x3030FF));
-		drawFrame(g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,-FIXED_ONE / 4,FIXED_ONE / 16,FIXED_ONE / 2,pixelColorToColor(0x808080),0x100);
+		drawRectangle(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,-(progress) + FIXED_ONE / 4,FIXED_ONE / 16,progress,pixelColorToColor(0x3030FF));
+		drawFrame(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,-FIXED_ONE / 4,FIXED_ONE / 16,FIXED_ONE / 2,pixelColorToColor(0x808080),0x100);
 
-		drawString(g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,FIXED_ONE / 8,(String)STRING_LITERAL("boss"),0x1000,pixelColorToColor(0xFFFFFF),0xC0);
+		drawString(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,FIXED_ONE / 8,(String)STRING_LITERAL("boss"),0x1000,pixelColorToColor(0xFFFFFF),0xC0);
 	}
 
-	drawLine(g_surface,-0x200,0,0x200,0,pixelColorToColor(0x00FF00));
-	drawLine(g_surface,0,-0x200,0,0x200,pixelColorToColor(0x00FF00));
+	drawLine(&g_surface,-0x200,0,0x200,0,pixelColorToColor(0x00FF00));
+	drawLine(&g_surface,0,-0x200,0,0x200,pixelColorToColor(0x00FF00));
 }
 
 

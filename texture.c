@@ -173,8 +173,8 @@ void texturesGenerate(void){
 		.backend = RENDER_BACKEND_SOFTWARE,
 	};
 	surfaceInit(&surface);
-	drawSquare(surface,-FIXED_ONE,-FIXED_ONE,FIXED_ONE * 2,pixelColorToColor(0x3090F0));
-	drawString(surface,-FIXED_ONE + 0x2000,-FIXED_ONE + 0x2000,(String)STRING_LITERAL("wall"),0x2000,pixelColorToColor(0xFFFFFF),0x800);
+	drawSquare(&surface,-FIXED_ONE,-FIXED_ONE,FIXED_ONE * 2,pixelColorToColor(0x3090F0));
+	drawString(&surface,-FIXED_ONE + 0x2000,-FIXED_ONE + 0x2000,(String)STRING_LITERAL("wall"),0x2000,pixelColorToColor(0xFFFFFF),0x800);
 
 	texture = g_textures + TEXTURE_GRASS;
 	softSurfaceDestroyMeta(&surface);
@@ -225,13 +225,13 @@ void texturesGenerate(void){
 		.height = texture->size,
 	};
 	surfaceInit(&surface);
-	drawCircle(surface,0,0,FIXED_ONE,pixelColorToColor(0x606060));
+	drawCircle(&surface,0,0,FIXED_ONE,pixelColorToColor(0x606060));
 
-	drawCircle(surface,-0x8000,0x4000,0x4000,pixelColorToColor(0x20FF20));
-	drawCircle(surface,0x8000,0x4000,0x4000,pixelColorToColor(0x20FF20));
-	drawCircle(surface,-0x8000,0x4000,0x2000,pixelColorToColor(0xA0A0A0));
-	drawCircle(surface,0x8000,0x4000,0x2000,pixelColorToColor(0xA0A0A0));
-	drawSegment(surface,-0x8000,-0x6000,0x8000,-0x6000,0x800,pixelColorToColor(0x20FF20));
+	drawCircle(&surface,-0x8000,0x4000,0x4000,pixelColorToColor(0x20FF20));
+	drawCircle(&surface,0x8000,0x4000,0x4000,pixelColorToColor(0x20FF20));
+	drawCircle(&surface,-0x8000,0x4000,0x2000,pixelColorToColor(0xA0A0A0));
+	drawCircle(&surface,0x8000,0x4000,0x2000,pixelColorToColor(0xA0A0A0));
+	drawSegment(&surface,-0x8000,-0x6000,0x8000,-0x6000,0x800,pixelColorToColor(0x20FF20));
 	softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_PLANKS;
 	surface = (DrawSurface){
@@ -380,13 +380,13 @@ void texturesGenerate(void){
 		.height = texture->size,
 	};
 	surfaceInit(&surface);
-	drawSquare(surface,-FIXED_ONE,-FIXED_ONE,FIXED_ONE * 2,pixelColorToColor(0xC0C0C0));
-	drawRectangle(surface,FIXED_ONE / 3,-FIXED_ONE,0x2000,FIXED_ONE * 2,pixelColorToColor(0x808080));
-	drawRectangle(surface,FIXED_ONE / 3 - 0x3000,-0x3000,0xA800,FIXED_ONE / 3 + 0xA00,pixelColorToColor(0xA0F0F0));
-	drawRectangle(surface,FIXED_ONE / 3 - 0x2800,-0x2800,0x9800,FIXED_ONE / 3 - 0x400,pixelColorToColor(0x505050));
+	drawSquare(&surface,-FIXED_ONE,-FIXED_ONE,FIXED_ONE * 2,pixelColorToColor(0xC0C0C0));
+	drawRectangle(&surface,FIXED_ONE / 3,-FIXED_ONE,0x2000,FIXED_ONE * 2,pixelColorToColor(0x808080));
+	drawRectangle(&surface,FIXED_ONE / 3 - 0x3000,-0x3000,0xA800,FIXED_ONE / 3 + 0xA00,pixelColorToColor(0xA0F0F0));
+	drawRectangle(&surface,FIXED_ONE / 3 - 0x2800,-0x2800,0x9800,FIXED_ONE / 3 - 0x400,pixelColorToColor(0x505050));
 	
-	drawRectangle(surface,FIXED_ONE - 0x9800,-FIXED_ONE + 0x2000,0x9800,FIXED_ONE / 3 - 0x400,pixelColorToColor(0x3070D0));
-	drawRectangle(surface,FIXED_ONE - 0x9800,FIXED_ONE - (FIXED_ONE / 3 - 0x400) - 0x2000,0x9800,FIXED_ONE / 3 - 0x400,pixelColorToColor(0x3070D0));
+	drawRectangle(&surface,FIXED_ONE - 0x9800,-FIXED_ONE + 0x2000,0x9800,FIXED_ONE / 3 - 0x400,pixelColorToColor(0x3070D0));
+	drawRectangle(&surface,FIXED_ONE - 0x9800,FIXED_ONE - (FIXED_ONE / 3 - 0x400) - 0x2000,0x9800,FIXED_ONE / 3 - 0x400,pixelColorToColor(0x3070D0));
 	softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_PICKUP;
 	surface = (DrawSurface){
@@ -397,8 +397,8 @@ void texturesGenerate(void){
 	surfaceInit(&surface);
 	for(int i = 0;i < texture->size * texture->size;i++)
 		texture->pixel_data[i] = 0xFF000000;
-	drawFrame(surface,0,0,FIXED_ONE,FIXED_ONE,pixelColorToColor(0xC0C0C0),0x2000);
-	drawString(surface,FIXED_ONE / 2 - FIXED_ONE / 8,FIXED_ONE / 2 - FIXED_ONE / 4,(String)STRING_LITERAL("x2"),FIXED_ONE / 4,pixelColorToColor(0xFFFFFF),0x800);
+	drawFrame(&surface,0,0,FIXED_ONE,FIXED_ONE,pixelColorToColor(0xC0C0C0),0x2000);
+	drawString(&surface,FIXED_ONE / 2 - FIXED_ONE / 8,FIXED_ONE / 2 - FIXED_ONE / 4,(String)STRING_LITERAL("x2"),FIXED_ONE / 4,pixelColorToColor(0xFFFFFF),0x800);
 	softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_BOLT;
 	surface = (DrawSurface){
@@ -409,7 +409,7 @@ void texturesGenerate(void){
 	surfaceInit(&surface);
 	for(int i = 0;i < texture->size * texture->size;i++)
 		texture->pixel_data[i] = 0xFF000000;
-	drawCircle(surface,0,0,FIXED_ONE,pixelColorToColor(0xF08080));
+	drawCircle(&surface,0,0,FIXED_ONE,pixelColorToColor(0xF08080));
  	softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_SMOKE;
 	surface = (DrawSurface){

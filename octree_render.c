@@ -1,3 +1,4 @@
+#include "console.h"
 #include "octree.h"
 #include "octree_render.h"
 #include "draw.h"
@@ -81,10 +82,10 @@ static void voxelModelRasterizeSide(DrawSurface* surface,Vec2 model_angle,Vec3* 
 			texture_crd[2] = (Vec2){texture_x + texture_size,texture_y + texture_size}; 
 			texture_crd[3] = (Vec2){texture_x + texture_size,texture_y}; 
 		}
-		drawTexturePolygon3d(*surface,voxel_s->texture,texture_crd,d_point,color,4);
+		drawTexturePolygon3d(surface,voxel_s->texture,texture_crd,d_point,color,4);
 	}
 	else{
-		drawPolygon3d(*surface,d_point,vec3MulR(color,voxel_s->color));
+		drawPolygon3d(surface,d_point,vec3MulR(color,voxel_s->color));
 	}
 }
 
@@ -278,7 +279,7 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 	};
 
 	if(voxel_s->flags & VOXEL_EMITER){
-        drawPolygon3d(g_surface,pos,luminance);
+        drawPolygon3d(&g_surface,pos,luminance);
 		return;
 	}
 
@@ -340,10 +341,10 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 	//luminance = vec3ShrR(vec3AddR(vec3AddR(luxel_colors[0],luxel_colors[1]),vec3AddR(luxel_colors[2],luxel_colors[3])),2);
 
 	if(g_render_lines && voxel->type != VOXEL_MENU && g_surface.backend != RENDER_BACKEND_GL){
-		drawLine(g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
-		drawLine(g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
-		drawLine(g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
-		drawLine(g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
+		drawLine(&g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
+		drawLine(&g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
+		drawLine(&g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
+		drawLine(&g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
 		return;
 	}
 
@@ -373,16 +374,16 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 		}
 		
         if(g_smooth_lighting)
-            drawColoredTexturePolygon3d(g_surface,texture,texture_crd,d_point,luxel_colors);
+            drawColoredTexturePolygon3d(&g_surface,texture,texture_crd,d_point,luxel_colors);
         else
-            drawTexturePolygon3d(g_surface,texture,texture_crd,d_point,luminance,4);
+            drawTexturePolygon3d(&g_surface,texture,texture_crd,d_point,luminance,4);
 			
 	}
 	else{
         if(g_smooth_lighting)
-            drawColoredPolygon3d(g_surface,d_point,luxel_colors);
+            drawColoredPolygon3d(&g_surface,d_point,luxel_colors);
         else
-            drawPolygon3d(g_surface,d_point,luminance);
+            drawPolygon3d(&g_surface,d_point,luminance);
 	}
 }
 
@@ -587,15 +588,15 @@ static void drawSideRecursiveTraced(Voxel* voxel,Vec3 block_pos,int side,Vec2 co
 	};
 
 	if(voxel_s->flags & VOXEL_EMITER){
-		drawPolygon3d(g_surface,d_point,luminance);
+		drawPolygon3d(&g_surface,d_point,luminance);
 		return;
 	}
 
 	if(g_render_lines && voxel->type != VOXEL_MENU && g_surface.backend != RENDER_BACKEND_GL){
-		drawLine(g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
-		drawLine(g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
-		drawLine(g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
-		drawLine(g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
+		drawLine(&g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
+		drawLine(&g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
+		drawLine(&g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
+		drawLine(&g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
 		return;
 	}
 
@@ -623,16 +624,33 @@ static void drawSideRecursiveTraced(Voxel* voxel,Vec3 block_pos,int side,Vec2 co
 			texture_crd[2] = (Vec2){texture_x + texture_size,texture_y + texture_size}; 
 			texture_crd[3] = (Vec2){texture_x + texture_size,texture_y}; 
 		}
-        drawTexturePolygon3d(g_surface,texture,texture_crd,d_point,luminance,4);
+        drawTexturePolygon3d(&g_surface,texture,texture_crd,d_point,luminance,4);
 	}
 	else{
 		if(g_surface.backend == RENDER_BACKEND_SOFTWARE){
 			spanQuad3dLightingAdd(&g_surface,d_point,(Vec3[]){luminance,luminance,luminance,luminance});
 		}
 		else{
-			drawPolygon3d(g_surface,d_point,luminance);
+			drawPolygon3d(&g_surface,d_point,luminance);
 		}
 	}
+}
+
+#include "font.h"
+
+static void drawConsoleLine(Voxel* voxel,int side,char* buffer,int buffer_index,int buffer_size,int offset_y){
+    int draw_length = 0;
+    int buffer_length = buffer_size - buffer_index;
+    for(int i = 0;i < buffer_length;i++){
+        if(draw_length > 0xE0000){
+            buffer_length = i;
+            break;
+        }
+        draw_length += g_vector_font[buffer[buffer_index + i]].width;
+    }
+    Vec2 uv = {0x1000,offset_y * 0x1000};
+    String draw_string = {.data = buffer + buffer_index,.size = buffer_length};
+    drawString3D(voxel,side,uv,draw_string,0x1000,0x400);
 }
 
 static void drawSide(Voxel* voxel,Vec3 block_pos,int side){
@@ -641,19 +659,33 @@ static void drawSide(Voxel* voxel,Vec3 block_pos,int side){
 		drawSideRecursiveTraced(voxel,block_pos,side,(Vec2){0},0,surfaceAngle(block_pos,g_normal_table[side]));
 	else
 		drawSideRecursive(voxel,block_pos,side,(Vec2){0},0,surfaceAngle(block_pos,g_normal_table[side]));
-
+    
     if(voxel->type == VOXEL_STRING){
-        int size = 0x800;
-        bool mirror[] = {
-            false,
-            false,
-            true,
-            true,
-            false,
-            false,
-        };
-        print(voxel->string);
-        drawString3D(&g_surface,voxel,g_axis_table[side],block_pos,(Vec2){0,FIXED_ONE - 0x800},voxel->string,size,mirror[side],0xC0);
+        int size = 0x1000;
+        drawString3D(voxel,side,(Vec2){0x1000,FIXED_ONE - 0x800},voxel->string,size,0x400);
+    }
+    if(voxel->type == VOXEL_CONSOLE){
+        int offset_y = 2;
+        char buffer[0x100];
+        int buffer_index = countof(buffer) - 1;
+        for(ConsoleContent* content = g_console_content;content;content = content->next){
+            String string = {.data = content->string_data,.size = content->string_length};
+            for(int i = content->string_length;i--;){
+                if(content->string_data[i] == '\n'){
+                    drawConsoleLine(voxel,side,buffer,buffer_index,countof(buffer),offset_y);
+                    offset_y += 1;
+                    buffer_index = countof(buffer) - 1;
+                    if(offset_y == 17)
+                        goto end_console;
+                    continue;
+                }
+                buffer[buffer_index--] = content->string_data[i];
+            }
+        }
+        drawConsoleLine(voxel,side,buffer,buffer_index,countof(buffer),offset_y);
+    end_console:
+        String input = {.data = g_console_buffer,.size = g_console_buffer_index};
+        drawString3D(voxel,side,(Vec2){0x1000,0x1000},input,0x1000,0x400);
     }
     
     voxelGuiDraw(voxel,block_pos,side);

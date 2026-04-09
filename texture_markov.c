@@ -429,7 +429,7 @@ structure(PixelFillThreadInfo){
     int n_threads;
 };
 
-static THREAD_ENTRY generateColorThread(void* arg){
+static void generateColorThread(void* arg){
     PixelFillThreadInfo* info = arg;
 
     int mipmap_offset = 0;
@@ -493,7 +493,6 @@ static THREAD_ENTRY generateColorThread(void* arg){
             n_sample -= graph_node->sample[j].n_sample;
         }
     }
-    return 0;
 }
 
 static unsigned stdcall generateColorBruteForceThread(void* arg){
@@ -632,8 +631,7 @@ static void generateColor(int* data,int mipmap,int image_size){
         if(!mipmap_size)
             return;
 
-        PixelFillThreadInfo thread_info[0x10];
-        thread_t threads[0x10];
+        PixelFillThreadInfo thread_info[MAX_THREAD];
 #if defined(__wasm__)
         thread_info->indices = g_indices + mipmap_size * mipmap_size;
         thread_info->mipmap = mipmap;
@@ -642,16 +640,15 @@ static void generateColor(int* data,int mipmap,int image_size){
         thread_info->n_threads = 1;
         generateColorThread(thread_info);
 #else
-        int n_threads = tMin(g_n_threads,0x10);
-        for(int j = 0;j < n_threads;j++){
-            thread_info[j].indices = g_indices + mipmap_size * mipmap_size / n_threads * j;
+        for(int j = 0;j < g_n_threads;j++){
+            thread_info[j].indices = g_indices + mipmap_size * mipmap_size / g_n_threads * j;
             thread_info[j].mipmap = mipmap;
             thread_info[j].image_size = image_size;
             thread_info[j].data = data;
-            thread_info[j].n_threads = n_threads;
-            threads[j] = threadCreate(generateColorThread,thread_info + j);
+            thread_info[j].n_threads = g_n_threads;
+            //threads[j] = threadCreate(generateColorThread,thread_info + j);
         }
-        threadWait(threads,n_threads);
+        threadWork(generateColorThread,thread_info,sizeof *thread_info);
 #endif
     }
 }
@@ -792,13 +789,16 @@ void markovTextureRemix(Texture texture,int remix_mipmap){
 void markovInit(void){
     if(g_options.fast_startup)
         return;
+    /*
     for(int i = 0;i < 0x10;i++)
         graph_color[i].entry = memoryArenaGet();
+    */
 }
 
 void markovFree(void){
     if(g_options.fast_startup)
         return;
+    /*
     for(int i = 0;i < 0x10;i++){
         memoryArenaFree(graph_color[i].entry);
         graph_color[i].entry = 0;
@@ -808,4 +808,5 @@ void markovFree(void){
     if(g_opencl_loaded)
         markovInferenceDeInitOpenCL();
 #endif
+    */
 }

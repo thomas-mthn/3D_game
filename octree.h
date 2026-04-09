@@ -59,6 +59,7 @@ typedef enum{
 	VOXEL_STONE2,
 	VOXEL_BOSS,
     VOXEL_STRING,
+    VOXEL_CONSOLE,
     VOXEL_ECOUNT,
 } VoxelType;
 

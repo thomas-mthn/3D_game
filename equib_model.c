@@ -59,9 +59,9 @@ static void drawBlock(Voxel* voxel,Vec3 octree_position,Vec3* luminance,int bloc
 
 	VoxelStatic* voxel_s = g_voxel_static + voxel->type;
 
-	drawPolygon(g_surface,vertices_2d[0],4,vec3MulR(voxel_s->color,luminance[0]));
-	drawPolygon(g_surface,vertices_2d[3],4,vec3MulR(voxel_s->color,luminance[1]));
-	drawPolygon(g_surface,vertices_2d[4],4,vec3MulR(voxel_s->color,luminance[2]));
+	drawPolygon(&g_surface,vertices_2d[0],4,vec3MulR(voxel_s->color,luminance[0]));
+	drawPolygon(&g_surface,vertices_2d[3],4,vec3MulR(voxel_s->color,luminance[1]));
+	drawPolygon(&g_surface,vertices_2d[4],4,vec3MulR(voxel_s->color,luminance[2]));
 }
 
 static void guiOctreeDrawRecursive(Voxel* voxel,Vec3 octree_position,Vec3* luminance,int view){
@@ -153,7 +153,7 @@ static void drawBlockSelect(Vec3 octree_position,Vec3* luminance,int block_size,
 			for(int i = 0;i < countof(frontface);i++){
 				if(!frontface[i])
 					continue;
- 				drawTexturePolygon(g_surface,voxel_s->texture,g_texture_coordinates_fill,vertices_2d[i],luminance[i / 2],4);
+ 				drawTexturePolygon(&g_surface,voxel_s->texture,g_texture_coordinates_fill,vertices_2d[i],luminance[i / 2],4);
 			}
 		}
 		else{
@@ -166,7 +166,7 @@ static void drawBlockSelect(Vec3 octree_position,Vec3* luminance,int block_size,
 			for(int i = 0;i < countof(frontface);i++){
 				if(!frontface[i])
 					continue;
- 				drawTexturePolygon(g_surface,voxel_s->texture,texture_coordinates_fill,vertices_2d[i],luminance[i / 2],4);
+ 				drawTexturePolygon(&g_surface,voxel_s->texture,texture_coordinates_fill,vertices_2d[i],luminance[i / 2],4);
 			}
 		}
 	}
@@ -174,14 +174,14 @@ static void drawBlockSelect(Vec3 octree_position,Vec3* luminance,int block_size,
 		for(int i = 0;i < countof(frontface);i++){
 			if(!frontface[i])
 				continue;
-			drawPolygon(g_surface,vertices_2d[i],4,voxel_s->color);
+			drawPolygon(&g_surface,vertices_2d[i],4,voxel_s->color);
 		}
 	}
 	else{
 		for(int i = 0;i < countof(frontface);i++){
 			if(!frontface[i])
 				continue;
-			drawPolygon(g_surface,vertices_2d[i],4,vec3MulR(voxel_s->color,luminance[i / 2]));
+			drawPolygon(&g_surface,vertices_2d[i],4,vec3MulR(voxel_s->color,luminance[i / 2]));
 		}
 	}
 }

@@ -1054,7 +1054,7 @@ static void entityRender3d(Entity* entity,int entity_size){
         spanSpriteAdd(&g_surface,&entity->texture_dynamic,points);
         return;
     }
-	drawTexturePolygon(g_surface,&entity->texture_dynamic,g_texture_coordinates_fill,points,vec3Single(FIXED_ONE << 4),4);
+	drawTexturePolygon(&g_surface,&entity->texture_dynamic,g_texture_coordinates_fill,points,vec3Single(FIXED_ONE << 4),4);
 }
 
 void entityDraw(Entity* entity){
@@ -1070,12 +1070,12 @@ void entityDraw(Entity* entity){
 				{point.x + fixedMulR(size,g_options.fov.x),point.y + fixedMulR(size,g_options.fov.y)},
 				{point.x - fixedMulR(size,g_options.fov.x),point.y + fixedMulR(size,g_options.fov.y)},
 			};
-			drawEllipses(g_surface,point.x,point.y,fixedMulR(size * 4,g_options.fov.x),fixedMulR(size * 4,g_options.fov.y),vec3MulRS(vec3Single(1 << 14),g_exposure));
-			drawEllipses(g_surface,point.x - size / 2,point.y + size / 2,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),vec3MulRS(vec3Single(1 << 18),g_exposure));
-			drawRectangle(g_surface,point.x - size * 2 - size / 4,point.y - size / 2,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y) * 4,vec3Single(1 << 16));
+			drawEllipses(&g_surface,point.x,point.y,fixedMulR(size * 4,g_options.fov.x),fixedMulR(size * 4,g_options.fov.y),vec3MulRS(vec3Single(1 << 14),g_exposure));
+			drawEllipses(&g_surface,point.x - size / 2,point.y + size / 2,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),vec3MulRS(vec3Single(1 << 18),g_exposure));
+			drawRectangle(&g_surface,point.x - size * 2 - size / 4,point.y - size / 2,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y) * 4,vec3Single(1 << 16));
 			int fuse = fixedMulR(fixedMulR(size,g_options.fov.x),entity->health << 10);
-			drawRectangle(g_surface,point.x - size * 2 - size / 4 - fuse / 2,point.y,fixedMulR(fuse,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x83B2EB));
-			drawRectangle(g_surface,point.x - size * 2 - size / 4 - fuse / 2 - size / 2,point.y,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x1050FF));
+			drawRectangle(&g_surface,point.x - size * 2 - size / 4 - fuse / 2,point.y,fixedMulR(fuse,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x83B2EB));
+			drawRectangle(&g_surface,point.x - size * 2 - size / 4 - fuse / 2 - size / 2,point.y,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x1050FF));
 		} break;
 		case ENTITY_BOLT: case ENTITY_ORB:{
 			Vec3 point = pointToScreen(entity->position);
@@ -1086,7 +1086,7 @@ void entityDraw(Entity* entity){
                 spanEllipsesAdd(&g_surface,point.x,point.y,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),vec3MulRS(entity->color_emit,g_exposure));
                 return;
             }
-			drawEllipses(g_surface,point.x,point.y,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),vec3MulRS(entity->color_emit,g_exposure));
+			drawEllipses(&g_surface,point.x,point.y,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),vec3MulRS(entity->color_emit,g_exposure));
 		} break;
 		case ENTITY_STAFF:{
 			entityRender3d(entity,FIXED_ONE);
@@ -1129,11 +1129,11 @@ void entityDraw(Entity* entity){
                         {entity->texture_offset.x + entity->texture_size,entity->texture_offset.y + entity->texture_size},
                         {entity->texture_offset.x + entity->texture_size,entity->texture_offset.y},
                     };
-                    drawTexturePolygon(g_surface,entity->texture,texture_coordinates,points,color,4);
+                    drawTexturePolygon(&g_surface,entity->texture,texture_coordinates,points,color,4);
                 }
 			}
 			else if(entity->particle_string.data){
-				drawString(g_surface,point.x,point.y,entity->particle_string,size,pixelColorToColor(0xFFFFFF),0x800);
+				drawString(&g_surface,point.x,point.y,entity->particle_string,size,pixelColorToColor(0xFFFFFF),0x800);
 			}
 			else{
                 if(g_surface.backend == RENDER_BACKEND_SOFTWARE){
@@ -1146,7 +1146,7 @@ void entityDraw(Entity* entity){
                     spanQuadAdd(&g_surface,points,color);
                 }
                 else{
-                    drawPolygon(g_surface,points,4,color);
+                    drawPolygon(&g_surface,points,4,color);
                 }
 			}
 		} break;
@@ -1161,16 +1161,16 @@ void entityDraw(Entity* entity){
 				{point.x + fixedMulR(size,g_options.fov.x),point.y + fixedMulR(size,g_options.fov.y)},
 				{point.x - fixedMulR(size,g_options.fov.x),point.y + fixedMulR(size,g_options.fov.y)},
 			};
-			drawFrame(g_surface,point.x - fixedMulR(size / 2,g_options.fov.x),point.y - fixedMulR(size / 2,g_options.fov.y),fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x808080),fixedMulR(size,g_options.fov.x) >> 4);
+			drawFrame(&g_surface,point.x - fixedMulR(size / 2,g_options.fov.x),point.y - fixedMulR(size / 2,g_options.fov.y),fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x808080),fixedMulR(size,g_options.fov.x) >> 4);
 			switch(entity->pickup_type){
 				case SPELL_BOLT:{
-					drawEllipses(g_surface,point.x,point.y,fixedMulR(size / 3,g_options.fov.x),fixedMulR(size / 3,g_options.fov.y),vec3MulRS(pixelColorToColor(0xFF0000),g_exposure));
+					drawEllipses(&g_surface,point.x,point.y,fixedMulR(size / 3,g_options.fov.x),fixedMulR(size / 3,g_options.fov.y),vec3MulRS(pixelColorToColor(0xFF0000),g_exposure));
 				} break;
 				case SPELL_BOMB:{
-					drawEllipses(g_surface,point.x,point.y,fixedMulR(size / 3,g_options.fov.x),fixedMulR(size / 3,g_options.fov.y),vec3MulRS(pixelColorToColor(0x0000FF),g_exposure));
+					drawEllipses(&g_surface,point.x,point.y,fixedMulR(size / 3,g_options.fov.x),fixedMulR(size / 3,g_options.fov.y),vec3MulRS(pixelColorToColor(0x0000FF),g_exposure));
 				} break;
 				case SPELL_ORB:{
-					drawEllipses(g_surface,point.x,point.y,fixedMulR(size / 3,g_options.fov.x),fixedMulR(size / 3,g_options.fov.y),vec3MulRS(pixelColorToColor(0x00FF00),g_exposure));
+					drawEllipses(&g_surface,point.x,point.y,fixedMulR(size / 3,g_options.fov.x),fixedMulR(size / 3,g_options.fov.y),vec3MulRS(pixelColorToColor(0x00FF00),g_exposure));
 				} break;
 			}
 			//drawTexturePolygon(g_surface,g_textures + TEXTURE_PICKUP,g_texture_coordinates_fill,points,vec3Single(1 << 20),4);

@@ -5,26 +5,23 @@
 #include "memory.h"
 #include "staff.h"
 #include "draw.h"
-
-#if !defined(__wasm__) && !defined(__linux__)
-#include "win32/w_draw_opengl.h"
-#endif
+#include "opengl.h"
 
 Texture g_spinning_staff = {.size = 0x100};
 
 void staffEditorCreateMenu(struct Staff* staff){
 	VoxelGuiElement menu_static[] = {
-		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x1C00},.size = 0x1000,.string = STRING_LITERAL("staff editor")},
-		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x3C00},.size = 0x800,.string = STRING_LITERAL("reload   =")},
-		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x3C00},.size = 0x800,.number = &g_equipped.reload},
-		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x4C00},.size = 0x800,.string = STRING_LITERAL("delay    =")},
-		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x4C00},.size = 0x800,.number = &g_equipped.delay},
-		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x5C00},.size = 0x800,.string = STRING_LITERAL("capacity =")},
-		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x5C00},.size = 0x800,.number = &g_equipped.capacity},
-		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x6C00},.size = 0x800,.string = STRING_LITERAL("mana gen =")},
-		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x6C00},.size = 0x800,.number = &g_equipped.mana_generation},
-		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x7C00},.size = 0x800,.string = STRING_LITERAL("mana max =")},
-		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x7C00},.size = 0x800,.number = &g_equipped.mana_max},
+		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x1C00},.string.size = 0x1000,.string.string = STRING_LITERAL("staff editor")},
+		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x3C00},.string.size = 0x800,.string.string = STRING_LITERAL("reload   =")},
+		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x3C00},.string.size = 0x800,.number = &g_equipped.reload},
+		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x4C00},.string.size = 0x800,.string.string = STRING_LITERAL("delay    =")},
+		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x4C00},.string.size = 0x800,.number = &g_equipped.delay},
+		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x5C00},.string.size = 0x800,.string.string = STRING_LITERAL("capacity =")},
+		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x5C00},.string.size = 0x800,.number = &g_equipped.capacity},
+		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x6C00},.string.size = 0x800,.string.string = STRING_LITERAL("mana gen =")},
+		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x6C00},.string.size = 0x800,.number = &g_equipped.mana_generation},
+		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x7C00},.string.size = 0x800,.string.string = STRING_LITERAL("mana max =")},
+		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x7C00},.string.size = 0x800,.number = &g_equipped.mana_max},
 		{.type = VOXEL_GUI_IMAGE,.position = {0x1000,FIXED_ONE - 0xCC00},.image = &g_spinning_staff},
 	};
 	VoxelGuiElement* menu = tMalloc(sizeof(*menu) * (countof(menu_static) + staff->capacity));
@@ -104,30 +101,29 @@ static void toggleEditorMode(VoxelGuiElement* self){
 }
 
 static VoxelGuiElement voxel_menu_gui[] = {
-	{.type = VOXEL_GUI_BUTTON,.on_click = goBack,.position = {0x1000,FIXED_ONE - 0x2000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x1C00},.string = STRING_LITERAL("go back")},
-	{.type = VOXEL_GUI_BUTTON,.on_click = renderLines,.position = {0x1000,FIXED_ONE - 0x4000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x3C00},.string = STRING_LITERAL("render lines")},
-	{.type = VOXEL_GUI_BUTTON,.on_click = toggleMovement,.position = {0x1000,FIXED_ONE - 0x6000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x5C00},.string = STRING_LITERAL("movement mode")},
-	{.type = VOXEL_GUI_CHECKBOX,.on_click = toggleEditorMode,.checkbox_state = &g_options.editor,.position = {0x1000,FIXED_ONE - 0x8000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x7C00},.string = STRING_LITERAL("editor mode")},
-	{.type = VOXEL_GUI_CHECKBOX,.checkbox_state = &g_luminance_overlay,.position = {0x1000,FIXED_ONE - 0xA000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x9C00},.string = STRING_LITERAL("luminance overlay")},
-    {.type = VOXEL_GUI_CHECKBOX,.checkbox_state = &g_options.fast_startup,.position = {0x1000,FIXED_ONE - 0xC000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0xBC00},.string = STRING_LITERAL("fast startup")},
+	{.type = VOXEL_GUI_BUTTON,.button.on_click = goBack,.position = {0x1000,FIXED_ONE - 0x2000}},
+	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x1C00},.string.string = STRING_LITERAL("go back")},
+	{.type = VOXEL_GUI_BUTTON,.button.on_click = renderLines,.position = {0x1000,FIXED_ONE - 0x4000}},
+	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x3C00},.string.string = STRING_LITERAL("render lines")},
+	{.type = VOXEL_GUI_BUTTON,.button.on_click = toggleMovement,.position = {0x1000,FIXED_ONE - 0x6000}},
+	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x5C00},.string.string = STRING_LITERAL("movement mode")},
+	{.type = VOXEL_GUI_CHECKBOX,.checkbox.state = &g_options.editor,.position = {0x1000,FIXED_ONE - 0x8000}},
+	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x7C00},.string.string = STRING_LITERAL("editor mode")},
+	{.type = VOXEL_GUI_CHECKBOX,.checkbox.state = &g_luminance_overlay,.position = {0x1000,FIXED_ONE - 0xA000}},
+	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x9C00},.string.string = STRING_LITERAL("luminance overlay")},
+    {.type = VOXEL_GUI_CHECKBOX,.checkbox.state = &g_options.fast_startup,.position = {0x1000,FIXED_ONE - 0xC000}},
+	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0xBC00},.string.string = STRING_LITERAL("fast startup")},
 };
 
 static VoxelGuiElement voxel_menu_render_backend_gui[] = {
-	{.type = VOXEL_GUI_BUTTON,.on_click = changeRenderBackendSoftware,.position = {0x1000,FIXED_ONE - 0x2000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x1C00},.string = STRING_LITERAL("software")},
-	{.type = VOXEL_GUI_BUTTON,.on_click = changeRenderBackendGL,.position = {0x1000,FIXED_ONE - 0x4000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x3C00},.string = STRING_LITERAL("opengl")},
+	{.type = VOXEL_GUI_BUTTON,.button.on_click = changeRenderBackendSoftware,.position = {0x1000,FIXED_ONE - 0x2000}},
+	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x1C00},.string.string = STRING_LITERAL("software")},
+	{.type = VOXEL_GUI_BUTTON,.button.on_click = changeRenderBackendGL,.position = {0x1000,FIXED_ONE - 0x4000}},
+	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x3C00},.string.string = STRING_LITERAL("opengl")},
 };
 
-#if !defined(__wasm__) && !defined(__linux__)
 static void antiAliasingSet(VoxelGuiElement* self){
-	antiAliasingSetGL((int)self->self_data);
+	antiAliasingSetGL((int)self->button.self_data);
 	voxelMenuMainSet();
 }
 
@@ -138,25 +134,24 @@ void antiAliasingLoadMenu(VoxelGuiElement* self){
 	VoxelGuiElement* aa_menu = tMallocZero(sizeof(VoxelGuiElement) * n_options);
 	int iter = 0;
 	aa_menu[0].type   = VOXEL_GUI_STRING;
-	aa_menu[0].string = (String)STRING_LITERAL("anti aliasing level");
+	aa_menu[0].string.string = (String)STRING_LITERAL("anti aliasing level");
 	aa_menu[0].position = (Vec2){FIXED_ONE - 0x2000,FIXED_ONE - 0x2000};
 	for(int i = g_smaa_max;i;i >>= 1){
 		VoxelGuiElement* element;
 		element = aa_menu + iter + 1;
 		element->type = VOXEL_GUI_BUTTON;
-		element->on_click = antiAliasingSet;
-		element->self_data = (void*)i;
+		element->button.on_click = antiAliasingSet;
+		element->button.self_data = (void*)i;
 		element->position = (Vec2){FIXED_ONE - 0x2000,FIXED_ONE - 0x2000 * (iter / 2 + 1) - 0x2000};
 		element = aa_menu + iter + 2;
 		element->type = VOXEL_GUI_STRING;
-		element->string = intToString(tMallocZero(0x10),i);
+		element->string.string = intToString(tMallocZero(0x10),i);
 		element->position = (Vec2){FIXED_ONE - 0x3000,FIXED_ONE - 0x2000 * (iter / 2 + 1) - 0x2000};
 		iter += 2;
 	}
 	g_voxel_static[VOXEL_MENU].gui   = aa_menu; 
 	g_voxel_static[VOXEL_MENU].n_gui = n_options;
 }
-#endif
 
 static void toggleMovement(VoxelGuiElement* self){
 	g_movement_fly ^= true;

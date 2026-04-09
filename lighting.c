@@ -546,7 +546,7 @@ static void voxelEmit(Vec3 emiter_position,Voxel* emiter,Voxel* voxel){
 }
 */
 
-static THREAD_ENTRY lightingTrace(void* arg_void){
+static void lightingTrace(void* arg_void){
 	LightingTraceParameters* arg = arg_void;
 	for(int i = arg->index;i < arg->index + arg->amount;i++){
 		LightingWorkData* light_data = arg->data + i;
@@ -662,27 +662,24 @@ void lightingOctree(void){
 		luxel_dynamic_cache[i].hash = 0;
 		luxel_dynamic_cache[i].luminance = (Vec3){0};
 	}
-		
+	
 	LightingWorkData* lighting_work_data = memoryScratchGet(MEMORY_SCRATCH_MAX_SIZE);
 	lightingCollect(&g_voxel,lighting_work_data);
 #if defined(__linux__) || defined(_MSC_VER)
-	thread_t threads[16];
 
-	LightingTraceParameters thread_arguments[countof(threads)];
-	int n_thread = tClamp(g_n_threads - 1,1,countof(threads));
+	LightingTraceParameters thread_arguments[MAX_THREAD];
 
-	for(int i = 0;i < n_thread;i++){
+	for(int i = 0;i < g_n_threads;i++){
 		thread_arguments[i] = (LightingTraceParameters){
-			.amount = g_lighting_work_data_ptr / n_thread,
-			.index = g_lighting_work_data_ptr / n_thread * i,
+			.amount = g_lighting_work_data_ptr / g_n_threads,
+			.index = g_lighting_work_data_ptr / g_n_threads * i,
 			.data = lighting_work_data,
 		};
-		if(i == n_thread - 1)
-			thread_arguments[i].amount += g_lighting_work_data_ptr % n_thread;
-		threads[i] = threadCreate(lightingTrace,thread_arguments + i);
+		if(i == g_n_threads - 1)
+			thread_arguments[i].amount += g_lighting_work_data_ptr % g_n_threads;
+		//threads[i] = threadCreate(lightingTrace,thread_arguments + i);
 	}
-	threadWait(threads,n_thread);
-    
+    threadWork(lightingTrace,thread_arguments,sizeof *thread_arguments);
     /*
 	  WaitForMultipleObjects(n_thread,threads,true,INFINITE);
 

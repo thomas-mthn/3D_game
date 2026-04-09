@@ -8,24 +8,19 @@
 #include "geometry.h"
 #include "voxel_gui.h"
 #include "libc.h"
-
-#if !defined(__wasm__) && !defined(__linux__)
-#include "win32/w_draw_opengl.h"
-#endif
+#include "opengl.h"
 
 Voxel g_voxel;
 Voxel* g_voxel_tick_list;
 
-#if !defined(__wasm__) && !defined(__linux__)
 static void toggleVsync(VoxelGuiElement* self){
 	g_vsync ^= true;
 	vsyncSet(false);
 }
-#endif
 
 static void voxelButtonExecute(VoxelGuiElement* self){
-	if(self->voxel->linked){
-		Voxel* door = self->voxel->linked;
+	if(self->button.voxel->linked){
+		Voxel* door = self->button.voxel->linked;
 		door->opened ^= true;
 		if(!door->animation){
 			door->animation = FIXED_ONE;
@@ -37,43 +32,72 @@ static void voxelButtonExecute(VoxelGuiElement* self){
 	}
 }
 
-static VoxelGuiElement g_voxel_menu_gui[] = {
-	{.type = VOXEL_GUI_BUTTON,.on_click = toggleSmoothLighting,.position = {0x1000,FIXED_ONE - 0x2000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x1C00},.string = STRING_LITERAL("toggle smooth lighting")},
-	{.type = VOXEL_GUI_BUTTON,.on_click = changeRenderBackend,.position = {0x1000,FIXED_ONE - 0x4000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x3C00},.string = STRING_LITERAL("render backend")},
-#if !defined(__wasm__) && !defined(__linux__)
-	{.type = VOXEL_GUI_BUTTON,.on_click = antiAliasingLoadMenu,.position = {0x1000,FIXED_ONE - 0x6000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x5C00},.string = STRING_LITERAL("anti aliasing")},
-	{.type = VOXEL_GUI_BUTTON,.on_click = toggleVsync,.position = {0x1000,FIXED_ONE - 0x8000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x7C00},.string = STRING_LITERAL("toggle vsync")},
-#endif
-	{.type = VOXEL_GUI_BUTTON,.on_click = debugOptions,.position = {0x1000,FIXED_ONE - 0xA000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x9C00},.string = STRING_LITERAL("debug options")},
+static VoxelGuiElement voxel_menu_gui[] = {
+	{.type = VOXEL_GUI_BUTTON,.button.on_click = toggleSmoothLighting,.position = {0x1000,FIXED_ONE - 0x2000}},
+	{.type = VOXEL_GUI_STRING,.position = {0x2800,FIXED_ONE - 0x1400},.string.string = STRING_LITERAL("toggle smooth lighting")},
+	{.type = VOXEL_GUI_BUTTON,.button.on_click = changeRenderBackend,.position = {0x1000,FIXED_ONE - 0x4000}},
+	{.type = VOXEL_GUI_STRING,.position = {0x2800,FIXED_ONE - 0x3400},.string.string = STRING_LITERAL("render backend")},
+	{.type = VOXEL_GUI_BUTTON,.button.on_click = antiAliasingLoadMenu,.position = {0x1000,FIXED_ONE - 0x6000}},
+	{.type = VOXEL_GUI_STRING,.position = {0x2800,FIXED_ONE - 0x5400},.string.string = STRING_LITERAL("anti aliasing")},
+	{.type = VOXEL_GUI_BUTTON,.button.on_click = toggleVsync,.position = {0x1000,FIXED_ONE - 0x8000}},
+	{.type = VOXEL_GUI_STRING,.position = {0x2800,FIXED_ONE - 0x7400},.string.string = STRING_LITERAL("toggle vsync")},
+	{.type = VOXEL_GUI_BUTTON,.button.on_click = debugOptions,.position = {0x1000,FIXED_ONE - 0xA000}},
+	{.type = VOXEL_GUI_STRING,.position = {0x2800,FIXED_ONE - 0x9400},.string.string = STRING_LITERAL("debug options")},
 };
 
-static VoxelGuiElement g_voxel_button_gui[] = {
-	{.type = VOXEL_GUI_BUTTON,.on_click = voxelButtonExecute,.position = {FIXED_ONE / 4,FIXED_ONE / 4},.size = FIXED_ONE / 2},
+static VoxelGuiElement voxel_button_gui[] = {
+	{.type = VOXEL_GUI_BUTTON,.button.on_click = voxelButtonExecute,.position = {FIXED_ONE / 4,FIXED_ONE / 4},.button.size = FIXED_ONE / 2},
 };
 
-static VoxelGuiElement g_staff_inspector_gui[] = {
-	{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x1C00},.size = 0x1000,.string = STRING_LITERAL("staff editor")},
+static VoxelGuiElement staff_inspector_gui[] = {
+	{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x1C00},.string.size = 0x1000,.string.string = STRING_LITERAL("staff editor")},
+};
+
+static VoxelGuiElement voxel_string_gui[] = {
+    {
+        .type = VOXEL_GUI_RECTANGLE,
+        .rectangle.size = {FIXED_ONE,0x2000},
+        .rectangle.flags = {RECTANGLE_RELATIVE_SIZE_X},
+        .rectangle.color = 0xF02020
+    },
+    {
+        .type = VOXEL_GUI_RECTANGLE,
+        .rectangle.size = {0x2000,FIXED_ONE},
+        .rectangle.flags = {RECTANGLE_RELATIVE_SIZE_Y},
+        .rectangle.color = 0xF02020
+    },
+    {
+        .type = VOXEL_GUI_RECTANGLE,
+        .position = {0,FIXED_ONE - 0x800},
+        .rectangle.size = {FIXED_ONE,0x2000},
+        .rectangle.flags = {RECTANGLE_RELATIVE_SIZE_X},
+        .rectangle.color = 0xF02020
+    },
+    {
+        .type = VOXEL_GUI_RECTANGLE,
+        .position = {FIXED_ONE - 0x800},
+        .rectangle.size = {0x2000,FIXED_ONE},
+        .rectangle.flags = {RECTANGLE_RELATIVE_SIZE_Y},
+        .rectangle.color = 0xF02020
+    },
 };
 
 VoxelGuiElement g_inventory_gui[31] = {
-	[30] = {.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x1C00},.size = 0x1000,.string = STRING_LITERAL("inventory")},
+	[30] = {.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x1C00},.string.size = 0x1000,.string.string = STRING_LITERAL("inventory")},
 };
 
 void voxelMenuStaffEditorDefault(void){
 	tFree(g_voxel_static[VOXEL_STAFF_INSPECTOR].side[VEC3_X * 2].gui);
-	g_voxel_static[VOXEL_STAFF_INSPECTOR].side[VEC3_X * 2].gui = g_staff_inspector_gui;
-	g_voxel_static[VOXEL_STAFF_INSPECTOR].side[VEC3_X * 2].n_gui = countof(g_staff_inspector_gui);
+	g_voxel_static[VOXEL_STAFF_INSPECTOR].side[VEC3_X * 2].gui = staff_inspector_gui;
+	g_voxel_static[VOXEL_STAFF_INSPECTOR].side[VEC3_X * 2].n_gui = countof(staff_inspector_gui);
 }
 
 void voxelMenuMainSet(void){
-	g_voxel_static[VOXEL_MENU].gui   = g_voxel_menu_gui;
-	g_voxel_static[VOXEL_MENU].n_gui = countof(g_voxel_menu_gui); 
+	g_voxel_static[VOXEL_MENU].gui   = voxel_menu_gui;
+	g_voxel_static[VOXEL_MENU].n_gui = countof(voxel_menu_gui); 
 }
+
+#define GUI_ADD(GUI) .gui = GUI,.n_gui = countof(GUI)
 
 VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 	[VOXEL_BLOCK] = {
@@ -140,8 +164,7 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 	},
 	[VOXEL_MENU] = {
 		.color = {0x3000,0x3000,0x3000},
-		.n_gui = countof(g_voxel_menu_gui),
-		.gui = g_voxel_menu_gui,
+        GUI_ADD(voxel_menu_gui),
 		.flags = VOXEL_NO_BLOCKPLACE,
 	},
 	[VOXEL_STONE_BRICK] = {
@@ -179,8 +202,7 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 	},
 	[VOXEL_BUTTON] = {
 		.color = {0xF000,0xF000,0xF000},
-		.gui = g_voxel_button_gui,
-		.n_gui = countof(g_voxel_button_gui),
+        GUI_ADD(voxel_button_gui)
 	},
 	[VOXEL_STAFF_INSPECTOR] = {
 		.color = {0x0F00,0x0F00,0x2000},
@@ -188,15 +210,13 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 		.side[VEC3_X * 2] = {
 			.custom = true,
 			.color = {0x0F00,0x0F00,0x2000},
-			.gui = g_staff_inspector_gui,
-			.n_gui = countof(g_staff_inspector_gui),
+            GUI_ADD(staff_inspector_gui)
 		},
 	},
 	[VOXEL_INVENTORY] = {
 		.color = {0x2000,0x2000,0x0F00},
 		.flags = VOXEL_EMITER,
-		.gui = g_inventory_gui,
-		.n_gui = countof(g_inventory_gui),
+        GUI_ADD(g_inventory_gui),
 	},
 	[VOXEL_LADDER] = {
 		.texture = g_textures + TEXTURE_PLANKS,
@@ -204,6 +224,10 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 	},
     [VOXEL_WATER] = {
         .flags = VOXEL_TRANSLUCENT
+    },
+    [VOXEL_STRING] = {
+        .color = {0x1F00,0x1F00,0x1F00},
+        GUI_ADD(voxel_string_gui),
     },
 };
 
@@ -217,39 +241,6 @@ static void octreeIndicesSet(VoxelSerialized* voxel_serial_array,int* voxel_seri
 					voxel->child_s[i]->index = ((*voxel_serial_index)++) + 1;
 				octreeIndicesSet(voxel_serial_array,voxel_serial_index,voxel->child_s[i]);
 			}
-		} break;
-	}
-}
-
-void octreeSerializeRecursive2(void* voxel_serial_array,int* voxel_serial_index,Voxel* voxel,Vec3 position,int depth,int parent){
-	if(!voxel)
-		return;
-
-	VoxelTrace* voxel_serial = (VoxelTrace*)((char*)voxel_serial_array + *voxel_serial_index);
-	voxel_serial->type = voxel->type;
-	voxel_serial->x = position.x;
-	voxel_serial->y = position.y;
-	voxel_serial->z = position.z;
-	voxel_serial->depth = depth;
-	voxel_serial->parent = parent;
-	
-	switch(voxel->type){
-		case VOXEL_PARENT:{
-			int parent = *voxel_serial_index;
-			*voxel_serial_index += sizeof(VoxelTraceParent);
-			VoxelTraceParent* voxel_serial_parent = (VoxelTraceParent*)voxel_serial;
-			for(int i = 0;i < 8;i++){
-				if(voxel->child_s[i]->type == VOXEL_AIR){
-					voxel_serial_parent->child_s[i] = -1;
-					continue;
-				}
-				voxel_serial_parent->child_s[i] = *voxel_serial_index;
-				Vec3 position_child = {position.x * 2 + !!(i & 1),position.y * 2 + !!(i & 2),position.z * 2 + !!(i & 4)};
-				octreeSerializeRecursive2(voxel_serial_array,voxel_serial_index,voxel->child_s[i],position_child,depth + 1,parent);
-			}
-		} break;
-		default:{
-			*voxel_serial_index += sizeof(VoxelTrace);
 		} break;
 	}
 }
@@ -311,9 +302,10 @@ Voxel* octreeDeserializeRecursive(VoxelSerializedParent* voxel_serial_array,int 
 		voxel_array[(*index_i)++] = voxel;
 
     if(voxel->type == VOXEL_STRING){
-        VoxelSerializedString* voxel_serial = (void*)voxel_serial;
-        voxel->string.data = tMalloc(voxel_serial->string_length);
-        tMemcpy(voxel->string.data,voxel_serial->string_data,voxel_serial->string_length);
+        VoxelSerializedString* voxel_serial_string = (void*)voxel_serial;
+        voxel->string.data = tMalloc(voxel_serial_string->string_length);
+        tMemcpy(voxel->string.data,voxel_serial_string->string_data,voxel_serial_string->string_length);
+        voxel->string.size = voxel_serial_string->string_length;
     }
     
 	if(voxel->type != VOXEL_PARENT)

@@ -36,8 +36,13 @@
 #define FUTEX_WAKE 1
 
 structure(TimeVal){
-    long tv_sec;
-    long tv_usec;
+    long seconds;
+    long micro_seconds;
+};
+
+structure(TimeSpec){
+    long seconds;
+    long nano_seconds;
 };
 
 structure(KernelStat){
@@ -74,8 +79,8 @@ long systemRead(unsigned file_descriptor,void* buffer,size_t buffer_size);
 void* systemMemoryMap(void* address,size_t length,int protection,int flags,int fd,long offset);
 long systemMemoryUnmap(void* address,size_t length);
 long systemGetdents(unsigned file_descriptor,char* buffer,int buffer_length);
-long systemTimeGet(TimeVal* timeval);
-long systemProcessExit(int exit_code);
+long systemTimeGet(TimeSpec* timeval);
+void systemProcessExit(int exit_code);
 long systemClone(long flags,void* stack_ptr,int* parent_id,int* child_tid,long tls);
 long systemFutex(int* address,int operation,unsigned value,TimeVal* utime,int* address_2,unsigned flags);
 

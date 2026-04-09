@@ -12,30 +12,57 @@ structure(Texture);
 structure(InventorySlot);
 structure(DrawSurface);
 
-typedef enum{
+typedef enum {
 	VOXEL_GUI_BUTTON,
 	VOXEL_GUI_CHECKBOX,
 	VOXEL_GUI_STRING,
 	VOXEL_GUI_NUMBER,
 	VOXEL_GUI_IMAGE,
 	VOXEL_GUI_INVENTORY_SLOT,
+    VOXEL_GUI_RECTANGLE,
 } VoxelGuiElementType;
 
 structure(VoxelGuiElement){
 	VoxelGuiElementType type;
-	Vec2 position;
-	int size;
-	void (*on_click)(VoxelGuiElement* self);
-	String string;
-	void* self_data;
-	Voxel* voxel;
-	bool* checkbox_state;
-	Texture* image;
-	int* number;
-	InventorySlot* inventory_slot;
+    Vec2 position;
+    union{
+        struct{
+            bool* state;
+            void (*on_click)(VoxelGuiElement* self);
+        } checkbox;
+        struct{
+            int size;
+            void (*on_click)(VoxelGuiElement* self);
+            void* self_data;
+            Voxel* voxel;
+        } button;
+        struct{
+            String string;
+            int size;
+        } string;
+        struct{
+            int* number;
+            int size;
+        } number;
+        struct{
+            Texture* image;
+        } image;
+        struct{
+            InventorySlot* slot;
+        } inventory_slot;
+        struct{
+            Vec2 size;
+            int color;
+            enum{
+                RECTANGLE_RELATIVE_SIZE_X = (1 << 0),
+                RECTANGLE_RELATIVE_SIZE_Y = (1 << 1),
+            } flags;
+        } rectangle;
+    };
 };
 
-void drawString3D(DrawSurface* surface,Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,String string,int scale,bool mirror,int thickness);
+void drawChar3D(Voxel* voxel,int side,Vec2 uv,char string_char,int scale,int thickness);
+void drawString3D(Voxel* voxel,int side,Vec2 uv,String string,int scale,int thickness);
 void drawGuiCircle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,int size,int color);
 void drawGuiFrame(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,int thickness);
 

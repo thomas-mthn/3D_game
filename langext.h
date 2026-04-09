@@ -7,7 +7,6 @@
 #include <stddef.h>
 
 #define structure(NAME) typedef struct NAME NAME;struct NAME
-#define enumeration(NAME) typedef enum NAME NAME;enum NAME
 
 #define countof(ARRAY) (sizeof(ARRAY) / sizeof((ARRAY)[0]))
 
@@ -26,6 +25,8 @@ typedef int32_t  int32;
 typedef uint32_t uint32;
 typedef int64_t  int64;
 typedef uint64_t uint64;
+
+typedef void (*funcptr_t)(void);
 
 #ifdef __wasm__
 #define stdcall 

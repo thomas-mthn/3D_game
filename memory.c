@@ -1,13 +1,14 @@
 #include "memory.h"
 
 #ifdef __linux__
-#include <stdlib.h>
 #include "linux/l_syscall.h"
-#include "tmath.h"
+#include "libc.h"
+
 #elif !defined(__wasm__)
 #include "win32/w_kernel.h"
 #include "win32/w_user.h"
 #include "win32/w_main.h"
+
 #endif
 
 static char memory_scratch[0x1000000];
@@ -49,53 +50,47 @@ void* memoryScratchGetZero(int size){
     return memory;
 }
 
+void virtualFree(void* address,size_t size){
 #ifdef __linux__
-static struct{
-    void* address;
-    size_t size;
-} memory_table[0x1000];
-#endif
-
-void* memoryArenaGet(void){
-    int size = 0x40000000;
-#ifdef __linux__
-    void* address = systemMemoryMap(0,size,PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS,-1,0);
-    int hash = tHash((size_t)address) % countof(memory_table);
-    while(memory_table[hash].address){
-        hash += 1;
-        hash %= countof(memory_table);
-    }
-    memory_table[hash].address = address;
-    memory_table[hash].size = size;
-    return address;
-#elif !defined(__wasm__)
-    unsigned error;
-    void* mem;
-    do{
-        mem = VirtualAlloc(0,size,MEM_COMMIT | MEM_RESERVE,PAGE_READWRITE);
-        size >>= 1;
-    } while(!mem && size >= 0x1000);
-    if(!mem)
-        errorBox();
-    return mem;
-#else
-    return 0;
-#endif
-}
-
-void memoryArenaFree(void* address){
-#ifdef __linux__
-    int hash = tHash((size_t)address % countof(memory_table));
-    while(memory_table[hash].address != address){
-        hash += 1;
-        hash %= countof(memory_table);
-    }
-    systemMemoryUnmap(memory_table[hash].address,memory_table[hash].size);
-    memory_table[hash].address = 0;
+    systemMemoryUnmap(address,size);
 #elif !defined(__wasm__)
     if(!VirtualFree(address,0,MEM_RELEASE))
         errorBox();
 #endif
+}
+
+void* virtualAllocate(size_t size){
+#ifdef __linux__
+    return systemMemoryMap(0,size,PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS,-1,0);
+#elif !defined(__wasm__)
+    void* mem = VirtualAlloc(0,size,MEM_COMMIT | MEM_RESERVE,PAGE_READWRITE);;
+    if(!mem)
+        errorBox();
+    return mem;
+#else
+    return nullptr;
+#endif
+}
+
+#define PAGE_SIZE 0x1000
+
+void* memoryArenaAllocate(MemoryArena* arena,size_t size){
+    if(arena->pointer + size > arena->capacity){
+        char* new_data = virtualAllocate(arena->capacity + PAGE_SIZE);
+        tMemcpy(new_data,arena->data,arena->capacity);
+        arena->capacity += PAGE_SIZE;
+        arena->data = new_data;
+    }
+    char* allocation = arena->data + arena->pointer;
+    arena->pointer += size;
+    return allocation;
+}
+
+void memoryArenaFree(MemoryArena* arena){
+    virtualFree(arena->data,arena->capacity);
+    arena->capacity = 0;
+    arena->pointer = 0;
+    arena->data = 0;
 }
 
 structure(MemoryBlock){

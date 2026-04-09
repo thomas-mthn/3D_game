@@ -3,6 +3,7 @@
 #include "geometry.h"
 #include "main.h"
 #include "texture.h"
+#include "memory.h"
 
 structure(Span){
 	Span* next;
@@ -28,12 +29,10 @@ structure(Clip){
     int16 end;
 };
 
-static Span  span_arena[0x100000];
-static Span* span_arena_ptr = span_arena;
 static Span* span_list[0x1000];
 
-static Clip  clip_list[0x1000];
-static Clip* clip_ptr = clip_list;
+static MemoryArena span_arena;
+static MemoryArena clip_arena;
 
 static void setScanline(Vec2* scanline,Vec2 pos_1,Vec2 pos_2,int size){
 	int p_begin,p_end;
@@ -256,13 +255,13 @@ void spanDrawList(void){
             bool culled = false;
             bool newclip = true;
             bool changed;
-            for(Clip* clip = clip_list;clip < clip_ptr;clip++){
+            for(Clip* clip = (void*)clip_arena.data;clip < clip_arena.data + clip_arena.pointer;clip++){
                 if(span_current->begin >= clip->begin && span_current->end <= clip->end){
                     culled = true;
                     break;
                 }
                 if(span_current->begin < clip->begin && span_current->end > clip->end){
-                    Span* span_new = span_arena_ptr++;
+                    Span* span_new = memoryArenaAllocate(&span_arena,sizeof(Span));
                     *span_new = *span_current;
                     span_new->begin = clip->end;
                     span_new->next = span;
@@ -280,18 +279,16 @@ void spanDrawList(void){
             if(culled)
                 continue;
             if(newclip){
-                Clip* clip = clip_ptr++;
-                if(clip_ptr - clip_list > countof(clip_list))
-                   clip_ptr = 0;
+                Clip* clip = memoryArenaAllocate(&clip_arena,sizeof(Clip));
                 clip->begin = span_current->begin;
                 clip->end = span_current->end;
             }
             spanDraw(span_current,i);
         }
-        clip_ptr = clip_list;
+        memoryArenaFree(&clip_arena);
         span_list[i] = 0;
     }
-    span_arena_ptr = span_arena;
+    memoryArenaFree(&span_arena);
 }
 
 static void spanListAdd(int x,Span* span){
@@ -302,14 +299,8 @@ static void spanListAdd(int x,Span* span){
     span_list[x] = span;
 }
 
-static Span* spanArenaAllocate(void){
-    if(span_arena_ptr - span_arena >= countof(span_arena))
-        span_arena_ptr = span_arena;
-    return span_arena_ptr++;
-}
-
 static void spanColorTextureAdd(int x,int begin,int end,Vec3 color_begin,Vec3 color_end,Texture* texture,Vec2 texture_begin,Vec2 texture_end,int mipmap,int flags){
-    Span* span = spanArenaAllocate();
+    Span* span = memoryArenaAllocate(&span_arena,sizeof(Span));
     *span = (Span){
         .begin = begin,
         .end = end,
@@ -326,7 +317,7 @@ static void spanColorTextureAdd(int x,int begin,int end,Vec3 color_begin,Vec3 co
 
 
 static void spanAdd(int x,int begin,int end,Vec3 color){
-    Span* span = spanArenaAllocate();
+    Span* span = memoryArenaAllocate(&span_arena,sizeof(Span));
     span->begin = begin;
     span->end = end;
     span->flags = SPAN_SOLIDCOLOR;

@@ -1,54 +1,41 @@
 #ifndef MAIN_H
 #define MAIN_H
 
+#define KEYTRANSLATE_BACK 1
+
 #ifdef __linux__
 
-enum{
-    KEY_Q = 24,
-    KEY_W,KEY_E,KEY_R,KEY_T,KEY_Y,KEY_U,
-    KEY_I,KEY_O,KEY_P,
-    
-    KEY_A = 38,
-    KEY_S,KEY_D,KEY_F,KEY_G,KEY_H,KEY_J,
-    KEY_K,KEY_L,
-    
-    KEY_Z = 52,
-    KEY_X,KEY_C,KEY_V,KEY_B,KEY_N,KEY_M
-};
-
-#define KEY_SPACE 65
-#define KEY_ESCAPE 9
-#define KEY_LEFT  113
-#define KEY_RIGHT 114
-#define KEY_ADD 86
-#define KEY_SUBTRACT 82
-
-#define KEY_F1  67
-#define KEY_F2  68
-#define KEY_F3  69
-#define KEY_F4  70
-#define KEY_F5  71
-#define KEY_F6  72
-#define KEY_F7  73
-#define KEY_F8  74
-#define KEY_F9  75
-#define KEY_F10 76
-#define KEY_F11 95
-#define KEY_F12 96
+typedef enum{
+    KEY_ESCAPE = 9,
+    KEY_1,KEY_2,KEY_3,KEY_4,KEY_5,KEY_6,KEY_7,KEY_8,KEY_9,KEY_0,
+    KEY_OEM_4,KEY_OEM_2,KEY_BACK,KEY_TAB,
+    KEY_Q,KEY_W,KEY_E,KEY_R,KEY_T,KEY_Y,KEY_U,KEY_I,KEY_O,KEY_P,
+    KEY_OEM_6,KEY_OEM_1,KEY_RETURN,KEY_LCONTROL,
+    KEY_A,KEY_S,KEY_D,KEY_F,KEY_G,KEY_H,KEY_J,KEY_K,KEY_L,
+    KEY_OEM_PLUS,KEY_OEM_3,KEY_OEM_7,KEY_LSHIFT,KEY_OEM_5,
+    KEY_Z,KEY_X,KEY_C,KEY_V,KEY_B,KEY_N,KEY_M,
+    KEY_OEM_COMMA,KEY_OEM_PERIOD,KEY_OEM_MINUS,KEY_RSHIFT,KEY_MULTIPLY,
+    KEY_LMENU,KEY_SPACE,KEY_CAPITAL,
+    KEY_F1,KEY_F2,KEY_F3,KEY_F4,KEY_F5,KEY_F6,KEY_F7,KEY_F8,KEY_F9,KEY_F10,
+    KEY_NUMLOCK,KEY_SCROLL,KEY_HOME,KEY_UP,KEY_PRIOR,KEY_SUBTRACT,
+    KEY_LEFT,KEY_CLEAR,KEY_RIGHT,KEY_ADD,KEY_END,KEY_DOWN,KEY_NEXT,
+    KEY_INSERT,KEY_DELETE,KEY_SNAPSHOT,
+    KEY_OEM_10 = (0x56 + 8),KEY_F11,KEY_F12,
+} KeyType;
 
 #define KEY_LBUTTON 191
 #define KEY_RBUTTON 192
 #define KEY_MBUTTON 193
 
-#define KEY_LCONTROL 37
-#define KEY_LALT     64
-#define KEY_LSHIFT   50
-#define KEY_RETURN   36
-#define KEY_BACK     22
-
 #else
 
 enum{
+    KEY_BACK = 8,KEY_TAB,KEY_CLEAR = 0x0C,KEY_RETURN,
+    KEY_SHIFT = 0x10,KEY_CONTROL,KEY_MENU,KEY_PAUSE,KEY_CAPITAL,
+    KEY_ESCAPE = 0x1B,KEY_SPACE = 0x20,KEY_PRIOR,KEY_NEXT,KEY_END,KEY_HOME,
+    KEY_LEFT,KEY_UP,KEY_RIGHT,KEY_DOWN,KEY_SELECT,KEY_PRINT,KEY_EXECUTE,
+    KEY_SNAPSHOT,KEY_INSERT,KEY_DELETE,KEY_HELP,KEY_0,KEY_1,KEY_2,
+    KEY_3,KEY_4,KEY_5,KEY_6,KEY_7,KEY_8,KEY_9,
     KEY_A = 'A',
     KEY_B,KEY_C,KEY_D,KEY_E,KEY_F,KEY_G,
     KEY_H,KEY_I,KEY_J,KEY_K,KEY_L,KEY_M,
@@ -56,13 +43,6 @@ enum{
     KEY_T,KEY_U,KEY_V,KEY_W,KEY_X,KEY_Y,
     KEY_Z,
 };
-
-#define KEY_SPACE    0x20
-#define KEY_ESCAPE   0x1B
-#define KEY_LEFT	 0x25	
-#define KEY_RIGHT    0x27
-#define KEY_ADD      0x6B
-#define KEY_SUBTRACT 0x6D
 
 #define KEY_F1	     0x70	
 #define KEY_F2	     0x71	
@@ -83,14 +63,30 @@ enum{
 #define KEY_LCONTROL 0xA2
 #define KEY_LALT     0xA4
 #define KEY_LSHIFT   0xA0
-#define KEY_RETURN   0x0D
-#define KEY_BACK     0x08
-
-#endif
 
 #define KEY_UP	     0x26	
-#define KEY_DOWN	 0x28	
+#define KEY_DOWN	 0x28
+
+#define KEY_OEM_PLUS 0xBB
+#define KEY_OEM_COMMA 0xBC
+#define KEY_OEM_MINUS 0xBD
+#define KEY_OEM_PERIOD 0xBE
+
+#define KEY_ADD 0x6B
+#define KEY_SUBTRACT 0x6D
+
+#define KEY_LMENU 0xA4
+
+#define KEY_OEM_1 0xBA	
+#define KEY_OEM_2 0xBF
 #define KEY_OEM_3    0xC0
+#define KEY_OEM_4 0xDB
+#define KEY_OEM_5 0xDC
+#define KEY_OEM_6 0xDD
+#define KEY_OEM_7 0xDE
+#define KEY_OEM_8 0xDF
+
+#endif
 	
 #define N_TICK_SECOND 128
 #define RENDER_DISTANCE (FIXED_ONE * 8)
@@ -112,14 +108,11 @@ structure(GameOptions){
 	bool fast_startup;
 	Vec2 fov;
 	RenderBackend render_backend;
+    int multi_sample;
+    bool multi_thread;
 };
 
-void print(String string);
-void debugPrint(char* string);
-void printNumber(int number);
-void printNumberNL(int number);
-void printNL(String string);
-void printVec3(Vec3 v);
+void applicationQuit(void);
 
 int bilinearScalar(Vec2 position,int* values);
 
@@ -143,6 +136,8 @@ Vec2 getLookAngle(Vec3 direction);
 Vec3 getLookDirection(Vec2 direction);
 
 int bitScanReverse(unsigned value);
+
+void configSave(void);
 
 void keyPress(int key);
 void lButtonUp(void);
@@ -171,7 +166,6 @@ static Vec3 pixelColorToColor(int color){
 
 extern char g_voxel_lighting_tree[];
 
-extern int g_n_threads;
 extern bool g_test_bool;
 extern Vec3 g_position;
 extern VoxelType g_voxel_select;
@@ -195,7 +189,7 @@ extern Voxel* g_voxel_link_list;
 extern InventorySlot g_inventory[];
 extern VoxelSerialized* g_voxel_template;
 extern Entity* g_boss;
-extern bool g_edit_voxelstring;
+extern Voxel* g_voxel_interact;
 
 extern bool g_pickup_collected;
 

@@ -104,7 +104,7 @@ long systemGetdents(unsigned file_descriptor,char* buffer,int buffer_length){
     return ret;
 }
 
-long systemTimeGet(TimeVal* timeval){
+long systemTimeGet(TimeSpec* timeval){
     long ret;
     asm volatile(
         "syscall"
@@ -115,15 +115,13 @@ long systemTimeGet(TimeVal* timeval){
     return ret;
 }
 
-long systemProcessExit(int exit_code){
-    long ret;
+void systemProcessExit(int exit_code){
     asm volatile(
         "syscall"
-        : "=a" (ret)
-        : "a"(0x3c),"D"(exit_code)
+        :
+        : "a"(231),"D"(exit_code)
         : "rcx", "r11", "memory"
     );
-    return ret;
 }
 
 long systemClone(long flags,void* stack_ptr,int* parent_id,int* child_tid,long tls){

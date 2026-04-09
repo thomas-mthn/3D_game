@@ -8,6 +8,7 @@ structure(String){
     char* data;
 };
 
+bool stringCompareSizeInsensitive(String string,String compare);
 String stringMake(char* cstring);
 String intToString(char* buffer,int number);
 String stringInString(String string_1,String string_2);

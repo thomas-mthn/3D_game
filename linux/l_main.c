@@ -1,10 +1,14 @@
-#include <X11/Xlib.h>
+#include <X11/X.h>
 #include <X11/Xutil.h>
+#include <GL/glx.h>
+#include <dlfcn.h>
 
 #include "../langext.h"
 #include "../draw.h"
 #include "../memory.h"
 #include "../main.h"
+#include "../thread.h"
+#include "../draw.h"
 
 #include "l_main.h"
 #include "l_syscall.h"
@@ -29,9 +33,6 @@ structure(InputEvent){
     int value;
 };
 
-static Display* display;
-static Window window;
-static int screen;
 static GC gc;
 
 Texture linuxLoadImage(char* path){
@@ -72,8 +73,6 @@ Texture linuxLoadImage(char* path){
 	
 	uint8* temp = tMalloc(image_size * 3);
 	systemRead(file,temp,image_size * 3);
-    print(stringMake("size: "));
-    printNumberNL(image_size);
 	for(int i = 0;i < image_size;i++){
 		image_data[i] = temp[i * 3 + 0] << 0;
 		image_data[i] |= temp[i * 3 + 1] << 8;
@@ -142,8 +141,8 @@ bool linuxOctreeDeserialize(void){
 
 void linuxBlit(int* data,int width,int height){
 	XImage* image = XCreateImage(
-        display,
-        DefaultVisual(display, screen),
+        g_surface.display,
+        DefaultVisual(g_surface.display,g_surface.screen),
         24,
         ZPixmap,
         0,
@@ -154,8 +153,8 @@ void linuxBlit(int* data,int width,int height){
         0
     );
 	XPutImage(
-		display,
-		window,
+		g_surface.display,
+		g_surface.window,
 		gc,
 		image,
 		0, 0,
@@ -165,16 +164,16 @@ void linuxBlit(int* data,int width,int height){
 	);
 	image->data = 0;
 	XDestroyImage(image);
-	XFlush(display);
+	XFlush(g_surface.display);
     for(int i = 0;i < width * height;i++)
         data[i] = 0;
 }
 
 static unsigned getTick(void){
-    TimeVal ts;
+    TimeSpec ts;
     systemTimeGet(&ts);
 
-    uint64 ns = (uint64)ts.tv_sec * 1000000000ULL + ts.tv_usec;
+    uint64 ns = (uint64)ts.seconds * 1000000000ULL + ts.nano_seconds;
 
     return ns / (1000000000ULL / N_TICK_SECOND);
 }
@@ -198,32 +197,16 @@ void linuxSaveConfig(void){
     systemClose(config_file);
 }
 
+#define WINDOW_SIZE_X (640 * 2)
+#define WINDOW_SIZE_Y (480 * 2)
+
+void linuxWindowInit(void){
+    XStoreName(g_surface.display,g_surface.window,"3D Game");
+    XSelectInput(g_surface.display,g_surface.window,ExposureMask | KeyPressMask | PointerMotionMask | ButtonPressMask | ButtonReleaseMask | StructureNotifyMask);
+    XMapWindow(g_surface.display,g_surface.window);
+}
+
 int main(void){
-    int cpuinfo_file = systemOpen("/proc/cpuinfo",0,0);
-    if(cpuinfo_file == -1)
-        goto no_cpuinfo;
-    
-    char* buffer = memoryScratchGet(MEMORY_SCRATCH_MAX_SIZE);
-    int file_size = 0;
-    for(;;){
-        int s = systemRead(cpuinfo_file,buffer + file_size,0x1000000);
-        if(!s)
-            break;
-        file_size += s;
-    }
-    String cpuinfo = {.data = buffer,.size = file_size};
-    for(int core_counter = 0;;core_counter += 1){
-        cpuinfo = stringInString(cpuinfo,(String)STRING_LITERAL("processor"));
-        if(!cpuinfo.data){
-            g_n_threads = core_counter;
-            systemClose(cpuinfo_file);
-            break;
-        }
-        cpuinfo.data += 1;
-        cpuinfo.size -= 1;
-    }
-    
-no_cpuinfo:
     int config_file = systemOpen("config.bin",0,0);
 	if(config_file == -1){
 		linuxSaveConfig();
@@ -264,31 +247,37 @@ no_cpuinfo:
             progress += dir->d_reclen;
         }
     }
-	
-    display = XOpenDisplay(NULL);
 
-    if(!display)
+    g_surface.display = XOpenDisplay(NULL);
+
+    if(!g_surface.display)
         return 0;
 
-    screen = DefaultScreen(display);
+    g_surface.screen = DefaultScreen(g_surface.display);
     
-    window = XCreateSimpleWindow(
-        display,
-        RootWindow(display, screen),
-        10,10,           
-        640 * 2,480 * 2,
-        1,                 
-        BlackPixel(display, screen),
-        WhitePixel(display, screen)
+    int context_attributes[] = {
+        GLX_RENDER_TYPE,   GLX_RGBA_BIT,
+        GLX_DRAWABLE_TYPE, GLX_WINDOW_BIT,
+        GLX_DOUBLEBUFFER,  True,
+        0
+    };
+
+    void* (*glxChooseFBConfig)(void* display,int screen,int* attribute_list,int* elements);
+    XVisualInfo* (*glxGetVisualFromFBConfig)(void* display,void* config);
+    
+    g_surface.window = XCreateSimpleWindow(
+        g_surface.display,
+        RootWindow(g_surface.display,g_surface.screen),
+        10,10,
+        WINDOW_SIZE_X,WINDOW_SIZE_Y,
+        0,
+        0,
+        0
     );
-    
-    XStoreName(display,window,"3D Game");
 
-    XSelectInput(display,window,ExposureMask | KeyPressMask | PointerMotionMask | ButtonPressMask | ButtonReleaseMask | StructureNotifyMask);
-
-    XMapWindow(display, window);
+    linuxWindowInit();
     
-	gc = XCreateGC(display, window, 0, NULL);
+	gc = XCreateGC(g_surface.display,g_surface.window, 0, NULL);
 	
     XEvent event;
     
@@ -298,7 +287,10 @@ no_cpuinfo:
 	mainInit();
 	
 	int prev_tick = getTick();
-	
+    TimeSpec time_pre = {0};
+    TimeSpec time_post = {0};
+    int frame_counter = 0;
+    int fps = 0;
     for(;;){
         InputEvent ev;
         
@@ -318,13 +310,15 @@ no_cpuinfo:
             }
         }
 
-        TimeVal time_pre;
-		TimeVal time_post;
-
         systemTimeGet(&time_post);
+
+        if(!(frame_counter++ % 0x20))
+            fps = 1000000000 / (time_post.nano_seconds - time_pre.nano_seconds + (time_post.seconds - time_pre.seconds) * 1000000000);
         
-        while(XPending(display)){
-			XNextEvent(display,&event);
+        time_pre = time_post;
+        
+        while(XPending(g_surface.display)){
+			XNextEvent(g_surface.display,&event);
 			switch(event.type){
                 case ConfigureNotify:{
                     surfaceChangeSize(&g_surface,event.xconfigure.width,event.xconfigure.height);
@@ -353,12 +347,12 @@ no_cpuinfo:
                             XColor dummy;
                             char data[1] = {0};
     
-                            blank = XCreateBitmapFromData(display,window,data,1,1);
-                            Cursor cursor = XCreatePixmapCursor(display,blank,blank,&dummy,&dummy,0,0);
+                            blank = XCreateBitmapFromData(g_surface.display,g_surface.window,data,1,1);
+                            Cursor cursor = XCreatePixmapCursor(g_surface.display,blank,blank,&dummy,&dummy,0,0);
 					
-                            XGrabPointer(display,window,true,0,GrabModeAsync,GrabModeAsync,window,cursor,CurrentTime);
+                            XGrabPointer(g_surface.display,g_surface.window,true,0,GrabModeAsync,GrabModeAsync,g_surface.window,cursor,CurrentTime);
 
-                            XFreePixmap(display, blank);
+                            XFreePixmap(g_surface.display, blank);
                     
                             cursor_in_window = true;
                         } break;
@@ -378,8 +372,8 @@ no_cpuinfo:
                             linuxOctreeSerialize(&g_voxel);
                         } break;
                         case KEY_ESCAPE:{
-                            XUngrabPointer(display, CurrentTime);
-                            XUndefineCursor(display, window);
+                            XUngrabPointer(g_surface.display,CurrentTime);
+                            XUndefineCursor(g_surface.display,g_surface.window);
                             cursor_in_window = false;
                         } break;
                     }
@@ -389,14 +383,14 @@ no_cpuinfo:
 		}
 		
 		char keys[32];
-		XQueryKeymap(display,keys);
+		XQueryKeymap(g_surface.display,keys);
 		for(int i = 0;i < 0x100;i++)
 			g_key[i] = !!(keys[i / 8] & 1 << i % 8) << 7;
         
         unsigned mouse_keys;
         int dummy_int;
         Window dummy_window;
-        XQueryPointer(display,window,&dummy_window,&dummy_window,&dummy_int,&dummy_int,&dummy_int,&dummy_int,&mouse_keys);
+        XQueryPointer(g_surface.display,g_surface.window,&dummy_window,&dummy_window,&dummy_int,&dummy_int,&dummy_int,&dummy_int,&mouse_keys);
 
         if(mouse_keys & 0x100)
             g_key[191] = 1 << 7;
@@ -419,9 +413,13 @@ no_cpuinfo:
         
 		frameRender();
         
-        surfaceBlit(g_surface);
+        drawString(&g_surface,-FIXED_ONE + 0x800,FIXED_ONE - 0x4000,(String)STRING_LITERAL("fps"),0x800,pixelColorToColor(0xFFFFFF),0xC0);
+        drawNumber(&g_surface,-FIXED_ONE + 0x800,FIXED_ONE - 0x2000,fps,0x800);
+        
+        surfaceBlit(&g_surface);
     }
 
-    XCloseDisplay(display);
+    XCloseDisplay(g_surface.display);
     return 0;
 }
+

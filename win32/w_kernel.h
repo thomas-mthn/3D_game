@@ -186,7 +186,7 @@ DLLIMPORT(void*) VirtualAlloc(void* address,size_t size,unsigned allocation_type
 DLLIMPORT(int) VirtualFree(void* address,size_t size,unsigned free_type);
 DLLIMPORT(void*) HeapAlloc(void* heap,unsigned flags,size_t size);
 DLLIMPORT(int) HeapFree(void* heap,unsigned flags,void* mem);
-DLLIMPORT(void*) GetProcessHeap();
+DLLIMPORT(void*) GetProcessHeap(void);
 
 DLLIMPORT(unsigned) GetFileSize(void* file,unsigned* file_size_high);
 DLLIMPORT(void*) CreateFileA(
@@ -214,6 +214,9 @@ DLLIMPORT(int) SetWaitableTimer(
 );
 DLLIMPORT(void*) GetConsoleWindow(void);
 DLLIMPORT(void) GetSystemInfo(SystemInfo* system_info);
+DLLIMPORT(void*) CreateEventA(SecurityAttributes* event_attributes,int manual_reset,int initial_state,const char* name);
+DLLIMPORT(int) SetEvent(void* event);
+DLLIMPORT(int) ResetEvent(void* event);
 
 #ifdef __cplusplus
 }
