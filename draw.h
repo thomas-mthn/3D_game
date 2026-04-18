@@ -9,6 +9,7 @@
 #include "vec3.h"
 #include "texture.h"
 #include "string.h"
+#include "memory.h"
 
 typedef enum{
 	RENDER_BACKEND_SOFTWARE,
@@ -16,14 +17,24 @@ typedef enum{
 	RENDER_BACKEND_GL,
 } RenderBackend;
 
+structure(Scanline){
+    int16* begin;
+    int16* end;
+};
+
 structure(ScanlineColor){
-	Vec3 begin;
-	Vec3 end;
+	Vec2 begin;
+	Vec2 end;
 };
 
 structure(ScanlineTexture){
-	Vec2 begin;
-	Vec2 end;
+	Vec2* begin;
+	Vec2* end;
+};
+
+structure(ScanlineZ){
+    int begin;
+    int end;
 };
 
 structure(DrawSurface){
@@ -46,17 +57,20 @@ structure(DrawSurface){
     void* display;
     int screen;
 	
-	Vec2* scanline;
+	Scanline scanline;
 	ScanlineColor* scanline_color;
-	ScanlineTexture* scanline_texture;
+	ScanlineTexture scanline_texture;
+    ScanlineZ* scanline_z;
+
+    MemoryArena fb_meta_arena; 
+    
 #if !defined(__wasm__) && !defined(__linux__)
 	BitmapInfo soft_bitmapinfo;
 #endif
 };
 
-int transformDraw(int size,int v);
-int scaleDraw(int size,int v);
-
+structure(LightmapTree);
+    
 void surfaceInit(DrawSurface* surface);
 void surfaceDestroy(DrawSurface* surface);
 void surfaceClear(DrawSurface* surface);
@@ -70,19 +84,23 @@ void drawSegment3d(DrawSurface* surface,Vec3* coordinats,int thickness,Vec3 colo
 void drawPolygon(DrawSurface* surface,Vec2* coordinats,int n_point,Vec3 color);
 void drawPolygon3d(DrawSurface* surface,Vec3* coordinats,Vec3 color);
 void drawColoredPolygon(DrawSurface* surface,Vec2* coordinats,Vec3* color,int n_point);
-void drawColoredPolygon3d(DrawSurface* surface,Vec3* coordinats,Vec3* color);
+void drawColoredPolygon3d(DrawSurface* surface,Vec3* coordinats,Vec3* color,LightmapTree* lightmap);
 void drawTexturePolygon(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3 color,int n_point);
 void drawTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point);
 void drawColoredTexturePolygon(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3* color,int n_point);
-void drawColoredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color);
+void drawColoredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap);
 void drawSkyboxPolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color);
 void drawCircle(DrawSurface* surface,int x,int y,int radius,Vec3 color);
 void drawEllipses(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color);
 void drawCircle3d(DrawSurface* surface,Vec3* coordinates,Vec3 color);
 void drawRing(DrawSurface* surface,int x,int y,int radius,int thickness,Vec3 color);
 void drawRectangle(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color);
-void drawString(DrawSurface* surface,int x,int y,String string,int scale,Vec3 color,int thickness);
+void drawStringEx(DrawSurface* surface,int x,int y,String string,int scale,Vec3 color,int thickness);
 void drawNumber(DrawSurface* surface,int x,int y,int number,int scale);
+
+static void drawString(DrawSurface* surface,int x,int y,String string,int scale,Vec3 color){
+    drawStringEx(surface,x,y,string,scale,color,FIXED_ONE >> 3);
+}
 
 static void drawSquare(DrawSurface* surface,int x,int y,int size,Vec3 color){
 	drawRectangle(surface,x,y,size,size,color);
@@ -93,6 +111,17 @@ static void drawFrame(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec
 	drawRectangle(surface,x,y,thickness,size_y,color);
 	drawRectangle(surface,x,y + size_y - thickness,size_x,thickness,color);
 	drawRectangle(surface,x + size_x - thickness,y,thickness,size_y,color);
+}
+
+static int transformDraw(int size,int v){
+    v *= size / 2;
+    v >>= FIXED_PRECISION;
+    v += size / 2;
+    return v;
+}
+
+static int scaleDraw(int size,int v){
+    return v * (size / 2) >> FIXED_PRECISION;
 }
 
 extern DrawSurface g_surface;

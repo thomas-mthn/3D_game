@@ -4,6 +4,12 @@
 #include "main.h"
 #include "audio.h"
 
+String g_spell_names[] = {
+#define X(name) STRING_LITERAL(#name),
+    SPELL_LIST
+#undef X
+};
+
 int g_mana;
 bool g_equipped_staff;
 Staff g_equipped;
@@ -76,10 +82,6 @@ void staffGenerate(Vec3 position){
 	staff->staff.spell_array[0].spell_type = SPELL_ADJ_DOUBLER;
 	staff->staff.spell_array[0].type = INVENTORY_SPELL;
 	for(int i = 1;i < staff->staff.capacity;i++){
-		/*
-		if(tRndChance(2))
-			continue;
-			*/
 		staff->staff.spell_array[i].type = INVENTORY_SPELL;
 		staff->staff.spell_array[i].spell_type = tRnd() % SPELL_ECOUNT;
 	}

@@ -1,14 +1,14 @@
 #include <X11/X.h>
 #include <X11/Xutil.h>
-#include <GL/glx.h>
 #include <dlfcn.h>
+#include <signal.h>
 
 #include "../langext.h"
 #include "../draw.h"
 #include "../memory.h"
 #include "../main.h"
-#include "../thread.h"
 #include "../draw.h"
+#include "../console.h"
 
 #include "l_main.h"
 #include "l_syscall.h"
@@ -104,39 +104,33 @@ void linuxThreadWait(int** thread_handles,int n_thread){
     }
 }
 
-void linuxOctreeSerialize(Voxel* root_voxel){
+void linuxOctreeSerialize(Voxel* root_voxel,char* file_name){
 	int voxel_mem_count = voxelMemoryCountRecursive(root_voxel);
 	int voxel_count = voxelChildCountRecursive(root_voxel);
-	VoxelSerialized* voxel_diskdata = memoryScratchGet(MEMORY_SCRATCH_MAX_SIZE);
+	VoxelSerialized* voxel_diskdata = virtualAllocate(voxel_mem_count + sizeof voxel_count);
 	octreeSerialize(voxel_diskdata,root_voxel);
-    unsigned file = systemOpen("world/world_1.octvxl",O_CREAT | O_TRUNC | O_WRONLY,0644);
+    unsigned file = systemOpen(file_name,O_CREAT | O_TRUNC | O_WRONLY,0644);
     systemWrite(file,&voxel_count,sizeof voxel_count);
     systemWrite(file,voxel_diskdata,voxel_mem_count);
     systemClose(file);
 }
 
-bool linuxOctreeDeserialize(void){
-    int file = systemOpen("world/world_1.octvxl",0,0);
-    
+FileContent linuxOctreeDeserialize(char* file_name){
+    int file = systemOpen(file_name,0,0);
+
 	if(file < 0)
-		return false;
+		return (FileContent){0};
+    
     KernelStat stat;
     systemFileStat(file,&stat);
 	unsigned file_size = stat.st_size;
-	VoxelSerializedParent* voxel_diskdata = memoryScratchGet(MEMORY_SCRATCH_MAX_SIZE);
+	char* voxel_diskdata = virtualAllocate(file_size);
    	int voxel_count;
     
     systemRead(file,&voxel_count,sizeof voxel_count);
     systemRead(file,voxel_diskdata,file_size - sizeof(voxel_count));
     systemClose(file);
-	//TODO: remove malloc
-	Voxel** voxel_array = tMallocZero(sizeof(Voxel*) * voxel_count);
-	int index_i = 0;
-	g_voxel = *octreeDeserializeRecursive(voxel_diskdata,0,0,0,(Vec3){0,0,0},voxel_array,&index_i);
-	index_i = 0;
-	octreeDeserializeLink(voxel_diskdata,0,0,(Vec3){0,0,0},voxel_array,&index_i);
-	tFree(voxel_array);
-	return true;
+	return (FileContent){.content = voxel_diskdata,.size = voxel_count};
 }
 
 void linuxBlit(int* data,int width,int height){
@@ -216,8 +210,6 @@ int main(void){
 	    systemClose(config_file);
 	}
     g_options.editor = true;
-    g_surface.height = 600;
-    g_surface.width = 800;
     int fd = systemOpen("/dev/input/by-id",0,0);
     char buf[0x1000];
     
@@ -255,16 +247,6 @@ int main(void){
 
     g_surface.screen = DefaultScreen(g_surface.display);
     
-    int context_attributes[] = {
-        GLX_RENDER_TYPE,   GLX_RGBA_BIT,
-        GLX_DRAWABLE_TYPE, GLX_WINDOW_BIT,
-        GLX_DOUBLEBUFFER,  True,
-        0
-    };
-
-    void* (*glxChooseFBConfig)(void* display,int screen,int* attribute_list,int* elements);
-    XVisualInfo* (*glxGetVisualFromFBConfig)(void* display,void* config);
-    
     g_surface.window = XCreateSimpleWindow(
         g_surface.display,
         RootWindow(g_surface.display,g_surface.screen),
@@ -274,15 +256,14 @@ int main(void){
         0,
         0
     );
+    g_surface.window_height = WINDOW_SIZE_Y;
+    g_surface.window_width = WINDOW_SIZE_X;
 
     linuxWindowInit();
     
 	gc = XCreateGC(g_surface.display,g_surface.window, 0, NULL);
 	
     XEvent event;
-    
-    if(!linuxOctreeDeserialize())
-		worldDefaultGenerate();
     
 	mainInit();
 	
@@ -361,15 +342,9 @@ int main(void){
 				} break;
 				case KeyPress:{
                     switch(event.xkey.keycode){
-                        case KEY_F8:{
-                            if(!g_options.editor)
-                                break;
-                            linuxOctreeDeserialize();
-                        } break;
-                        case KEY_F9:{
-                            if(!g_options.editor)
-                                break;
-                            linuxOctreeSerialize(&g_voxel);
+                        case KEY_F4:{
+                            XUngrabPointer(g_surface.display,CurrentTime);
+                            XUndefineCursor(g_surface.display,g_surface.window);
                         } break;
                         case KEY_ESCAPE:{
                             XUngrabPointer(g_surface.display,CurrentTime);
@@ -386,7 +361,15 @@ int main(void){
 		XQueryKeymap(g_surface.display,keys);
 		for(int i = 0;i < 0x100;i++)
 			g_key[i] = !!(keys[i / 8] & 1 << i % 8) << 7;
-        
+#if 0
+        for(int i = 0;i < 0x100;i++){
+            if(g_key[i]){
+                debugPrint("key: ");
+                printNumberNL(i);
+                printNumberNL(KEY_LEFT);
+            }
+        }
+#endif   
         unsigned mouse_keys;
         int dummy_int;
         Window dummy_window;
@@ -413,8 +396,8 @@ int main(void){
         
 		frameRender();
         
-        drawString(&g_surface,-FIXED_ONE + 0x800,FIXED_ONE - 0x4000,(String)STRING_LITERAL("fps"),0x800,pixelColorToColor(0xFFFFFF),0xC0);
-        drawNumber(&g_surface,-FIXED_ONE + 0x800,FIXED_ONE - 0x2000,fps,0x800);
+        drawString(&g_surface,-FIXED_ONE + 0x800,-FIXED_ONE + 0x4000,(String)STRING_LITERAL("fps"),0xA00,(Vec3){0});
+        drawNumber(&g_surface,-FIXED_ONE + 0x800,-FIXED_ONE + 0x2000,fps,0x800);
         
         surfaceBlit(&g_surface);
     }

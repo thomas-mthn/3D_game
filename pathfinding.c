@@ -110,20 +110,22 @@ bool pathFinding(Vec3 position,Vec3 size,Vec3 destination,Route* route_result){
 
 	position.z += 1;
 	
-	Heap* g_route_list = memoryScratchGetZero(sizeof *g_route_list);
-	heapInsert(g_route_list,(Route){
+	Heap* route_list = virtualAllocate(sizeof *route_list);
+	heapInsert(route_list,(Route){
 		.positions = {position},
 		.n_positions = 1,
 		.score = tAbs(position.x - destination.x) + tAbs(position.y - destination.y)
 	});
 	
-	for(int i = 1;i < countof(g_route_list->routes);i++)
-		g_route_list->routes[i].score = INT_MAX;
+	for(int i = 1;i < countof(route_list->routes);i++)
+		route_list->routes[i].score = INT_MAX;
 
+    bool result = false;
+    
 	for(int c = 0;c < 0x400;c++){
-		if(!g_route_list->amount)
-			return false;
-		Route route = heapGet(g_route_list);
+		if(!route_list->amount)
+		    goto exit;
+		Route route = heapGet(route_list);
 
 		Vec3 offset[] = {
 			{1,0,0},
@@ -153,15 +155,15 @@ bool pathFinding(Vec3 position,Vec3 size,Vec3 destination,Route* route_result){
 					route.positions[j] = route2.positions[route2.n_positions - j - 1];
 				route.n_positions = route2.n_positions - 1;
 				*route_result = route;
-					
-				return true;
+                result = true;
+                goto exit;
 			}
 			if(route2.n_positions == countof(route.positions))
-				return false;
+				goto exit;
 			int score = (vec2Distance((Vec2){position_forward.x << 8,position_forward.y << 8},(Vec2){destination.x << 8,destination.y << 8}) >> 8) + route2.n_positions;
 			route2.score = score;
 			
-			if(heapInsert(g_route_list,route2)){
+			if(heapInsert(route_list,route2)){
 				unsigned hash = tHash(tHash(position_forward.x) ^ position_forward.y);
 				unsigned index = hash % countof(g_pathfind_hashtable);
 				while(g_pathfind_hashtable[index]){
@@ -172,5 +174,7 @@ bool pathFinding(Vec3 position,Vec3 size,Vec3 destination,Route* route_result){
 			}
 		}
 	}
-	return false;
+ exit:
+    virtualFree(route_list,sizeof *route_list);
+	return result;
 }

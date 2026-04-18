@@ -2,6 +2,7 @@
 #define DDA_H
 
 #include "vec3.h"
+#include "main.h"
 
 structure(Ray3){
 	Vec3 pos;

@@ -1,13 +1,14 @@
 #ifndef LINUX_H
 #define LINUX_H
 
+#include "../main.h"
 #include "../string.h"
 #include "../texture.h"
 
 structure(Voxel);
 
-void linuxOctreeSerialize(Voxel* root_voxel);
-bool linuxOctreeDeserialize(void);
+void linuxOctreeSerialize(Voxel* root_voxel,char* file_name);
+FileContent linuxOctreeDeserialize(char* file_name);
 
 void linuxBlit(int* data,int width,int height);
 Texture linuxLoadImage(char* path);

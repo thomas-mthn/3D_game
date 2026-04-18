@@ -43,8 +43,8 @@ static int tClamp(int v,int max,int min){
     return tMin(tMax(v,max),min);
 }
 
-static int tMix(int v1,int v2,int mix){
-    return fixedMulR(v1,FIXED_ONE - mix) + fixedMulR(v2,mix);
+static int tMix(int v1, int v2, int mix){
+    return v1 + fixedMulR(v2 - v1, mix);
 }
 
 static int tSqrt(int value){

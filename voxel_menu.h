@@ -4,15 +4,17 @@
 #include "texture.h"
 
 structure(VoxelGuiElement);
-
-struct Staff;
+structure(Staff);
 
 void toggleSmoothLighting(VoxelGuiElement* self);
 void changeRenderBackend(VoxelGuiElement* self);
 void antiAliasingLoadMenu(VoxelGuiElement* self);
 void debugOptions(VoxelGuiElement* self);
 void spinningStaffSpin(void);
-void staffEditorCreateMenu(struct Staff* staff);
+void staffEditorCreateMenu(Staff* staff);
+
+void renderBackendChangeSoftware(void);
+void renderBackendChangeGl(void);
 
 extern Texture g_spinning_staff;
 

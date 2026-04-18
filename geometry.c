@@ -109,10 +109,5 @@ bool boxBoxIntersect(Vec3 box1_pos,Vec3 box1_size,Vec3 box2_pos,Vec3 box2_size){
 }
 
 bool boxCubeIntersect(Vec3 box_pos,Vec3 box_size,Vec3 cube_pos,int cube_size){
-	Vec3 box_max = vec3AddR(box_pos,box_size);
-	Vec3 cube_max = vec3AddRS(cube_pos,cube_size);
-	bool x = box_pos.x <= cube_max.x && box_max.x >= cube_pos.x;
-	bool y = box_pos.y <= cube_max.y && box_max.y >= cube_pos.y;
-	bool z = box_pos.z <= cube_max.z && box_max.z >= cube_pos.z;
-    return x && y && z;
+    return boxBoxIntersect(box_pos,box_size,cube_pos,vec3Single(cube_size));
 }

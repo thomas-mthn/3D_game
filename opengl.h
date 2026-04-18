@@ -3,6 +3,8 @@
 
 #include "draw.h"
 
+structure(LightmapTree);
+
 extern int g_smaa_max;
 extern bool g_vsync;
 
@@ -30,11 +32,11 @@ void drawCircle3dGL(DrawSurface* surface,Vec3* coordinates,Vec3 color);
 void drawPolygonGL(DrawSurface* surface,Vec2* coordinats,int n_point,Vec3 color);
 void drawPolygon3dGL(DrawSurface* surface,Vec3* coordinats,Vec3 color);
 void drawColoredPolygonGL(DrawSurface* surface,Vec2* coordinats,Vec3* color,int n_point);
-void drawColoredPolygon3dGL(DrawSurface* surface,Vec3* coordinats,Vec3* color);
+void drawColoredPolygon3dGL(DrawSurface* surface,Vec3* coordinats,Vec3* color,LightmapTree* lightmap);
 void drawTexturePolygonGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3 color,int n_point);
 void drawTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point);
 void drawColoredTexturePolygonGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3* color,int n_point);
-void drawColoredTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color);
+void drawColoredTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap);
 
 void drawColoredTextureSkyboxPolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color);
 

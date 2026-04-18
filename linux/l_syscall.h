@@ -71,6 +71,75 @@ structure(KernelStat){
     uint8              __padding[32];
 };
 
+typedef enum{
+    SIGNAL_HUP = 1,
+    SIGNAL_INT,
+    SIGNAL_QUIT,
+    SIGNAL_ILL,
+    SIGNAL_TRAP,
+    SIGNAL_ABRT,
+    SIGNAL_FPE = 8,
+    SIGNAL_KILL,
+    SIGNAL_SEGV = 11,
+    SIGNAL_PIPE = 13,
+    SIGNAL_ALRM,
+    SIGNAL_TERM,  
+} SignalType;
+
+typedef long clock__t;
+typedef int pid__t;
+typedef unsigned uid__t;
+
+structure(SignalInfo){
+    int      signo;     
+    int      errno;     
+    int      code;      
+    int      trapno;    
+    pid__t    pid;      
+    uid__t    uid;   
+    int      status;
+    clock__t  utime;  
+    clock__t  stime;  
+    union{
+        int sival_int;
+        void *sival_ptr;
+    };
+    int      integer;   
+    void    *ptr;  
+    int      overrun;  
+    int      timerid;   
+    void    *addr;      
+    long     band;      
+    int      fd;       
+    short    addr_lsb; 
+    void    *lower;    
+    void    *upper;  
+    int      pkey;  
+    void    *call_addr; 
+    int      syscall;  
+    unsigned arch;  
+                         
+};
+
+#define SA_SIGINFO  0x00000004
+#define SA_RESTORER 0x04000000
+
+#define _SIGSET_NWORDS (1024 / (8 * sizeof (unsigned long int)))
+
+typedef struct{
+  unsigned long int __val[_SIGSET_NWORDS];
+} sigset__t;
+
+structure(SignalAction){
+    union{
+        void     (*handler)(int);
+        void     (*signal_action)(int,SignalInfo *, void *);
+    };
+    unsigned long        flags;
+    void     (*restorer)(void);
+    sigset__t   mask;
+};
+
 long systemOpen(char* filename,int flags,int mode);
 long systemClose(unsigned file_descriptor);
 long systemWrite(unsigned file_descriptor,void* buffer,size_t buffer_size);
@@ -78,6 +147,7 @@ long systemFileStat(unsigned file_descriptor,KernelStat* stat);
 long systemRead(unsigned file_descriptor,void* buffer,size_t buffer_size);
 void* systemMemoryMap(void* address,size_t length,int protection,int flags,int fd,long offset);
 long systemMemoryUnmap(void* address,size_t length);
+long systemSignalAction(SignalType signal,SignalAction* action,SignalAction* old_action);
 long systemGetdents(unsigned file_descriptor,char* buffer,int buffer_length);
 long systemTimeGet(TimeSpec* timeval);
 void systemProcessExit(int exit_code);
@@ -85,3 +155,5 @@ long systemClone(long flags,void* stack_ptr,int* parent_id,int* child_tid,long t
 long systemFutex(int* address,int operation,unsigned value,TimeVal* utime,int* address_2,unsigned flags);
 
 #endif
+
+

@@ -10,6 +10,7 @@
 #include "voxel_menu.h"
 #include "audio.h"
 #include "span.h"
+#include "opengl.h"
 
 #if !defined(__wasm__) && !defined(__linux__)
 #include "win32/w_draw_opengl.h"
@@ -189,9 +190,7 @@ static void entityRender3dGenerateSprite(Entity* entity){
 	voxelModelRasterize(&surface_model,entity->player_angle,entity->luminance_3d,entity->model,camera_position,camera_distance);
 	*/
 	generateMipmaps(&entity->texture_dynamic);
-#if !defined(__wasm__) && !defined(__linux__)
 	textureUpdateGL(&entity->texture_dynamic);
-#endif
 	//surface_model.data = 0;
 	//surfaceDestroy(&surface_model);
 	entity->render_angle = angle;
@@ -284,9 +283,7 @@ void entityDestroy(void){
 			g_entity = entity_i->next;
 		Entity* next = entity_i->next;
 		if(entity_i->texture_dynamic.pixel_data){
-#if !defined(__wasm__) && !defined(__linux__)
 			deleteTextureGL(entity_i->texture_dynamic.gl_id);
-#endif
 			tFree(entity_i->texture_dynamic.pixel_data);
 		}
 		Entity* entity_d = entity_i;
@@ -298,9 +295,7 @@ void entityDestroy(void){
 void entityDestroyAll(void){
 	for(Entity* entity = g_entity;entity;){
 		if(entity->texture_dynamic.pixel_data){
-#if !defined(__wasm__) && !defined(__linux__)
 			deleteTextureGL(entity->texture_dynamic.gl_id);
-#endif
 			tFree(entity->texture_dynamic.pixel_data);
 		}
 		Entity* copy = entity;
@@ -1002,7 +997,7 @@ static void entityDynamicLightingRecursive(Voxel* voxel,Entity* entity){
 			
 		return;
 	}
-	if(voxel->type == VOXEL_AIR || voxel->type == VOXEL_MIRROR || g_voxel_static[voxel->type].flags & VOXEL_EMITER)
+	if(voxel->type == VOXEL_AIR || voxel->type == VOXEL_MIRROR || g_voxel_static[voxel->type].emiter)
 		return;
 	entityDynamicLightingSidePre(voxel,entity,block_pos,0);
 	entityDynamicLightingSidePre(voxel,entity,vec3AddR(block_pos,(Vec3){block_size,0,0}),1);
@@ -1107,9 +1102,11 @@ void entityDraw(Entity* entity){
 			if(!point.z)
 				return;
 			int size = entitySpriteSize(entity->position,entity->size);
+            /*
 			if(entity->health < 0x80)
 				fixedMul(&size,entity->health * FIXED_ONE / 0x80);
-			Vec2 points[] = {
+            */
+            Vec2 points[] = {
 				{point.x + fixedMulR(size,g_options.fov.x),point.y + fixedMulR(size,g_options.fov.y)},
 				{point.x + fixedMulR(size,g_options.fov.x),point.y - fixedMulR(size,g_options.fov.y)},
 				{point.x - fixedMulR(size,g_options.fov.x),point.y - fixedMulR(size,g_options.fov.y)},
@@ -1133,7 +1130,7 @@ void entityDraw(Entity* entity){
                 }
 			}
 			else if(entity->particle_string.data){
-				drawString(&g_surface,point.x,point.y,entity->particle_string,size,pixelColorToColor(0xFFFFFF),0x800);
+                drawString(&g_surface,point.x,point.y,entity->particle_string,size,COLOR_WHITE);
 			}
 			else{
                 if(g_surface.backend == RENDER_BACKEND_SOFTWARE){

@@ -10,7 +10,7 @@ static int fixedDivR(int value_1,int value_2){
     if(!value_2)
         return INT_MAX;
     int result;
-#if !defined(_WIN64) && defined(_MSC_VER) && !defined(__wasm__)
+#if INTPTR_MAX != INT64_MAX && defined(_MSC_VER) && !defined(__wasm__)
     if(((value_1 / value_2) < 0 ? -(value_1 / value_2) : (value_1 / value_2)) >= FIXED_ONE / 2)
         return INT_MAX;
     _asm {
@@ -21,7 +21,7 @@ static int fixedDivR(int value_1,int value_2){
         idiv    value_2
         mov     result, eax
     }
-#elif !defined(_WIN64) && defined(__GNUC__) && !defined(__wasm__)
+#elif INTPTR_MAX != INT64_MAX && defined(__GNUC__) && !defined(__wasm__)
     if(((value_1 / value_2) < 0 ? -(value_1 / value_2) : (value_1 / value_2)) >= FIXED_ONE / 2)
         return INT_MAX;
     asm (
@@ -44,7 +44,7 @@ static int fixedDivR(int value_1,int value_2){
 
 static int fixedMulR(int value_1,int value_2){
     int result;
-#if !defined(_WIN64) && defined(_MSC_VER) && !defined(__wasm__)
+#if INTPTR_MAX != INT64_MAX && defined(_MSC_VER) && !defined(__wasm__)
     _asm {
         mov     eax,value_1
         imul    value_2

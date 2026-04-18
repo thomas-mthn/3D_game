@@ -10,11 +10,10 @@ enum{
     VEC3_Z,
 };
 
-structure(Vec3){
-    int x;
-    int y;
-    int z;
-};
+typedef union{
+    struct{int x,y,z};
+    int a[3];
+} Vec3;
 
 static Vec3 vec3Single(int value){
     return (Vec3){value,value,value};

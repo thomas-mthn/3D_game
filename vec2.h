@@ -138,4 +138,8 @@ static Vec2 vec2Rotate(Vec2 v,int theta){
 	return r;
 }
 
+static Vec2 vec2Mix(Vec2 v1,Vec2 v2,int mix){
+    return (Vec2){tMix(v1.x,v2.x,mix),tMix(v1.y,v2.y,mix)};
+}
+
 #endif

@@ -1,5 +1,5 @@
 #include "draw_soft.h"
-#include "font.h"
+#include "draw.h"
 #include "fixed.h"
 #include "memory.h"
 #include "vec2.h"
@@ -25,12 +25,22 @@ static int numberStringLength(int number){
     return length;
 }
 
+static void fbAllocate(DrawSurface* surface){
+    //can probably merge this
+    surface->scanline.begin = memoryArenaAllocate(&surface->fb_meta_arena,surface->height * sizeof(*surface->scanline.begin));
+    surface->scanline.end = memoryArenaAllocate(&surface->fb_meta_arena,surface->height * sizeof(*surface->scanline.end));
+    surface->scanline_color = memoryArenaAllocate(&surface->fb_meta_arena,surface->height * sizeof(*surface->scanline_color));
+    surface->scanline_texture.begin = memoryArenaAllocate(&surface->fb_meta_arena,surface->height * sizeof(*surface->scanline_texture.begin));
+    surface->scanline_texture.end = memoryArenaAllocate(&surface->fb_meta_arena,surface->height * sizeof(*surface->scanline_texture.end));
+    surface->scanline_z = memoryArenaAllocate(&surface->fb_meta_arena,surface->height * sizeof(*surface->scanline_z));
+}
+
 bool softSurfaceCreate(DrawSurface* surface){
     if(!surface->data)
-        surface->data = tMalloc(surface->height * surface->width * sizeof(surface->data));
-    surface->scanline = tMalloc(surface->height * sizeof(Vec2));
-    surface->scanline_color = tMalloc(surface->height * sizeof(ScanlineColor));
-    surface->scanline_texture = tMalloc(surface->height * sizeof(ScanlineTexture));
+        surface->data = tMalloc(surface->height * surface->width * sizeof(*surface->data));
+
+    fbAllocate(surface);
+    
 #if !defined(__wasm__) && !defined(__linux__)
     surface->soft_bitmapinfo = (BitmapInfo){
 		.bmi_header = {
@@ -45,9 +55,14 @@ bool softSurfaceCreate(DrawSurface* surface){
 }
 
 void softSurfaceDestroyMeta(DrawSurface* surface){
-    tFree(surface->scanline);
+    memoryArenaFree(&surface->fb_meta_arena);
+    /*
+    tFree(surface->scanline.begin);
+    tFree(surface->scanline.end);
     tFree(surface->scanline_color);
-    tFree(surface->scanline_texture);
+    tFree(surface->scanline_texture.begin);
+    tFree(surface->scanline_texture.end);
+    */
 }
 
 void softSurfaceDestroy(DrawSurface* surface){
@@ -62,14 +77,24 @@ void softSurfaceClear(DrawSurface* surface){
 void softSurfaceSizeChange(DrawSurface* surface,int width,int height){
     surface->width = width;
     surface->height = height;
+    /*
     tFree(surface->data);
-    tFree(surface->scanline);
+    tFree(surface->scanline.begin);
+    tFree(surface->scanline.end);
     tFree(surface->scanline_color);
-    tFree(surface->scanline_texture);
-    surface->scanline = tMalloc(surface->height * sizeof(Vec2));
-    surface->scanline_color = tMalloc(surface->height * sizeof(ScanlineColor));
-    surface->scanline_texture = tMalloc(surface->height * sizeof(ScanlineTexture));
-    surface->data = tMalloc(width * height * sizeof(surface->data));
+    tFree(surface->scanline_texture.begin);
+    tFree(surface->scanline_texture.end);
+    */
+    memoryArenaFree(&surface->fb_meta_arena);
+    /*
+    surface->scanline.begin = tMalloc(surface->height * sizeof(*surface->scanline.begin));
+    surface->scanline.end = tMalloc(surface->height * sizeof(*surface->scanline.end));
+    surface->scanline_color = tMalloc(surface->height * sizeof(*surface->scanline_color));
+    surface->scanline_texture.begin = tMalloc(surface->height * sizeof(*surface->scanline_texture.begin));
+    surface->scanline_texture.end = tMalloc(surface->height * sizeof(*surface->scanline_texture.end));
+    surface->data = tMalloc(width * height * sizeof(*surface->data));
+    */
+    fbAllocate(surface);
 }
 
 void softSurfaceBlit(DrawSurface* surface){
@@ -80,7 +105,7 @@ void softSurfaceBlit(DrawSurface* surface){
 #endif
 }
 
-static void setScanline(Vec2* scanline,Vec2 pos_1,Vec2 pos_2,int size){
+static void setScanline(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size){
 	int p_begin,p_end;
 	int delta,delta_pos;
 	if(pos_1.x > pos_2.x){
@@ -106,14 +131,14 @@ static void setScanline(Vec2* scanline,Vec2 pos_1,Vec2 pos_2,int size){
 		p_begin = size;
 	}
 	while(p_begin-- > p_end){
-		scanline[p_begin].x = tMin(scanline[p_begin].x,delta_pos >> FIXED_PRECISION);
-		scanline[p_begin].y = tMax(scanline[p_begin].y,delta_pos >> FIXED_PRECISION);
+		scanline.begin[p_begin] = tMin(scanline.begin[p_begin],delta_pos >> FIXED_PRECISION);
+		scanline.end[p_begin] = tMax(scanline.end[p_begin],delta_pos >> FIXED_PRECISION);
         int v = delta_pos >> FIXED_PRECISION;
 		delta_pos -= delta;
 	}
 }
 
-static void setScanlineColor(ScanlineColor* color,Vec2* scanline,Vec3 color_1,Vec3 color_2,Vec2 pos_1,Vec2 pos_2,int size){
+static void setScanlineColor(ScanlineColor* color,Scanline scanline,Vec3 color_1,Vec3 color_2,Vec2 pos_1,Vec2 pos_2,int size){
 	int p_begin,p_end;
 	int delta,delta_pos;
     Vec3 delta_color;
@@ -147,20 +172,22 @@ static void setScanlineColor(ScanlineColor* color,Vec2* scanline,Vec3 color_1,Ve
     delta_color.x /= tMax(p_begin - p_end,1);
     delta_color.y /= tMax(p_begin - p_end,1);
     delta_color.z /= tMax(p_begin - p_end,1);
+#if 0
 	while(p_begin-- > p_end){
-        if(delta_pos >> FIXED_PRECISION < scanline[p_begin].x)
+        if(delta_pos >> FIXED_PRECISION < scanline.begin[p_begin])
             color[p_begin].begin = color_a;
-        if(delta_pos >> FIXED_PRECISION > scanline[p_begin].y)
+        if(delta_pos >> FIXED_PRECISION > scanline.end[p_begin])
             color[p_begin].end = color_a;
         vec3Add(&color_a,delta_color);
 
-		scanline[p_begin].x = tMin(scanline[p_begin].x,delta_pos >> FIXED_PRECISION);
-		scanline[p_begin].y = tMax(scanline[p_begin].y,delta_pos >> FIXED_PRECISION);
+		scanline.begin[p_begin] = tMin(scanline.begin[p_begin],delta_pos >> FIXED_PRECISION);
+		scanline.end[p_begin] = tMax(scanline.end[p_begin],delta_pos >> FIXED_PRECISION);
 		delta_pos -= delta;
 	}
+#endif
 }
 
-static void setScanlineTexture(ScanlineColor* color,ScanlineTexture* texture,Vec2* scanline,Vec2 texture_1,Vec2 texture_2,Vec2 pos_1,Vec2 pos_2,int size){
+static void setScanlineTexture(ScanlineColor* color,ScanlineTexture texture,Scanline scanline,Vec2 texture_1,Vec2 texture_2,Vec2 pos_1,Vec2 pos_2,int size){
 	int p_begin,p_end;
 	int delta,delta_pos;
     Vec2 delta_texture;
@@ -196,20 +223,20 @@ static void setScanlineTexture(ScanlineColor* color,ScanlineTexture* texture,Vec
     delta_texture.y /= tMax(p_begin - p_end,1);
 
 	while(p_begin-- > p_end){
-        if(delta_pos >> FIXED_PRECISION < scanline[p_begin].x)
-            texture[p_begin].begin = texture_iterator;
-        if(delta_pos >> FIXED_PRECISION > scanline[p_begin].y)
-            texture[p_begin].end = texture_iterator;
+        if(delta_pos >> FIXED_PRECISION < scanline.begin[p_begin])
+            texture.begin[p_begin] = texture_iterator;
+        if(delta_pos >> FIXED_PRECISION > scanline.end[p_begin])
+            texture.end[p_begin] = texture_iterator;
 
         vec2Add(&texture_iterator,delta_texture);
 
-		scanline[p_begin].x = tMin(scanline[p_begin].x,delta_pos >> FIXED_PRECISION);
-		scanline[p_begin].y = tMax(scanline[p_begin].y,delta_pos >> FIXED_PRECISION);
+		scanline.begin[p_begin] = tMin(scanline.begin[p_begin],delta_pos >> FIXED_PRECISION);
+		scanline.end[p_begin] = tMax(scanline.end[p_begin],delta_pos >> FIXED_PRECISION);
 		delta_pos -= delta;
 	}
 }
 
-static void setScanlineColorTexture(ScanlineColor* color,ScanlineTexture* texture,Vec2* scanline,Vec2 texture_1,Vec2 texture_2,Vec3 color_1,Vec3 color_2,Vec2 pos_1,Vec2 pos_2,int size){
+static void setScanlineColorTexture(ScanlineColor* color,ScanlineTexture texture,Scanline scanline,Vec2 texture_1,Vec2 texture_2,Vec3 color_1,Vec3 color_2,Vec2 pos_1,Vec2 pos_2,int size){
 	int p_begin,p_end;
 	int delta,delta_pos;
     Vec3 delta_color;
@@ -253,23 +280,24 @@ static void setScanlineColorTexture(ScanlineColor* color,ScanlineTexture* textur
 
     delta_texture.x /= tMax(p_begin - p_end,1);
     delta_texture.y /= tMax(p_begin - p_end,1);
-
+#if 0 
 	while(p_begin-- > p_end){
-        if(delta_pos >> FIXED_PRECISION < scanline[p_begin].x){
+        if(delta_pos >> FIXED_PRECISION < scanline.begin[p_begin]){
             color[p_begin].begin = color_iterator;
-            texture[p_begin].begin = texture_iterator;
+            texture.begin[p_begin] = texture_iterator;
         }
-        if(delta_pos >> FIXED_PRECISION > scanline[p_begin].y){
+        if(delta_pos >> FIXED_PRECISION > scanline.end[p_begin]){
             color[p_begin].end = color_iterator;
-            texture[p_begin].end = texture_iterator;
+            texture.end[p_begin] = texture_iterator;
         }
         vec3Add(&color_iterator,delta_color);
         vec2Add(&texture_iterator,delta_texture);
 
-		scanline[p_begin].x = tMin(scanline[p_begin].x,delta_pos >> FIXED_PRECISION);
-		scanline[p_begin].y = tMax(scanline[p_begin].y,delta_pos >> FIXED_PRECISION);
+		scanline.begin[p_begin] = tMin(scanline.begin[p_begin],delta_pos >> FIXED_PRECISION);
+		scanline.end[p_begin] = tMax(scanline.end[p_begin],delta_pos >> FIXED_PRECISION);
 		delta_pos -= delta;
 	}
+#endif
 }
 /*
 void drawSegmentSoft(DrawSurface surface,int x1,int y1,int x2,int y2,int thickness,int color){
@@ -344,8 +372,8 @@ void drawPolygonSoft(DrawSurface* surface,Vec2* coordinats,int n_point,Vec3 colo
         return;
 
     for(int i = x_min;i < x_max;i++){
-		surface->scanline[i].x = INT_MAX;
-		surface->scanline[i].y = INT_MIN;
+		surface->scanline.begin[i] = INT16_MAX;
+		surface->scanline.end[i] = INT16_MIN;
 	}
 
     for(int i = 0;i < n_point;i += 1){
@@ -355,9 +383,9 @@ void drawPolygonSoft(DrawSurface* surface,Vec2* coordinats,int n_point,Vec3 colo
     }
 
     for(int x = x_min;x < x_max;x++){
-        surface->scanline[x].x = tClamp(surface->scanline[x].x,0,surface->width);
-        surface->scanline[x].y = tClamp(surface->scanline[x].y,0,surface->width);
-        for(int y = surface->scanline[x].x;y < surface->scanline[x].y;y++)
+        surface->scanline.begin[x] = tClamp(surface->scanline.begin[x],0,surface->width);
+        surface->scanline.end[x] = tClamp(surface->scanline.end[x],0,surface->width);
+        for(int y = surface->scanline.begin[x];y < surface->scanline.end[x];y++)
             surface->data[x * surface->width + y] = pixel_color;
     }
 }
@@ -399,8 +427,8 @@ void drawColoredPolygonSoft(DrawSurface* surface,Vec2* coordinats,Vec3* color,in
         return;
 
     for(int i = x_min;i < x_max;i++){
-		surface->scanline[i].x = INT_MAX;
-		surface->scanline[i].y = INT_MIN;
+		surface->scanline.begin[i] = INT16_MAX;
+		surface->scanline.end[i]   = INT16_MIN;
 	}
 
     for(int i = 0;i < n_point;i++){
@@ -410,24 +438,25 @@ void drawColoredPolygonSoft(DrawSurface* surface,Vec2* coordinats,Vec3* color,in
         Vec3 color_2 = color[(i + 1) % n_point];
         setScanlineColor(surface->scanline_color,surface->scanline,color_1,color_2,p1,p2,surface->height);
     }
-
+#if 0
     for(int x = x_min;x < x_max;x++){
-        surface->scanline[x].x = tClamp(surface->scanline[x].x,0,surface->width);
-        surface->scanline[x].y = tClamp(surface->scanline[x].y,0,surface->width);
+        surface->scanline.begin[x] = tClamp(surface->scanline.begin[x],0,surface->width);
+        surface->scanline.end[x] = tClamp(surface->scanline.end[x],0,surface->width);
 
         Vec3 color_1 = surface->scanline_color[x].begin;
         Vec3 color_2 = surface->scanline_color[x].end;
 
         Vec3 delta = vec3SubR(color_2,color_1);
-        delta.x /= tMax(surface->scanline[x].y - surface->scanline[x].x,1);
-        delta.y /= tMax(surface->scanline[x].y - surface->scanline[x].x,1);
-        delta.z /= tMax(surface->scanline[x].y - surface->scanline[x].x,1);
+        delta.x /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
+        delta.y /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
+        delta.z /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
         
-        for(int y = surface->scanline[x].x;y < surface->scanline[x].y;y++){
+        for(int y = surface->scanline.begin[x];y < surface->scanline.end[x];y++){
             surface->data[x * surface->width + y] = colorToPixelColor(color_1);
             vec3Add(&color_1,delta);
         }
     }
+#endif
 }
 
 void drawColoredPolygon3dSoft(DrawSurface* surface,Vec3* coordinats,Vec3* color){
@@ -466,8 +495,8 @@ void drawTexturePolygonSoft(DrawSurface* surface,Texture* texture,Vec2* texture_
         return;
 
     for(int i = x_min;i < x_max;i++){
-		surface->scanline[i].x = INT_MAX;
-		surface->scanline[i].y = INT_MIN;
+		surface->scanline.begin[i] = INT16_MAX;
+		surface->scanline.end[i] = INT16_MIN;
 	}
 
     for(int i = 0;i < n_point;i++){
@@ -478,12 +507,12 @@ void drawTexturePolygonSoft(DrawSurface* surface,Texture* texture,Vec2* texture_
         setScanlineTexture(surface->scanline_color,surface->scanline_texture,surface->scanline,texture_1,texture_2,p1,p2,surface->height);
     }
 
-    Vec2 texture_begin = surface->scanline_texture[x_min].begin;
-    Vec2 texture_end   = surface->scanline_texture[x_min].end;
+    Vec2 texture_begin = surface->scanline_texture.begin[x_min];
+    Vec2 texture_end   = surface->scanline_texture.end[x_min];
 
     Vec2 texture_delta = vec2SubR(texture_end,texture_begin);
-    texture_delta.x /= tMax(surface->scanline[x_min].y - surface->scanline[x_min].x,1);
-    texture_delta.y /= tMax(surface->scanline[x_min].y - surface->scanline[x_min].x,1);
+    texture_delta.x /= tMax(surface->scanline.end[x_min] - surface->scanline.begin[x_min],1);
+    texture_delta.y /= tMax(surface->scanline.end[x_min] - surface->scanline.begin[x_min],1);
 
     int mipmap = tClamp(bitScanReverse((tAbs(texture_delta.x) + tAbs(texture_delta.y)) * texture->size) - 16,0,31);
     int mipmap_size = texture->size >> mipmap;
@@ -493,17 +522,17 @@ void drawTexturePolygonSoft(DrawSurface* surface,Texture* texture,Vec2* texture_
     }
 
     for(int x = x_min;x < x_max;x++){
-        surface->scanline[x].x = tClamp(surface->scanline[x].x,0,surface->width);
-        surface->scanline[x].y = tClamp(surface->scanline[x].y,0,surface->width);
+        surface->scanline.begin[x] = tClamp(surface->scanline.begin[x],0,surface->width);
+        surface->scanline.end[x] = tClamp(surface->scanline.end[x],0,surface->width);
 
-        Vec2 texture_begin = surface->scanline_texture[x].begin;
-        Vec2 texture_end = surface->scanline_texture[x].end;
+        Vec2 texture_begin = surface->scanline_texture.begin[x];
+        Vec2 texture_end = surface->scanline_texture.end[x];
 
         Vec2 texture_delta = vec2SubR(texture_end,texture_begin);
-        texture_delta.x /= tMax(surface->scanline[x].y - surface->scanline[x].x,1);
-        texture_delta.y /= tMax(surface->scanline[x].y - surface->scanline[x].x,1);
+        texture_delta.x /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
+        texture_delta.y /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
         
-        for(int y = surface->scanline[x].x;y < surface->scanline[x].y;y++){
+        for(int y = surface->scanline.begin[x];y < surface->scanline.end[x];y++){
             unsigned texel = texture->pixel_data[mipmap_offset + (texture_begin.x * mipmap_size >> FIXED_PRECISION & mipmap_size - 1) * mipmap_size + (texture_begin.y * mipmap_size >> FIXED_PRECISION & mipmap_size - 1)];
             
             if(texel >> 24 <= 0x80) 
@@ -555,8 +584,8 @@ void drawColoredTexturePolygonSoft(DrawSurface* surface,Texture* texture,Vec2* t
         return;
 
     for(int i = x_min;i < x_max;i++){
-		surface->scanline[i].x = INT_MAX;
-		surface->scanline[i].y = INT_MIN;
+		surface->scanline.begin[i] = INT16_MAX;
+		surface->scanline.end[i] = INT16_MIN;
 	}
 
     for(int i = 0;i < n_point;i++){
@@ -569,12 +598,12 @@ void drawColoredTexturePolygonSoft(DrawSurface* surface,Texture* texture,Vec2* t
         setScanlineColorTexture(surface->scanline_color,surface->scanline_texture,surface->scanline,texture_1,texture_2,color_1,color_2,p1,p2,surface->height);
     }
 
-    Vec2 texture_begin = surface->scanline_texture[x_min].begin;
-    Vec2 texture_end   = surface->scanline_texture[x_min].end;
+    Vec2 texture_begin = surface->scanline_texture.begin[x_min];
+    Vec2 texture_end   = surface->scanline_texture.end[x_min];
 
     Vec2 texture_delta = vec2SubR(texture_end,texture_begin);
-    texture_delta.x /= tMax(surface->scanline[x_min].y - surface->scanline[x_min].x,1);
-    texture_delta.y /= tMax(surface->scanline[x_min].y - surface->scanline[x_min].x,1);
+    texture_delta.x /= tMax(surface->scanline.end[x_min] - surface->scanline.begin[x_min],1);
+    texture_delta.y /= tMax(surface->scanline.end[x_min] - surface->scanline.begin[x_min],1);
 
     int mipmap = tClamp(bitScanReverse((tAbs(texture_delta.x) + tAbs(texture_delta.y)) * texture->size) - 15,0,31);
     int mipmap_size = texture->size >> mipmap;
@@ -582,29 +611,29 @@ void drawColoredTexturePolygonSoft(DrawSurface* surface,Texture* texture,Vec2* t
     for(int i = 0;i < mipmap;i++){
         mipmap_offset += (texture->size >> i) * (texture->size >> i);
     }
-
+#if 0 
     for(int x = x_min;x < x_max;x++){
-        surface->scanline[x].x = tClamp(surface->scanline[x].x,0,surface->width);
-        surface->scanline[x].y = tClamp(surface->scanline[x].y,0,surface->width);
+        surface->scanline.begin[x] = tClamp(surface->scanline.begin[x],0,surface->width);
+        surface->scanline.end[x] = tClamp(surface->scanline.end[x],0,surface->width);
 
         Vec3 color_begin = surface->scanline_color[x].begin;
         Vec3 color_end = surface->scanline_color[x].end;
 
-        Vec2 texture_begin = surface->scanline_texture[x].begin;
-        Vec2 texture_end = surface->scanline_texture[x].end;
+        Vec2 texture_begin = surface->scanline_texture.begin[x];
+        Vec2 texture_end = surface->scanline_texture.end[x];
 
         Vec3 color_delta = vec3SubR(color_end,color_begin);
-        color_delta.x /= tMax(surface->scanline[x].y - surface->scanline[x].x,1);
-        color_delta.y /= tMax(surface->scanline[x].y - surface->scanline[x].x,1);
-        color_delta.z /= tMax(surface->scanline[x].y - surface->scanline[x].x,1);
+        color_delta.x /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
+        color_delta.y /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
+        color_delta.z /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
 
         Vec2 texture_delta = vec2SubR(texture_end,texture_begin);
-        texture_delta.x /= tMax(surface->scanline[x].y - surface->scanline[x].x,1);
-        texture_delta.y /= tMax(surface->scanline[x].y - surface->scanline[x].x,1);
+        texture_delta.x /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
+        texture_delta.y /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
 
-        int y = surface->scanline[x].x;
+        int y = surface->scanline.begin[x];
 
-        for(;y < surface->scanline[x].y - 3;y += 4){
+        for(;y < surface->scanline.end[x] - 3;y += 4){
             for(int j = 0;j < 4;j++){
                 unsigned texel = texture->pixel_data[mipmap_offset + (texture_begin.x * mipmap_size >> FIXED_PRECISION & mipmap_size - 1) * mipmap_size + (texture_begin.y * mipmap_size >> FIXED_PRECISION & mipmap_size - 1)];
                 Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
@@ -613,7 +642,7 @@ void drawColoredTexturePolygonSoft(DrawSurface* surface,Texture* texture,Vec2* t
                 vec2Add(&texture_begin,texture_delta);
             }
         }
-        for(;y < surface->scanline[x].y;y++){
+        for(;y < surface->scanline.end[x];y++){
             unsigned texel = texture->pixel_data[mipmap_offset + (texture_begin.x * mipmap_size >> FIXED_PRECISION & mipmap_size - 1) * mipmap_size + (texture_begin.y * mipmap_size >> FIXED_PRECISION & mipmap_size - 1)];
             Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
             surface->data[x * surface->width + y] = colorToPixelColor(vec3MulR(color_begin,texture_color)); 
@@ -621,6 +650,7 @@ void drawColoredTexturePolygonSoft(DrawSurface* surface,Texture* texture,Vec2* t
             vec2Add(&texture_begin,texture_delta);
         }
     }
+#endif
 }
 
 void drawColoredTexturePolygon3dSoft(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color){

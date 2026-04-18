@@ -3,7 +3,7 @@
 
 #include "langext.h"
 
-#define MEMORY_SCRATCH_MAX_SIZE -1
+structure(MemoryBlock);
 
 structure(MemoryArena){
     size_t capacity;
@@ -11,18 +11,29 @@ structure(MemoryArena){
     char* data;
 };
 
+structure(AllocatorFreeList){
+    MemoryArena arena;
+    MemoryBlock* block_list;
+    MemoryBlock* free_list;
+};
+
 void* virtualAllocate(size_t size);
 void virtualFree(void* address,size_t size);
 
-void* memoryScratchGet(int size);
-void* memoryScratchGetZero(int size);
-
-void* tMalloc(size_t size);
-void* tMallocZero(size_t size);
-void tFree(void* address);
-
 void* memoryArenaAllocate(MemoryArena* arena,size_t size);
 void memoryArenaFree(MemoryArena* arena);
+
+void* tMalloc(size_t size);
+void tFree(void* address);
+void* tMallocZero(size_t size);
+
+void* allocatorFreeListAlloc(AllocatorFreeList* free_list,size_t size);
+void allocatorFreeListFree(AllocatorFreeList* allocator,void* address);
+void* allocatorFreeListZero(AllocatorFreeList* free_list,size_t size);
+
+void allocatorFreeListFreeAll(AllocatorFreeList* free_list);
+
+extern MemoryArena g_arena_frame;
 
 #endif
 

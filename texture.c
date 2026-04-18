@@ -174,7 +174,7 @@ void texturesGenerate(void){
 	};
 	surfaceInit(&surface);
 	drawSquare(&surface,-FIXED_ONE,-FIXED_ONE,FIXED_ONE * 2,pixelColorToColor(0x3090F0));
-	drawString(&surface,-FIXED_ONE + 0x2000,-FIXED_ONE + 0x2000,(String)STRING_LITERAL("wall"),0x2000,pixelColorToColor(0xFFFFFF),0x800);
+	drawString(&surface,-FIXED_ONE + 0x2000,-FIXED_ONE + 0x2000,(String)STRING_LITERAL("wall"),0x1000,COLOR_WHITE);
 
 	texture = g_textures + TEXTURE_GRASS;
 	softSurfaceDestroyMeta(&surface);
@@ -398,7 +398,7 @@ void texturesGenerate(void){
 	for(int i = 0;i < texture->size * texture->size;i++)
 		texture->pixel_data[i] = 0xFF000000;
 	drawFrame(&surface,0,0,FIXED_ONE,FIXED_ONE,pixelColorToColor(0xC0C0C0),0x2000);
-	drawString(&surface,FIXED_ONE / 2 - FIXED_ONE / 8,FIXED_ONE / 2 - FIXED_ONE / 4,(String)STRING_LITERAL("x2"),FIXED_ONE / 4,pixelColorToColor(0xFFFFFF),0x800);
+	drawString(&surface,FIXED_ONE / 2 - FIXED_ONE / 8,FIXED_ONE / 2 - FIXED_ONE / 4,(String)STRING_LITERAL("x2"),0x1000,COLOR_WHITE);
 	softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_BOLT;
 	surface = (DrawSurface){

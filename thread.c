@@ -83,7 +83,7 @@ void threadInit(void){
     if(cpuinfo_file == -1)
         goto no_cpuinfo;
     
-    char* buffer = memoryScratchGet(MEMORY_SCRATCH_MAX_SIZE);
+    char* buffer = virtualAllocate(0x1000000);
     int file_size = 0;
     for(;;){
         int s = systemRead(cpuinfo_file,buffer + file_size,0x1000000);
@@ -103,6 +103,8 @@ void threadInit(void){
         cpuinfo.size -= 1;
     }
  no_cpuinfo:
+    virtualFree(buffer,0x1000000);
+    
     pthread_mutex_init(&mutex, NULL);
     pthread_mutex_init(&mutex_main, NULL);
     pthread_cond_init(&cond, NULL);

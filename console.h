@@ -3,21 +3,23 @@
 
 #include "string.h"
 #include "vec3.h"
+#include "vec2.h"
+
+structure(Voxel);
 
 structure(ConsoleContent){
     ConsoleContent* next;
     size_t string_length;
     char string_data[];
 };
-extern ConsoleContent* g_console_content;
-extern char g_console_buffer[0x100];
-extern int g_console_buffer_index;
-
 void consoleInput(char key);
+
+void consoleVoxelDraw(Voxel* voxel,int side);
 
 void print(String string);
 void printNumber(int number);
 void printNumberNL(int number);
+void printVec2(Vec2 v);
 void printVec3(Vec3 v);
 void printNL(String string);
 

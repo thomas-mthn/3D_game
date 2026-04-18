@@ -95,7 +95,7 @@ static void guiOctreeDrawRecursive(Voxel* voxel,Vec3 octree_position,Vec3* lumin
 		}
 		return;
 	}
-	if(voxel->type == VOXEL_AIR || voxel->type == VOXEL_MIRROR || g_voxel_static[voxel->type].flags & VOXEL_EMITER)
+	if(voxel->type == VOXEL_AIR || voxel->type == VOXEL_MIRROR || g_voxel_static[voxel->type].emiter)
 		return;
 	drawBlock(voxel,octree_position,luminance,block_size,vec3ShrR(pixelColorToColor(0x507090),4));
 }
@@ -149,7 +149,7 @@ static void drawBlockSelect(Vec3 octree_position,Vec3* luminance,int block_size,
 	};
 
 	if(voxel_s->texture){
-		if(voxel_s->flags & VOXEL_TEXTUREFILL){
+		if(voxel_s->texturefill){
 			for(int i = 0;i < countof(frontface);i++){
 				if(!frontface[i])
 					continue;
@@ -170,7 +170,7 @@ static void drawBlockSelect(Vec3 octree_position,Vec3* luminance,int block_size,
 			}
 		}
 	}
-	else if(voxel_s->flags & VOXEL_EMITER){
+	else if(voxel_s->emiter){
 		for(int i = 0;i < countof(frontface);i++){
 			if(!frontface[i])
 				continue;

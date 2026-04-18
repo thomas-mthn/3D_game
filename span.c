@@ -1,9 +1,11 @@
 #include "span.h"
 #include "draw.h"
+#include "fixed.h"
 #include "geometry.h"
 #include "main.h"
 #include "texture.h"
 #include "memory.h"
+#include "lighting.h"
 
 structure(Span){
 	Span* next;
@@ -11,17 +13,21 @@ structure(Span){
 	int16 begin;
 	int16 end;
     union{
-        Vec3 color_begin;
+        Vec2 color_begin;
         Vec3 color;
     };
-    Vec3 color_end;
-    enum{
-        SPAN_SOLIDCOLOR = 1 << 0
-    } flags;
+    Vec2 color_end;
+    bool solid_color : 1;
+    bool solid_color_texture : 1;
     Texture* texture;
     int mipmap;
     Vec2 texture_begin;
     Vec2 texture_end;
+    int z_begin;
+    int z_end;
+    int interpolate_begin;
+    int interpolate_end;
+    LightmapTree* lightmap;
 };
 
 structure(Clip){
@@ -29,12 +35,18 @@ structure(Clip){
     int16 end;
 };
 
+structure(ClipContainer){
+    ClipContainer* next;
+    int count;
+    Clip clip[0x100];
+};
+
 static Span* span_list[0x1000];
 
 static MemoryArena span_arena;
 static MemoryArena clip_arena;
 
-static void setScanline(Vec2* scanline,Vec2 pos_1,Vec2 pos_2,int size){
+static void setScanline(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size){
 	int p_begin,p_end;
 	int delta,delta_pos;
 	if(pos_1.x > pos_2.x){
@@ -60,127 +72,255 @@ static void setScanline(Vec2* scanline,Vec2 pos_1,Vec2 pos_2,int size){
 		p_begin = size;
 	}
 	while(p_begin-- > p_end){
-		scanline[p_begin].x = tMin(scanline[p_begin].x,delta_pos >> FIXED_PRECISION);
-		scanline[p_begin].y = tMax(scanline[p_begin].y,delta_pos >> FIXED_PRECISION);
+		scanline.begin[p_begin] = tMin(scanline.begin[p_begin],delta_pos >> FIXED_PRECISION);
+		scanline.end[p_begin] = tMax(scanline.end[p_begin],delta_pos >> FIXED_PRECISION);
         int v = delta_pos >> FIXED_PRECISION;
 		delta_pos -= delta;
 	}
 }
 
-static void setScanlineColor(ScanlineColor* color,Vec2* scanline,Vec3 color_1,Vec3 color_2,Vec2 pos_1,Vec2 pos_2,int size){
-	int p_begin,p_end;
-	int delta,delta_pos;
-    Vec3 delta_color;
-    Vec3 color_a;
-	if(pos_1.x > pos_2.x){
-        delta_color = vec3SubR(color_2,color_1);
-        color_a = color_1;
-		p_begin = pos_1.x;
-		p_end = pos_2.x;
-		delta = (pos_2.y - pos_1.y << FIXED_PRECISION) / (pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
-		delta_pos = (pos_1.y << FIXED_PRECISION);
-	}
-	else{
-        delta_color = vec3SubR(color_1,color_2);
-        color_a = color_2;
-		p_begin = pos_2.x;
-		p_end = pos_1.x;
-		delta = (pos_1.y - pos_2.y << FIXED_PRECISION) / (pos_1.x - pos_2.x ? pos_1.x - pos_2.x : 1);
-		delta_pos = (pos_2.y << FIXED_PRECISION);
-	}
-	if(p_begin < 0)
-		return;
-    if(p_end >= size)
-        return;
-	if(p_end < 0)
-		p_end = 0;
-	if(p_begin >= size){
-		delta_pos -= delta * (p_begin - size);
-		p_begin = size;
-	}
-    delta_color.x /= tMax(p_begin - p_end,1);
-    delta_color.y /= tMax(p_begin - p_end,1);
-    delta_color.z /= tMax(p_begin - p_end,1);
-	while(p_begin-- > p_end){
-        if(delta_pos >> FIXED_PRECISION < scanline[p_begin].x)
-            color[p_begin].begin = color_a;
-        if(delta_pos >> FIXED_PRECISION > scanline[p_begin].y)
-            color[p_begin].end = color_a;
-        vec3Add(&color_a,delta_color);
+int perspective_lerp(int z1,int z2,int t){
+    int inv_z1 = fixedDivR(FIXED_ONE << 8,z1) >> 8;
+    int inv_z2 = fixedDivR(FIXED_ONE << 8,z2) >> 8;
 
-		scanline[p_begin].x = tMin(scanline[p_begin].x,delta_pos >> FIXED_PRECISION);
-		scanline[p_begin].y = tMax(scanline[p_begin].y,delta_pos >> FIXED_PRECISION);
-		delta_pos -= delta;
-	}
+    int b = fixedMulR(t,inv_z2);
+    
+    return fixedDivR(b << 8,tMix(inv_z1,inv_z2,t)) >> 8;
 }
 
-static void setScanlineColorTexture(ScanlineColor* color,ScanlineTexture* texture,Vec2* scanline,Vec2 texture_1,Vec2 texture_2,Vec3 color_1,Vec3 color_2,Vec2 pos_1,Vec2 pos_2,int size){
-	int p_begin,p_end;
-	int delta,delta_pos;
-    Vec3 delta_color;
-    Vec2 delta_texture;
-    Vec3 color_iterator;
-    Vec2 texture_iterator;
-	if(pos_1.x > pos_2.x){
-        delta_color = vec3SubR(color_2,color_1);
-        delta_texture = vec2SubR(texture_2,texture_1);
-        color_iterator = color_1;
-        texture_iterator = texture_1;
-		p_begin = pos_1.x;
-		p_end = pos_2.x;
-		delta = (pos_2.y - pos_1.y << FIXED_PRECISION) / (pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
-		delta_pos = (pos_1.y << FIXED_PRECISION);
-	}
-	else{
-        delta_color = vec3SubR(color_1,color_2);
-        delta_texture = vec2SubR(texture_1,texture_2);
-        color_iterator = color_2;
-        texture_iterator = texture_2;
-		p_begin = pos_2.x;
-		p_end = pos_1.x;
-		delta = (pos_1.y - pos_2.y << FIXED_PRECISION) / (pos_1.x - pos_2.x ? pos_1.x - pos_2.x : 1);
-		delta_pos = (pos_2.y << FIXED_PRECISION);
-	}
-	if(p_begin < 0)
-		return;
-    if(p_end >= size)
-        return;
+static void setScanlineColor(ScanlineColor* color,Scanline scanline,ScanlineZ* scanline_z,Vec2 color_1,Vec2 color_2,Vec3 pos_1,Vec3 pos_2,int size){
+    if(pos_1.x > pos_2.x){
+        Vec2 tmp = color_1;
+        color_1 = color_2;
+        color_2 = tmp;
+
+        Vec3 tmp_pos = pos_1;
+        pos_1 = pos_2;
+        pos_2 = tmp_pos;
+    }
+    
+    Vec2 delta_color = vec2SubR(color_2,color_1);
+    int p_begin = pos_1.x;
+    int p_end = pos_2.x;
+    int delta = (pos_2.y - pos_1.y << FIXED_PRECISION) / (pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
+    int delta_pos = (pos_1.y << FIXED_PRECISION);
+    int delta_t = (FIXED_ONE) / tMax(p_end - p_begin,1);
+    int t = 0;
+
+    delta_color.x /= tMax(p_end - p_begin,1);
+    delta_color.y /= tMax(p_end - p_begin,1);
+
 	if(p_end < 0)
-		p_end = 0;
-	if(p_begin >= size){
-		delta_pos -= delta * (p_begin - size);
-		p_begin = size;
+		return;
+    if(p_begin >= size)
+        return;
+	if(p_begin < 0){
+        delta_pos += delta * (-p_begin);
+        t += delta_t * (-p_begin);
+		p_begin = 0;
+    }
+	if(p_end >= size){
+		p_end = size;
 	}
+    while(p_begin < p_end){
+        int index = p_begin;
 
-    delta_color.x /= tMax(p_begin - p_end,1);
-    delta_color.y /= tMax(p_begin - p_end,1);
-    delta_color.z /= tMax(p_begin - p_end,1);
+        int l = perspective_lerp(pos_1.z,pos_2.z,t);
 
-    delta_texture.x /= tMax(p_begin - p_end,1);
-    delta_texture.y /= tMax(p_begin - p_end,1);
+        Vec2 c = vec2Mix(color_1,color_2,l);
 
-	while(p_begin-- > p_end){
-        if(delta_pos >> FIXED_PRECISION < scanline[p_begin].x){
-            color[p_begin].begin = color_iterator;
-            texture[p_begin].begin = texture_iterator;
+        if(delta_pos >> FIXED_PRECISION < scanline.begin[index]){
+            scanline_z[index].begin = tMix(pos_1.z,pos_2.z,l);
+            color[index].begin = c;
         }
-        if(delta_pos >> FIXED_PRECISION > scanline[p_begin].y){
-            color[p_begin].end = color_iterator;
-            texture[p_begin].end = texture_iterator;
+        if(delta_pos >> FIXED_PRECISION > scanline.end[index]){
+            scanline_z[index].end = tMix(pos_1.z,pos_2.z,l);
+            color[index].end = c;
         }
-        vec3Add(&color_iterator,delta_color);
-        vec2Add(&texture_iterator,delta_texture);
 
-		scanline[p_begin].x = tMin(scanline[p_begin].x,delta_pos >> FIXED_PRECISION);
-		scanline[p_begin].y = tMax(scanline[p_begin].y,delta_pos >> FIXED_PRECISION);
-		delta_pos -= delta;
-	}
+        scanline.begin[index] = tMin(scanline.begin[index],delta_pos >> FIXED_PRECISION);
+        scanline.end[index] = tMax(scanline.end[index],delta_pos >> FIXED_PRECISION);
+        delta_pos += delta;
+        
+        p_begin += 1;
+        t += delta_t;               
+    }
 }
 
-static void spanDraw(Span* span,int height){
+static void setScanlineTexture(ScanlineTexture texture,Scanline scanline,ScanlineZ* scanline_z,Vec2 texture_1,Vec2 texture_2,Vec3 pos_1,Vec3 pos_2,int size){
+    if(pos_1.x > pos_2.x){
+        Vec2 tmp_tex = texture_1;
+        texture_1 = texture_2;
+        texture_2 = tmp_tex;
+
+        Vec3 tmp_pos = pos_1;
+        pos_1 = pos_2;
+        pos_2 = tmp_pos;
+    }
+
+    Vec2 delta_texture = vec2SubR(texture_2,texture_1);
+    Vec2 texture_iterator = texture_1;
+    int p_begin = pos_1.x;
+    int p_end = pos_2.x;
+    int delta = (pos_2.y - pos_1.y << FIXED_PRECISION) / (pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
+    int delta_pos = (pos_1.y << FIXED_PRECISION);
+    int delta_t = (FIXED_ONE) / tMax(p_end - p_begin,1);
+    int t = 0;
+    
+    delta_texture.x /= tMax(p_end - p_begin,1);
+    delta_texture.y /= tMax(p_end - p_begin,1);
+	if(p_end < 0)
+		return;
+    if(p_begin >= size)
+        return;
+	if(p_begin < 0){
+        delta_pos += delta * (-p_begin);
+        vec2Add(&texture_iterator,(Vec2){delta_texture.x * -p_begin,delta_texture.y * -p_begin});
+        t += delta_t * (-p_begin);
+		p_begin = 0;
+    }
+	if(p_end >= size){
+		p_end = size;
+	}
+    while(p_begin < p_end){
+        int index = p_begin;
+
+        int l = perspective_lerp(pos_1.z,pos_2.z,t);
+
+        Vec2 uv = vec2Mix(texture_1,texture_2,l);
+
+        if(delta_pos >> FIXED_PRECISION < scanline.begin[index]){
+            texture.begin[index] = uv;
+            scanline_z[index].begin = tMix(pos_1.z,pos_2.z,l);
+        }
+        if(delta_pos >> FIXED_PRECISION > scanline.end[index]){
+            texture.end[index] = uv;
+            scanline_z[index].end = tMix(pos_1.z,pos_2.z,l);
+        }
+
+        scanline.begin[index] = tMin(scanline.begin[index],delta_pos >> FIXED_PRECISION);
+        scanline.end[index] = tMax(scanline.end[index],delta_pos >> FIXED_PRECISION);
+        delta_pos += delta;
+        
+        p_begin += 1;
+        t += delta_t;               
+    }
+}
+
+static void setScanlineColorTexture(ScanlineColor* color,ScanlineTexture texture,ScanlineZ* scanline_z,Scanline scanline,Vec2 texture_1,Vec2 texture_2,Vec2 color_1,Vec2 color_2,Vec3 pos_1,Vec3 pos_2,int size){
+    if(pos_1.x > pos_2.x){
+        Vec2 tmp_tex = texture_1;
+        texture_1 = texture_2;
+        texture_2 = tmp_tex;
+
+        Vec2 tmp = color_1;
+        color_1 = color_2;
+        color_2 = tmp;
+
+        Vec3 tmp_pos = pos_1;
+        pos_1 = pos_2;
+        pos_2 = tmp_pos;
+    }
+    
+    Vec2 delta_color = vec2SubR(color_2,color_1);
+    Vec2 delta_texture = vec2SubR(texture_2,texture_1);
+    int p_begin = pos_1.x;
+    int p_end = pos_2.x;
+    int delta = (pos_2.y - pos_1.y << FIXED_PRECISION) / (pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
+    int delta_pos = (pos_1.y << FIXED_PRECISION);
+    int delta_t = (FIXED_ONE << 8) / tMax(p_end - p_begin,1);
+    int t = 0;
+
+    delta_color.x /= tMax(p_end - p_begin,1);
+    delta_color.y /= tMax(p_end - p_begin,1);
+
+    delta_texture.x /= tMax(p_end - p_begin,1);
+    delta_texture.y /= tMax(p_end - p_begin,1);
+
+	if(p_end < 0)
+		return;
+    if(p_begin >= size)
+        return;
+	if(p_begin < 0){
+        delta_pos += delta * (-p_begin);
+        t += delta_t * (-p_begin);
+		p_begin = 0;
+    }
+	if(p_end >= size){
+		p_end = size;
+	}
+    while(p_begin < p_end){
+        int index = p_begin;
+
+        int l = perspective_lerp(pos_1.z,pos_2.z,t >> 8);
+
+        Vec2 uv = vec2Mix(texture_1,texture_2,l);
+        Vec2 c = vec2Mix(color_1,color_2,l);
+
+        if(delta_pos >> FIXED_PRECISION < scanline.begin[index]){
+            texture.begin[index] = uv;
+            scanline_z[index].begin = tMix(pos_1.z,pos_2.z,l);
+            color[index].begin = c;
+        }
+        if(delta_pos >> FIXED_PRECISION > scanline.end[index]){
+            texture.end[index] = uv;
+            scanline_z[index].end = tMix(pos_1.z,pos_2.z,l);
+            color[index].end = c;
+        }
+
+        scanline.begin[index] = tMin(scanline.begin[index],delta_pos >> FIXED_PRECISION);
+        scanline.end[index] = tMax(scanline.end[index],delta_pos >> FIXED_PRECISION);
+        delta_pos += delta;
+        
+        p_begin += 1;
+        t += delta_t;               
+    }
+}
+
+static Vec3 lightmapGet(LightmapTree* lightmap,Vec2 uv){
+    uv.x = tClamp(uv.x,0,FIXED_ONE - 1);
+    uv.y = tClamp(uv.y,0,FIXED_ONE - 1);
+    int bit = FIXED_PRECISION - 1;
+    while(lightmap->child[0]){
+        int index = (uv.x & 1 << bit) >> bit << 1 | (uv.y & 1 << bit) >> bit;
+        lightmap = lightmap->child[index];
+        bit -= 1;
+    }
+    return lightmap->luminance;
+}
+
+static Vec3 lightmapBilinear(LightmapTree* lightmap,Vec2 uv){
+    LightmapTree* node = lightmap;
+    int bit = FIXED_PRECISION - 1;
+    while(node->child[0]){
+        int index = (uv.x & 1 << bit) >> bit << 1 | (uv.y & 1 << bit) >> bit;
+        node = node->child[index];
+        bit -= 1;
+    }
+    bit += 1;
+    int luxel_size = 1 << bit + 1;
+
+    int mask = luxel_size - 1;
+    
+    Vec2 lightmap_pos = {uv.x & ~mask,uv.y & ~mask};
+    
+    Vec2 l_uv = {fixedDivR(uv.x & mask,luxel_size),fixedDivR(uv.y & mask,luxel_size)};
+    
+    Vec3 ll = lightmapGet(lightmap,(Vec2){lightmap_pos.x,lightmap_pos.y});
+    Vec3 lh = lightmapGet(lightmap,(Vec2){lightmap_pos.x,lightmap_pos.y + luxel_size});
+    Vec3 hh = lightmapGet(lightmap,(Vec2){lightmap_pos.x + luxel_size,lightmap_pos.y + luxel_size});
+    Vec3 hl = lightmapGet(lightmap,(Vec2){lightmap_pos.x + luxel_size,lightmap_pos.y});
+
+    Vec3 lx1 = vec3Mix(ll,hl,l_uv.x);
+    Vec3 lx2 = vec3Mix(lh,hh,l_uv.x);
+
+    return vec3Mix(lx1,lx2,l_uv.y); 
+}
+
+noinline static void spanDraw(Span* span,int height){
     int i = span->begin;
 
-    if(span->flags & SPAN_SOLIDCOLOR){
+    if(span->solid_color){
         for(;i < span->end - 3;i += 4){
             for(int j = 0;j < 4;j++)
                 g_surface.data[height * g_surface.width + i + j] = colorToPixelColor(span->color);
@@ -190,13 +330,8 @@ static void spanDraw(Span* span,int height){
         }
         return;
     }
-
-    Vec3 color_delta = vec3SubR(span->color_end,span->color_begin);
-    color_delta.x /= tMax(span->end - span->begin,1);
-    color_delta.y /= tMax(span->end - span->begin,1);
-    color_delta.z /= tMax(span->end - span->begin,1);
-
     if(!span->texture){
+#if 0
         for(;i < span->end - 3;i += 4){
             for(int j = 0;j < 4;j++){
                 g_surface.data[height * g_surface.width + i + j] = colorToPixelColor(span->color_begin);
@@ -207,6 +342,7 @@ static void spanDraw(Span* span,int height){
             g_surface.data[height * g_surface.width + i] = colorToPixelColor(span->color_begin);
             vec3Add(&span->color_begin,color_delta);
         }
+#endif
         return;
     }
 
@@ -221,9 +357,151 @@ static void spanDraw(Span* span,int height){
     texture_delta.x /= tMax(span->end - span->begin,1);
     texture_delta.y /= tMax(span->end - span->begin,1);
 
+    int delta = (span->interpolate_end - span->interpolate_begin << 8) / tMax(span->end - span->begin,1);
+    int z = span->interpolate_begin << 8;
+    
     span->texture_begin.x <<= mipmap_shift;
     span->texture_begin.y <<= mipmap_shift;
+    span->texture_end.x <<= mipmap_shift;
+    span->texture_end.y <<= mipmap_shift;
+
+    int batch_size = 16;
     
+    if(span->solid_color_texture){
+        int l = perspective_lerp(span->z_begin,span->z_end,z);
+        int l_n = perspective_lerp(span->z_begin,span->z_end,z + delta * batch_size);
+        Vec2 uv = vec2Mix(span->texture_begin,span->texture_end,l);
+        Vec2 uv_next = vec2Mix(span->texture_begin,span->texture_end,l_n);
+        for(;i < span->end - batch_size + 1;i += batch_size){
+            Vec2 uv_delta = vec2ShrR(vec2SubR(uv_next,uv),4);
+            for(int j = 0;j < batch_size;j++){
+                int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
+                int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
+                unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
+                Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
+                g_surface.data[height * g_surface.width + i + j] = colorToPixelColor(vec3MulR(texture_color,span->color));
+                vec2Add(&uv,uv_delta);
+            }
+            z += delta * batch_size;
+            l = l_n;
+            l_n = perspective_lerp(span->z_begin,span->z_end,z + delta * batch_size);
+            uv = uv_next;
+            uv_next = vec2Mix(span->texture_begin,span->texture_end,l_n);
+        }
+        Vec2 uv_delta = vec2ShrR(vec2SubR(uv_next,uv),4);
+        for(;i < span->end;i++){
+            int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
+            int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
+            unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
+            Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
+            g_surface.data[height * g_surface.width + i] = colorToPixelColor(vec3MulR(texture_color,span->color));
+            vec2Add(&uv,uv_delta);
+        }
+        return;
+    }
+    int l = perspective_lerp(span->z_begin,span->z_end,z >> 8);
+    int l_n = perspective_lerp(span->z_begin,span->z_end,(z >> 8) + (delta >> 8) * batch_size);
+    Vec2 uv = vec2Mix(span->texture_begin,span->texture_end,l);
+    Vec2 uv_next = vec2Mix(span->texture_begin,span->texture_end,l_n);
+
+    Vec2 uv_lightmap = vec2Mix(span->color_begin,span->color_end,l);
+    Vec2 uv_lightmap_next = vec2Mix(span->color_begin,span->color_end,l_n);
+    
+    if(!g_options.smooth_lighting){
+        for(;i < span->end - batch_size + 1;i += batch_size){
+            Vec2 uv_delta = vec2ShrR(vec2SubR(uv_next,uv),4);
+            Vec2 uv_lightmap_delta = vec2ShrR(vec2SubR(uv_lightmap_next,uv_lightmap),4);
+            for(int j = 0;j < batch_size;j++){
+                int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
+                int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
+                unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
+                Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
+                Vec3 color = lightmapGet(span->lightmap,uv_lightmap);
+                g_surface.data[height * g_surface.width + i + j] = colorToPixelColor(vec3MulR(color,texture_color));
+                vec2Add(&uv,uv_delta);
+                vec2Add(&uv_lightmap,uv_lightmap_delta);
+            }
+            z += delta * batch_size;
+            l = l_n;
+            l_n = perspective_lerp(span->z_begin,span->z_end,(z >> 8) + (delta >> 8) * batch_size);
+            
+            uv = uv_next;
+            uv_next = vec2Mix(span->texture_begin,span->texture_end,l_n);
+
+            uv_lightmap = uv_lightmap_next;
+            uv_lightmap_next = vec2Mix(span->color_begin,span->color_end,l_n);
+        }
+        Vec2 uv_delta = vec2ShrR(vec2SubR(uv_next,uv),4);
+        for(;i < span->end;i++){
+            Vec2 u = vec2Mix(span->color_begin,span->color_end,l_n);
+            int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
+            int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
+            unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
+            Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
+            Vec3 color = lightmapGet(span->lightmap,uv_lightmap);
+            g_surface.data[height * g_surface.width + i] = colorToPixelColor(vec3MulR(color,texture_color));
+            vec2Add(&uv,uv_delta);
+        }
+        return;
+    }
+
+    Vec3 color_next = {0};
+    Vec3 color = {0};
+    
+    color = lightmapBilinear(span->lightmap,uv_lightmap);
+    color_next = lightmapBilinear(span->lightmap,uv_lightmap_next);
+    
+    for(;i < span->end - batch_size + 1;i += batch_size){
+        Vec2 uv_delta = vec2ShrR(vec2SubR(uv_next,uv),4);
+        Vec3 color_delta = vec3ShrR(vec3SubR(color_next,color),4);
+        for(int j = 0;j < batch_size;j++){
+            Vec2 u = vec2Mix(span->color_begin,span->color_end,l_n);
+            int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
+            int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
+            unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
+            Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
+            g_surface.data[height * g_surface.width + i + j] = colorToPixelColor(vec3MulR(color,texture_color));
+            vec2Add(&uv,uv_delta);
+            vec3Add(&color,color_delta);
+        }
+        z += delta * batch_size;
+        l = l_n;
+        l_n = perspective_lerp(span->z_begin,span->z_end,(z >> 8) + (delta >> 8) * batch_size);
+        uv = uv_next;
+        uv_next = vec2Mix(span->texture_begin,span->texture_end,l_n);
+        
+        color = color_next;
+        
+        uv_lightmap = uv_lightmap_next;
+        uv_lightmap_next = vec2Mix(span->color_begin,span->color_end,l_n);
+        
+        color_next = lightmapBilinear(span->lightmap,uv_lightmap_next);
+    }
+    Vec2 uv_delta = vec2ShrR(vec2SubR(uv_next,uv),4);
+    Vec3 color_delta = vec3ShrR(vec3SubR(color_next,color),4);
+    for(;i < span->end;i++){
+        Vec2 u = vec2Mix(span->color_begin,span->color_end,l_n);
+        int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
+        int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
+        unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
+        Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
+        g_surface.data[height * g_surface.width + i] = colorToPixelColor(vec3MulR(color,texture_color));
+        vec2Add(&uv,uv_delta);
+        vec3Add(&color,color_delta);
+    }
+    /*
+    Vec2 uv_delta = vec2ShrR(vec2SubR(uv_next,uv),4);
+    for(;i < span->end;i++){
+        int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
+        int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
+        unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
+        Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
+        g_surface.data[height * g_surface.width + i] = colorToPixelColor(vec3MulR(texture_color,span->color));
+        vec2Add(&uv,uv_delta);
+    }
+    return;
+    */
+        /*
     for(;i < span->end - 3;i += 4){
         for(int j = 0;j < 4;j++){
             int texture_x = span->texture_begin.x >> FIXED_PRECISION & mipmap_size - 1;
@@ -245,47 +523,64 @@ static void spanDraw(Span* span,int height){
         vec3Add(&span->color_begin,color_delta);
         vec2Add(&span->texture_begin,texture_delta);
     }
+        */
 }
 
 void spanDrawList(void){
+    static Clip clip_list[0x400];
+    int clip_n = 0;
     for(int i = 0;i < g_surface.height;i++){
-        for(Span* span = span_list[i];span;){
-            Span* span_current = span;
-            span = span->next;
-            bool culled = false;
-            bool newclip = true;
-            bool changed;
-            for(Clip* clip = (void*)clip_arena.data;clip < clip_arena.data + clip_arena.pointer;clip++){
-                if(span_current->begin >= clip->begin && span_current->end <= clip->end){
-                    culled = true;
-                    break;
-                }
-                if(span_current->begin < clip->begin && span_current->end > clip->end){
+        int cover = 0;
+        for(Span* span = span_list[i];span;span = span->next){
+            Clip* neighbour[2] = {0};
+            for(int i = 0;i < clip_n;i++){
+                Clip* clip = clip_list + i;
+                if(span->begin >= clip->begin && span->end <= clip->end)
+                    goto end;
+                if(span->begin < clip->begin && span->end > clip->end){
                     Span* span_new = memoryArenaAllocate(&span_arena,sizeof(Span));
-                    *span_new = *span_current;
+                    *span_new = *span;
+                    int mix = fixedDivR(clip->end - span->begin << FIXED_PRECISION,span->end - span->begin << FIXED_PRECISION);
+
+                    span_new->interpolate_begin = tMix(span->interpolate_begin,span->interpolate_end,mix);
+
+                    mix = fixedDivR(clip->begin - span->begin << FIXED_PRECISION,span->end - span->begin << FIXED_PRECISION);
+
+                    span->interpolate_end = tMix(span->interpolate_begin,span->interpolate_end,mix);
+                    
                     span_new->begin = clip->end;
-                    span_new->next = span;
-                    span = span_new;
-                    span_current->end = clip->begin;
-                    continue;
+                    span_new->next = span->next;
+                    span->next = span_new;
+                    span->end = clip->begin;
+                    neighbour[1] = clip;
                 }
-                if(span_current->begin >= clip->begin && span_current->begin < clip->end){
-                    span_current->begin = clip->end;
+                else if(span->begin >= clip->begin && span->begin < clip->end){
+                    span->begin = clip->end;
+                    neighbour[0] = clip;
                 }
-                else if(span_current->end > clip->begin && span_current->end <= clip->end){
-                    span_current->end = clip->begin;
+                else if(span->end > clip->begin && span->end <= clip->end){
+                    span->end = clip->begin;
+                    neighbour[1] = clip;
                 }
             }
-            if(culled)
-                continue;
-            if(newclip){
-                Clip* clip = memoryArenaAllocate(&clip_arena,sizeof(Clip));
-                clip->begin = span_current->begin;
-                clip->end = span_current->end;
+            if(neighbour[0]){
+                neighbour[0]->end = span->end;
             }
-            spanDraw(span_current,i);
+            else if(neighbour[1]){
+                neighbour[1]->begin = span->begin;
+            }
+            else if(clip_n < countof(clip_list)){
+                Clip* clip_new = clip_list + clip_n++;
+                clip_new->begin = span->begin;
+                clip_new->end = span->end;
+                cover += span->end - span->begin;
+            }
+            spanDraw(span,i);
+            if(cover >= g_surface.width)
+                break;
+        end:
         }
-        memoryArenaFree(&clip_arena);
+        clip_n = 0;
         span_list[i] = 0;
     }
     memoryArenaFree(&span_arena);
@@ -299,38 +594,64 @@ static void spanListAdd(int x,Span* span){
     span_list[x] = span;
 }
 
-static void spanColorTextureAdd(int x,int begin,int end,Vec3 color_begin,Vec3 color_end,Texture* texture,Vec2 texture_begin,Vec2 texture_end,int mipmap,int flags){
+structure(SpanFlag){
+    bool solid_color : 1;
+    bool solid_color_texture : 1;
+};
+
+static void spanColorTextureAdd(int x,int begin,int end,Vec2 color_begin,Vec2 color_end,Texture* texture,Vec2 texture_begin,Vec2 texture_end,int z_begin,int z_end,int interpolate_begin,int interpolate_end,int mipmap,SpanFlag flags,LightmapTree* lightmap){
     Span* span = memoryArenaAllocate(&span_arena,sizeof(Span));
-    *span = (Span){
-        .begin = begin,
-        .end = end,
-        .flags = flags,
-        .color_begin = color_begin,
-        .color_end = color_end,
-        .texture_begin = texture_begin,
-        .texture_end = texture_end,
-        .mipmap = mipmap,
-        .texture = texture,
-    };
+    span->begin = begin;
+    span->end = end;
+    span->solid_color = flags.solid_color;
+    span->color_begin = color_begin;
+    span->color_end = color_end;
+    span->texture_begin = texture_begin;
+    span->texture_end = texture_end;
+    span->mipmap = mipmap;
+    span->texture = texture;
+    span->z_begin = z_begin;
+    span->z_end = z_end;
+    span->interpolate_begin = interpolate_begin;
+    span->interpolate_end = interpolate_end;
+    span->lightmap = lightmap;
     spanListAdd(x,span);
 }
 
+static void spanTextureAdd(int x,int begin,int end,Texture* texture,Vec2 texture_begin,Vec2 texture_end,Vec3 color,int z_begin,int z_end,int interpolate_begin,int interpolate_end,int mipmap){
+    Span* span = memoryArenaAllocate(&span_arena,sizeof(Span));
+    span->begin = begin;
+    span->end = end;
+    span->texture_begin = texture_begin;
+    span->texture_end = texture_end;
+    span->mipmap = mipmap;
+    span->texture = texture;
+    span->color = color;
+    span->solid_color_texture = true;
+    span->z_begin = z_begin;
+    span->z_end = z_end;
+    span->interpolate_begin = interpolate_begin;
+    span->interpolate_end = interpolate_end;
+    spanListAdd(x,span);
+}
 
 static void spanAdd(int x,int begin,int end,Vec3 color){
     Span* span = memoryArenaAllocate(&span_arena,sizeof(Span));
     span->begin = begin;
     span->end = end;
-    span->flags = SPAN_SOLIDCOLOR;
+    span->solid_color = true;
     span->color = color;
 
     spanListAdd(x,span);
 }
 
-static Vec3 polygonPositionNew(Vec3 inside,Vec3 outside){
+static Vec3 polygonPositionNew(Vec3 inside,Vec3 outside,int* between,int z_offset){
     Vec3 direction = vec3Direction(inside,outside);
-    Plane plane = {.normal = getLookDirection(g_angle)};
+    Plane plane = {.normal = getLookDirection(g_angle),.distance = -z_offset};
     int distance = tAbs(rayPlaneIntersection(vec3SubR(inside,g_position),direction,plane));
-    return vec3AddR(inside,vec3MulRS(direction,distance - 0x2000));
+    if(between)
+        *between = fixedDivR(distance,vec3Distance(inside,outside));
+    return vec3AddR(inside,vec3MulRS(direction,distance));
 }
 
 void spanEllipsesAdd(DrawSurface* surface,int cx,int cy,int size_x,int size_y,Vec3 color){
@@ -370,8 +691,8 @@ void spanQuadAdd(DrawSurface* surface,Vec2* coords_2d,Vec3 color){
         return;
 
     for(int i = x_min;i < x_max;i++){
-		surface->scanline[i].x = INT_MAX;
-		surface->scanline[i].y = INT_MIN;
+		surface->scanline.begin[i] = INT_MAX;
+		surface->scanline.end[i] = INT_MIN;
 	}
 
     for(int i = 0;i < 4;i++){
@@ -381,20 +702,21 @@ void spanQuadAdd(DrawSurface* surface,Vec2* coords_2d,Vec3 color){
     }
 
     for(int x = x_min;x < x_max;x++){
-        surface->scanline[x].x = tClamp(surface->scanline[x].x,0,surface->width);
-        surface->scanline[x].y = tClamp(surface->scanline[x].y,0,surface->width);
-        spanAdd(x,surface->scanline[x].x,surface->scanline[x].y,color);
+        surface->scanline.begin[x] = tClamp(surface->scanline.begin[x],0,surface->width);
+        surface->scanline.end[x] = tClamp(surface->scanline.end[x],0,surface->width);
+        spanAdd(x,surface->scanline.begin[x],surface->scanline.end[x],color);
     }
 }
 
-void spanQuad3dAdd(DrawSurface* surface,Vec3* coordinats,Vec3 color){
+static int polygonClipProject(Vec3* polygon,Vec3* polygon_2d,Vec2* texture_coordinates,Vec2* texture_coordinates_2d,Vec2* lighting_coordinates_2d){
+    Vec2 lighting_coordinates[] = {{0,0},{0,FIXED_ONE},{FIXED_ONE,FIXED_ONE},{FIXED_ONE,0},{0,0}};
     Vec3 d_point[] = {
-        coordinats[0],
-        coordinats[1],
-        coordinats[3],
-        coordinats[2],
+        polygon[0],
+        polygon[1],
+        polygon[3],
+        polygon[2],
     };
-    Vec3 transformed[] = {
+    Vec3 transformed[5] = {
         pointToScreenRenderer(d_point[0],g_tri,g_position,g_options.fov),
         pointToScreenRenderer(d_point[1],g_tri,g_position,g_options.fov),
         pointToScreenRenderer(d_point[2],g_tri,g_position,g_options.fov),
@@ -402,37 +724,66 @@ void spanQuad3dAdd(DrawSurface* surface,Vec3* coordinats,Vec3 color){
     };
     
     if(transformed[0].z <= 0 && transformed[1].z <= 0 && transformed[2].z <= 0 && transformed[3].z <= 0)
-        return;
-    
+        return 0;
+
     Vec3 quad_new[5];
-    Vec3* quad_ptr = quad_new;
+    int quad_ptr = 0;
+
+    int z_offset = 0x2000;
+    
     for(int i = 0;i < 4;i++){
-        if(transformed[i].z > 0){
-            *quad_ptr++ = d_point[i];
-            if(transformed[(i + 1) % 4].z <= 0)
-                *quad_ptr++ = polygonPositionNew(d_point[i],d_point[(i + 1) % 4]);
+        int mix_value;
+        int i_next = (i + 1) % 4;
+        if(transformed[i].z > z_offset){
+            quad_new[quad_ptr] = d_point[i];
+            if(texture_coordinates_2d)
+                texture_coordinates_2d[quad_ptr] = texture_coordinates[i];
+            if(lighting_coordinates_2d)
+                lighting_coordinates_2d[quad_ptr] = lighting_coordinates[i];
+            quad_ptr += 1;
+            if(transformed[(i + 1) % 4].z <= z_offset){
+                quad_new[quad_ptr] = polygonPositionNew(d_point[i],d_point[i_next],texture_coordinates ? &mix_value : 0,z_offset);
+                if(texture_coordinates)
+                    texture_coordinates_2d[quad_ptr] = vec2Mix(texture_coordinates[i],texture_coordinates[i_next],mix_value);
+                if(lighting_coordinates_2d)
+                    lighting_coordinates_2d[quad_ptr] = vec2Mix(lighting_coordinates[i],lighting_coordinates[i_next],mix_value);
+                quad_ptr += 1;
+            }
         }
         else{
-            if(transformed[(i + 1) % 4].z > 0)
-                *quad_ptr++ = polygonPositionNew(d_point[(i + 1) % 4],d_point[i]);
+            if(transformed[(i + 1) % 4].z > z_offset){
+                quad_new[quad_ptr] = polygonPositionNew(d_point[i_next],d_point[i],texture_coordinates ? &mix_value : 0,z_offset);
+                if(texture_coordinates)
+                    texture_coordinates_2d[quad_ptr] = vec2Mix(texture_coordinates[i_next],texture_coordinates[i],mix_value);
+                if(lighting_coordinates_2d)
+                    lighting_coordinates_2d[quad_ptr] = vec2Mix(lighting_coordinates[i_next],lighting_coordinates[i],mix_value);
+                quad_ptr += 1;
+            }
         }
     }
-    int n_vertex = quad_ptr - quad_new;        
+    int n_vertex = quad_ptr;        
     for(int i = n_vertex;i--;)
         transformed[i] = pointToScreenRenderer(quad_new[i],g_tri,g_position,g_options.fov);
     
-    Vec2 coords_2d[5];
     for(int i = n_vertex;i--;){
-        coords_2d[i] = (Vec2){fixedDivR(transformed[i].x,transformed[i].z),fixedDivR(-transformed[i].y,transformed[i].z)};
-        coords_2d[i].x = tClamp(coords_2d[i].x,-FIXED_ONE * 0x10,FIXED_ONE * 0x10);
-        coords_2d[i].y = tClamp(coords_2d[i].y,-FIXED_ONE * 0x10,FIXED_ONE * 0x10);
+        polygon_2d[i] = (Vec3){fixedDivR(transformed[i].x,transformed[i].z),fixedDivR(-transformed[i].y,transformed[i].z),transformed[i].z};
+        polygon_2d[i].x = tClamp(polygon_2d[i].x,-FIXED_ONE * 0x10,FIXED_ONE * 0x10);
+        polygon_2d[i].y = tClamp(polygon_2d[i].y,-FIXED_ONE * 0x10,FIXED_ONE * 0x10);
     }
 
     for(int i = 0;i < n_vertex;i++){
-        coords_2d[i].x = transformDraw(surface->height,coords_2d[i].x);
-        coords_2d[i].y = transformDraw(surface->width ,coords_2d[i].y);
+        polygon_2d[i].x = transformDraw(g_surface.height,polygon_2d[i].x);
+        polygon_2d[i].y = transformDraw(g_surface.width ,polygon_2d[i].y);
     }
+    return n_vertex;
+}
 
+void spanQuad3dAdd(DrawSurface* surface,Vec3* coordinats,Vec3 color){
+    Vec3 coords_2d[5];
+    int n_vertex = polygonClipProject(coordinats,coords_2d,0,0,0);
+    if(!n_vertex)
+        return;
+    
     int x_min = INT_MAX;
     int x_max = INT_MIN;
 
@@ -448,41 +799,34 @@ void spanQuad3dAdd(DrawSurface* surface,Vec3* coordinats,Vec3 color){
         return;
 
     for(int i = x_min;i < x_max;i++){
-		surface->scanline[i].x = INT_MAX;
-		surface->scanline[i].y = INT_MIN;
+		surface->scanline.begin[i] = INT16_MAX;
+		surface->scanline.end[i] = INT16_MIN;
 	}
 
     for(int i = 0;i < n_vertex;i++){
-        Vec2 p1 = coords_2d[i];
-        Vec2 p2 = coords_2d[(i + 1) % n_vertex];
+        Vec2 p1 = (Vec2){coords_2d[i].x,coords_2d[i].y};
+        Vec2 p2 = (Vec2){coords_2d[(i + 1) % n_vertex].x,coords_2d[(i + 1) % n_vertex].y};
         setScanline(surface->scanline,p1,p2,surface->height);
     }
 
     for(int x = x_min;x < x_max;x++){
-        surface->scanline[x].x = tClamp(surface->scanline[x].x,0,surface->width);
-        surface->scanline[x].y = tClamp(surface->scanline[x].y,0,surface->width);
-        spanAdd(x,surface->scanline[x].x,surface->scanline[x].y,color);
+        surface->scanline.begin[x] = tClamp(surface->scanline.begin[x],0,surface->width);
+        surface->scanline.end[x] = tClamp(surface->scanline.end[x],0,surface->width);
+        spanAdd(x,surface->scanline.begin[x],surface->scanline.end[x],color);
     }
 }
 
-void spanQuad3dLightingAdd(DrawSurface* surface,Vec3* coordinats,Vec3* color){
+void spanQuad3dLightingAdd(DrawSurface* surface,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
+    Vec3 coords_2d[5];
+    Vec2 texture_coordinats_2d[5];
+    int n_vertex = polygonClipProject(coordinats,coords_2d,0,0,0);
+    if(!n_vertex)
+        return;
     if(coordinats[0].z <= 0 || coordinats[1].z <= 0 || coordinats[2].z <= 0 || coordinats[3].z <= 0)
         return;
-    Vec2 coords_2d[] = {
-        {fixedDivR(coordinats[0].x,coordinats[0].z),fixedDivR(-coordinats[0].y,coordinats[0].z)},
-        {fixedDivR(coordinats[1].x,coordinats[1].z),fixedDivR(-coordinats[1].y,coordinats[1].z)},
-        {fixedDivR(coordinats[2].x,coordinats[2].z),fixedDivR(-coordinats[2].y,coordinats[2].z)},
-        {fixedDivR(coordinats[3].x,coordinats[3].z),fixedDivR(-coordinats[3].y,coordinats[3].z)},
-    };
-
-    for(int i = 0;i < 4;i++){
-        coords_2d[i].x = transformDraw(surface->height,coords_2d[i].x);
-        coords_2d[i].y = transformDraw(surface->width ,coords_2d[i].y);
-    }
-
     int x_min = INT_MAX;
     int x_max = INT_MIN;
-
+    
     for(int i = 0;i < 4;i++){
         x_min = tMin(coords_2d[i].x,x_min);
         x_max = tMax(coords_2d[i].x,x_max);
@@ -495,22 +839,35 @@ void spanQuad3dLightingAdd(DrawSurface* surface,Vec3* coordinats,Vec3* color){
         return;
 
     for(int i = x_min;i < x_max;i++){
-		surface->scanline[i].x = INT_MAX;
-		surface->scanline[i].y = INT_MIN;
+		surface->scanline.begin[i] = INT16_MAX;
+		surface->scanline.end[i] = INT16_MIN;
 	}
 
+    Vec2 color_coord[] = {{0,0},{0,FIXED_ONE},{FIXED_ONE,FIXED_ONE},{FIXED_ONE,0},{0,0}};
+
     for(int i = 0;i < 4;i++){
-        Vec2 p1 = coords_2d[i];
-        Vec2 p2 = coords_2d[(i + 1) % 4];
-        Vec3 color_1 = color[i];
-        Vec3 color_2 = color[(i + 1) % 4];
-        setScanlineColor(surface->scanline_color,surface->scanline,color_1,color_2,p1,p2,surface->height);
+        Vec3 p1 = coords_2d[i];
+        Vec3 p2 = coords_2d[(i + 1) % 4];
+        Vec2 color_1 = color_coord[i];
+        Vec2 color_2 = color_coord[(i + 1) % 4];
+        setScanlineColor(surface->scanline_color,surface->scanline,surface->scanline_z,color_1,color_2,p1,p2,surface->height);
     }
 
     for(int x = x_min;x < x_max;x++){
-        surface->scanline[x].x = tClamp(surface->scanline[x].x,0,surface->width);
-        surface->scanline[x].y = tClamp(surface->scanline[x].y,0,surface->width);
-        spanColorTextureAdd(x,surface->scanline[x].x,surface->scanline[x].y,surface->scanline_color[x].begin,surface->scanline_color[x].end,0,surface->scanline_texture[x].begin,surface->scanline_texture[x].end,0,0);
+        int begin = tClamp(surface->scanline.begin[x],0,surface->width);
+        int end = tClamp(surface->scanline.end[x],0,surface->width);
+
+        int length = surface->scanline.end[x] - surface->scanline.begin[x];
+        int b_length_clip = surface->scanline.end[x] - begin;
+        int e_length_clip = end - surface->scanline.begin[x];
+        int begin_clip = length - b_length_clip;
+        int end_clip = length - e_length_clip;
+
+        int interpolate_begin = ((FIXED_ONE << 8) / tMax(length,1)) * begin_clip >> 8;
+        int interpolate_end = FIXED_ONE - (((FIXED_ONE << 8) / tMax(length,1)) * end_clip >> 8);
+        
+        spanColorTextureAdd(x,begin,end,surface->scanline_color[x].begin,surface->scanline_color[x].end,0,surface->scanline_texture.begin[x],surface->scanline_texture.end[x],surface->scanline_z[x].begin,surface->scanline_z[x].end,interpolate_begin,interpolate_end,0,(SpanFlag){0},lightmap);
+        //spanColorTextureAdd(x,surface->scanline.begin[x],surface->scanline.end[x],surface->scanline_color[x].begin,surface->scanline_color[x].end,0,surface->scanline_texture.begin[x],surface->scanline_texture.end[x],0,(SpanFlag){0});
     }
 }
 
@@ -571,34 +928,28 @@ void spanSpriteAdd(DrawSurface* surface,Texture* texture,Vec2* coords_2d){
         if(!begin || !end)
             continue;
         
-        spanColorTextureAdd(x,begin,end,vec3Single(FIXED_ONE << 4),vec3Single(FIXED_ONE << 4),texture,(Vec2){i_e_x,texture_b},(Vec2){i_e_x,texture_e},mipmap,0);
+        //spanColorTextureAdd(x,begin,end,vec3Single(FIXED_ONE << 4),vec3Single(FIXED_ONE << 4),texture,(Vec2){i_e_x,texture_b},(Vec2){i_e_x,texture_e},mipmap,(SpanFlag){0});
     }
 }
 
-void spanQuad3dLightingTextureAdd(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color){
-    if(coordinats[0].z <= 0 || coordinats[1].z <= 0 || coordinats[2].z <= 0 || coordinats[3].z <= 0)
+void spanQuad3dTextureAdd(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point){
+    Vec3 coords_2d[5];
+    Vec2 texture_coordinats_2d[5];
+    int n_vertex = polygonClipProject(coordinats,coords_2d,texture_coordinats,texture_coordinats_2d,0);
+    if(!n_vertex)
         return;
-    Vec2 coords_2d[] = {
-        {fixedDivR(coordinats[0].x,coordinats[0].z),fixedDivR(-coordinats[0].y,coordinats[0].z)},
-        {fixedDivR(coordinats[1].x,coordinats[1].z),fixedDivR(-coordinats[1].y,coordinats[1].z)},
-        {fixedDivR(coordinats[2].x,coordinats[2].z),fixedDivR(-coordinats[2].y,coordinats[2].z)},
-        {fixedDivR(coordinats[3].x,coordinats[3].z),fixedDivR(-coordinats[3].y,coordinats[3].z)},
-    };
-    for(int i = 0;i < 4;i++){
+    /*
+    for(int i = 0;i < n_vertex;i++){
         int temp = texture_coordinats[i].x;
         texture_coordinats[i].x = texture_coordinats[i].y;
         texture_coordinats[i].y = temp;
     }
-
-    for(int i = 0;i < 4;i++){
-        coords_2d[i].x = transformDraw(surface->height,coords_2d[i].x);
-        coords_2d[i].y = transformDraw(surface->width ,coords_2d[i].y);
-    }
+    */
 
     int x_min = INT_MAX;
     int x_max = INT_MIN;
 
-    for(int i = 0;i < 4;i++){
+    for(int i = 0;i < n_vertex;i++){
         x_min = tMin(coords_2d[i].x,x_min);
         x_max = tMax(coords_2d[i].x,x_max);
     }
@@ -610,60 +961,64 @@ void spanQuad3dLightingTextureAdd(DrawSurface* surface,Texture* texture,Vec2* te
         return;
 
     for(int i = x_min;i < x_max;i++){
-		surface->scanline[i].x = INT_MAX;
-		surface->scanline[i].y = INT_MIN;
+		surface->scanline.begin[i] = INT16_MAX;
+		surface->scanline.end[i] = INT16_MIN;
 	}
 
-    for(int i = 0;i < 4;i++){
-        Vec2 p1 = coords_2d[i];
-        Vec2 p2 = coords_2d[(i + 1) % 4];
-        Vec3 color_1 = color[i];
-        Vec3 color_2 = color[(i + 1) % 4];
-        Vec2 texture_1 = texture_coordinats[i];
-        Vec2 texture_2 = texture_coordinats[(i + 1) % 4];
-        setScanlineColorTexture(surface->scanline_color,surface->scanline_texture,surface->scanline,texture_1,texture_2,color_1,color_2,p1,p2,surface->height);
+    for(int i = 0;i < n_vertex;i++){
+        Vec3 p1 = coords_2d[i];
+        Vec3 p2 = coords_2d[(i + 1) % n_vertex];
+        Vec2 texture_1 = texture_coordinats_2d[i];
+        Vec2 texture_2 = texture_coordinats_2d[(i + 1) % n_vertex];
+        setScanlineTexture(surface->scanline_texture,surface->scanline,surface->scanline_z,texture_1,texture_2,p1,p2,surface->height);
     }
 
-    Vec2 texture_begin = surface->scanline_texture[x_min].begin;
-    Vec2 texture_end   = surface->scanline_texture[x_min].end;
+    Vec2 texture_begin = surface->scanline_texture.begin[x_min];
+    Vec2 texture_end   = surface->scanline_texture.end[x_min];
 
     Vec2 texture_delta = vec2SubR(texture_end,texture_begin);
-    texture_delta.x /= tMax(surface->scanline[x_min].y - surface->scanline[x_min].x,1);
-    texture_delta.y /= tMax(surface->scanline[x_min].y - surface->scanline[x_min].x,1);
+    texture_delta.x /= tMax(surface->scanline.end[x_min] - surface->scanline.begin[x_min],1);
+    texture_delta.y /= tMax(surface->scanline.end[x_min] - surface->scanline.begin[x_min],1);
 
     int mipmap = tClamp(bitScanReverse((tAbs(texture_delta.x) + tAbs(texture_delta.y)) * texture->size) - 14,0,31);
 
     for(int x = x_min;x < x_max;x++){
-        surface->scanline[x].x = tClamp(surface->scanline[x].x,0,surface->width);
-        surface->scanline[x].y = tClamp(surface->scanline[x].y,0,surface->width);
-        spanColorTextureAdd(x,surface->scanline[x].x,surface->scanline[x].y,surface->scanline_color[x].begin,surface->scanline_color[x].end,texture,surface->scanline_texture[x].begin,surface->scanline_texture[x].end,mipmap,0);
+        int begin = tClamp(surface->scanline.begin[x],0,surface->width);
+        int end   = tClamp(surface->scanline.end[x],0,surface->width);
+
+        Vec2 texture_delta = vec2SubR(surface->scanline_texture.end[x],surface->scanline_texture.begin[x]);
+        texture_delta.x /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
+        texture_delta.y /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
+
+        int z_delta = (surface->scanline_z[x].end - surface->scanline_z[x].begin) / tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
+        
+        int length = surface->scanline.end[x] - surface->scanline.begin[x];
+        int b_length_clip = surface->scanline.end[x] - begin;
+        int e_length_clip = end - surface->scanline.begin[x];
+        int begin_clip = length - b_length_clip;
+        int end_clip = length - e_length_clip;
+
+        int interpolate_begin = ((FIXED_ONE << 8) / tMax(length,1)) * begin_clip >> 8;
+        int interpolate_end = FIXED_ONE - (((FIXED_ONE << 8) / tMax(length,1)) * end_clip >> 8);
+        
+        spanTextureAdd(x,begin,end,texture,surface->scanline_texture.begin[x],surface->scanline_texture.end[x],color,surface->scanline_z[x].begin,surface->scanline_z[x].end,interpolate_begin,interpolate_end,mipmap);
     }
 }
 
-void spanSegmentAdd(DrawSurface* surface,int x1,int y1,int x2,int y2,int thickness,Vec3 color){
-    /*
-    Vec2 p1 = {x1,y1};
-    Vec2 p2 = {x2,y2};
+void spanQuad3dLightingTextureAdd(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
+    Vec3 coords_2d[5];
+    Vec2 texture_coordinats_2d[5];
+    Vec2 color_coordinats_2d[5];
+    int n_vertex = polygonClipProject(coordinats,coords_2d,texture_coordinats,texture_coordinats_2d,color_coordinats_2d);
+    if(!n_vertex)
+        return;
 
-    Vec2 direction = vec2MulRS(vec2Direction((Vec2){x1,y1},(Vec2){x2,y2}),thickness);
-    Vec2 quad[] = {
-        vec2AddR((Vec2){x1,y1},vec2Rotate(direction,FIXED_ONE / 8 * 3)),
-        vec2AddR((Vec2){x2,y2},vec2Rotate(direction,FIXED_ONE / 8 * 1)),
-        vec2AddR((Vec2){x2,y2},vec2Rotate(direction,FIXED_ONE / 8 * 7)),
-        vec2AddR((Vec2){x1,y1},vec2Rotate(direction,FIXED_ONE / 8 * 5)),
-    };
-
-    for(int i = 0;i < 4;i++){
-        quad[i].x = transformDraw(surface->height,quad[i].x);
-        quad[i].y = transformDraw(surface->width ,quad[i].y);
-    }
-    
     int x_min = INT_MAX;
     int x_max = INT_MIN;
 
-    for(int i = 0;i < 4;i++){
-        x_min = tMin(quad[i].x,x_min);
-        x_max = tMax(quad[i].x,x_max);
+    for(int i = 0;i < n_vertex;i++){
+        x_min = tMin(coords_2d[i].x,x_min);
+        x_max = tMax(coords_2d[i].x,x_max);
     }
 
     x_min = tMax(0,x_min);
@@ -673,20 +1028,48 @@ void spanSegmentAdd(DrawSurface* surface,int x1,int y1,int x2,int y2,int thickne
         return;
 
     for(int i = x_min;i < x_max;i++){
-		surface->scanline[i].x = INT_MAX;
-		surface->scanline[i].y = INT_MIN;
+		surface->scanline.begin[i] = INT16_MAX;
+		surface->scanline.end[i] = INT16_MIN;
 	}
-
-    for(int i = 0;i < 4;i++){
-        Vec2 p1 = quad[i];
-        Vec2 p2 = quad[(i + 1) % 4];
-        setScanline(surface->scanline,p1,p2,surface->height);
+    
+    for(int i = 0;i < n_vertex;i++){
+        Vec3 p1 = coords_2d[i];
+        Vec3 p2 = coords_2d[(i + 1) % n_vertex];
+        Vec2 color_1 = color_coordinats_2d[i];
+        Vec2 color_2 = color_coordinats_2d[(i + 1) % n_vertex];
+        Vec2 texture_1 = texture_coordinats_2d[i];
+        Vec2 texture_2 = texture_coordinats_2d[(i + 1) % n_vertex];
+        setScanlineColorTexture(surface->scanline_color,surface->scanline_texture,surface->scanline_z,surface->scanline,texture_1,texture_2,color_1,color_2,p1,p2,surface->height);
     }
+
+    Vec2 texture_begin = surface->scanline_texture.begin[x_min];
+    Vec2 texture_end   = surface->scanline_texture.end[x_min];
+
+    Vec2 texture_delta = vec2SubR(texture_end,texture_begin);
+    texture_delta.x /= tMax(surface->scanline.end[x_min] - surface->scanline.begin[x_min],1);
+    texture_delta.y /= tMax(surface->scanline.end[x_min] - surface->scanline.begin[x_min],1);
+
+    int mipmap = tClamp(bitScanReverse((tAbs(texture_delta.x) + tAbs(texture_delta.y)) * texture->size) - 14,0,31);
 
     for(int x = x_min;x < x_max;x++){
-        surface->scanline[x].x = tClamp(surface->scanline[x].x,0,surface->width);
-        surface->scanline[x].y = tClamp(surface->scanline[x].y,0,surface->width);
-        spanAdd(x,surface->scanline[x].x,surface->scanline[x].y,color);
+        int begin = tClamp(surface->scanline.begin[x],0,surface->width);
+        int end   = tClamp(surface->scanline.end[x],0,surface->width);
+
+        Vec2 texture_delta = vec2SubR(surface->scanline_texture.end[x],surface->scanline_texture.begin[x]);
+        texture_delta.x /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
+        texture_delta.y /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
+
+        int z_delta = (surface->scanline_z[x].end - surface->scanline_z[x].begin) / tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
+        
+        int length = surface->scanline.end[x] - surface->scanline.begin[x];
+        int b_length_clip = surface->scanline.end[x] - begin;
+        int e_length_clip = end - surface->scanline.begin[x];
+        int begin_clip = length - b_length_clip;
+        int end_clip = length - e_length_clip;
+
+        int interpolate_begin = ((FIXED_ONE << 8) / tMax(length,1)) * begin_clip >> 8;
+        int interpolate_end = FIXED_ONE - (((FIXED_ONE << 8) / tMax(length,1)) * end_clip >> 8);
+
+        spanColorTextureAdd(x,begin,end,surface->scanline_color[x].begin,surface->scanline_color[x].end,texture,surface->scanline_texture.begin[x],surface->scanline_texture.end[x],surface->scanline_z[x].begin,surface->scanline_z[x].end,interpolate_begin,interpolate_end,mipmap,(SpanFlag){0},lightmap);
     }
-    */
 }

@@ -1,4 +1,5 @@
 #include "console.h"
+#include "fixed.h"
 #include "octree.h"
 #include "octree_render.h"
 #include "draw.h"
@@ -8,11 +9,6 @@
 #include "voxel_gui.h"
 #include "entity.h"
 #include "span.h"
-
-bool g_render_lines;
-bool g_render_fog;
-
-bool g_no_lighing;
 
 static void voxelModelRasterizeSide(DrawSurface* surface,Vec2 model_angle,Vec3* luminance,Voxel* voxel,Vec3 block_pos,int side,Vec3 camera_position,int camera_distance){
     unsigned polygon_id = tRnd();
@@ -62,7 +58,7 @@ static void voxelModelRasterizeSide(DrawSurface* surface,Vec2 model_angle,Vec3* 
 
 	if(voxel_s->texture){
 		Vec2 texture_crd[4];
-		if(voxel_s->flags & VOXEL_TEXTUREFILL){
+		if(voxel_s->texturefill){
 			int size = FIXED_ONE >> 0;
 			int texture_x = 0;
 			int texture_y = 0;
@@ -140,50 +136,24 @@ void voxelModelRasterize(DrawSurface* surface,Vec2 model_angle,Vec3* luminance,V
 		voxelModelRasterizeSide(surface,model_angle,luminance,voxel,vec3AddR(block_pos,(Vec3){0,0,block_size}),5,camera_position,camera_distance);
 }
 
-static Vec3 lightingGet(Vec3 position,int mipmap,Vec2 axis){
-	unsigned hash_main = luxelHashGet(position,mipmap);
-	Luxel* luxel_main = luxelGet(hash_main); 
-
-	if(luxel_main->hash == hash_main && luxel_main->n_sample > 0x100)
-		return luxel_main->luminance;
-
-	unsigned hash = luxelHashGet(vec3ShrR(position,1),mipmap + 1);
-	Luxel* luxel = luxelGet(hash);
-
-	if(luxel->hash == hash && luxel->n_sample > 0x100)
-		return luxel->luminance;
-
-	Vec3 neighbour = position;
-	((int*)&neighbour)[axis.x] += 1;
-
-	hash = luxelHashGet(neighbour,mipmap);
-	luxel = luxelGet(hash);
-
-	if(luxel->hash == hash && luxel->n_sample > 0x100)
-		return luxel->luminance;
-
-	return luxel_main->luminance;
-}
-
-static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,int depth,int surface_angle){
-	Vec2 axis = g_axis_table[side];
+static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,int depth,int surface_angle,Vec2 size){
+    Vec2 axis = g_axis_table[side];
 	Vec3 block_pos_t = block_pos;
-	int size = depthToSize(voxel->depth + depth);
-	((int*)&block_pos_t)[axis.x] += fixedMulR(coord.x << FIXED_PRECISION,size);
-	((int*)&block_pos_t)[axis.y] += fixedMulR(coord.y << FIXED_PRECISION,size);
+	block_pos_t.a[axis.x] += fixedMulR(coord.x << FIXED_PRECISION,size.x);
+	block_pos_t.a[axis.y] += fixedMulR(coord.y << FIXED_PRECISION,size.y);
 
 	Vec3 pos[4] = {block_pos_t,block_pos_t,block_pos_t,block_pos_t};
 
-	((int*)&pos[1])[axis.y] += size;
-	((int*)&pos[2])[axis.x] += size;
-	((int*)&pos[3])[axis.x] += size;
-	((int*)&pos[3])[axis.y] += size;
+	pos[1].a[axis.y] += size.y;
+	pos[2].a[axis.x] += size.x;
+	pos[3].a[axis.x] += size.x;
+	pos[3].a[axis.y] += size.y;
 
 	Vec3 voxel_pos = voxelWorldPos(voxel);
 
 	Vec3 square_pos = pos[0];
-	((int*)&square_pos)[axis.x] += size / 2;
-	((int*)&square_pos)[axis.y] += size / 2;
+	square_pos.a[axis.x] += size.x / 2;
+	square_pos.a[axis.y] += size.y / 2;
 
 	Vec3 point[4] = {pointToScreen(pos[0]),pointToScreen(pos[1]),pointToScreen(pos[2]),pointToScreen(pos[3])};
 
@@ -200,46 +170,79 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 
 	Vec3 cube_c = pos[0];
 
-	((int*)&cube_c)[axis.x] = tClamp(((int*)&g_position)[axis.x],((int*)&pos[0])[axis.x],((int*)&pos[3])[axis.x]);
-	((int*)&cube_c)[axis.y] = tClamp(((int*)&g_position)[axis.y],((int*)&pos[0])[axis.y],((int*)&pos[3])[axis.y]);
+	cube_c.a[axis.x] = tClamp(g_position.a[axis.x],pos[0].a[axis.x],pos[3].a[axis.x]);
+	cube_c.a[axis.y] = tClamp(g_position.a[axis.y],pos[0].a[axis.y],pos[3].a[axis.y]);
 
 	Vec3 normal = g_normal_table[side];
-	int mipmap = mipmapGet(squarePointClosestPosition(pos[0],size,normal),normal,distance_max,surface_angle);
+	int mipmap = mipmapGet(squarePointClosestPosition(pos[0],size.x,normal),normal,distance_max,surface_angle);
 
 	int split = 25 + -tClamp(mipmap,26 - LUXEL_MAX_MIPMAP,31) - voxel->depth;
 
 	VoxelStatic* voxel_s = g_voxel_static + voxel->type;
 
-	if(depth < split && !(voxel_s->flags & VOXEL_EMITER)){
-		Vec3 v_pos = vec3ShlR((Vec3){voxel->position_x,voxel->position_y,voxel->position_z},depth);
-		((int*)&v_pos)[axis.x] += coord.x;
-		((int*)&v_pos)[axis.y] += coord.y;
+    LightmapTree* lightmap;
+    //more aggressive pruning for software because drawing is more expensive
+    if(g_surface.backend == RENDER_BACKEND_SOFTWARE){
+        Vec3 v_pos = vec3ShlR((Vec3){voxel->position_x,voxel->position_y,voxel->position_z},depth);
+		v_pos.a[axis.x] += coord.x;
+		v_pos.a[axis.y] += coord.y;
 		if(side & 1)
-			((int*)&v_pos)[side >> 1] += (1 << depth) - 1;
-		
-		if(!voxel->opened && !voxel->animation && !squareVisible(v_pos,voxel->depth + depth,side,voxel->type))
+			v_pos.a[side >> 1] += (1 << depth) - 1;
+        		if(
+           !voxel->opened &&
+           !voxel->animation &&
+           !squareVisible(v_pos,voxel->depth + depth,side,voxel->type) &&
+           !(voxel_s->translucent)
+        )
 			return;
 		
-		if(sdSquare(vec3ShrR(g_position,4),vec3ShrR(block_pos_t,4),size >> 4,side) > RENDER_DISTANCE)
+		if(sdSquare(vec3ShrR(g_position,4),vec3ShrR(block_pos_t,4),size.x >> 4,side) > RENDER_DISTANCE)
 			return;
 
 		if(!squareInScreenSpace(pos))
 			return;
+        lightmap = memoryArenaAllocate(&g_arena_frame,sizeof(*lightmap));
+        lightmapTreeGenerate(lightmap,voxel,block_pos,side,coord,depth,surface_angle,size);
+    }
+    else{
+        if(depth < split && !voxel_s->emiter){
+            Vec3 v_pos = vec3ShlR((Vec3){voxel->position_x,voxel->position_y,voxel->position_z},depth);
+            v_pos.a[axis.x] += coord.x;
+            v_pos.a[axis.y] += coord.y;
+            if(side & 1)
+                v_pos.a[side >> 1] += (1 << depth) - 1;
 		
-		coord.x <<= 1;
-		coord.y <<= 1;
-		drawSideRecursive(voxel,block_pos,side,vec2AddR(coord,(Vec2){0,0}),depth + 1,surface_angle);
-		drawSideRecursive(voxel,block_pos,side,vec2AddR(coord,(Vec2){0,1}),depth + 1,surface_angle);
-		drawSideRecursive(voxel,block_pos,side,vec2AddR(coord,(Vec2){1,0}),depth + 1,surface_angle);
-		drawSideRecursive(voxel,block_pos,side,vec2AddR(coord,(Vec2){1,1}),depth + 1,surface_angle);
-		return;
-	}
+            if(
+               !voxel->opened &&
+               !voxel->animation &&
+               !squareVisible(v_pos,voxel->depth + depth,side,voxel->type) &&
+               !(voxel_s->translucent)
+               )
+                return;
+		
+            if(sdSquare(vec3ShrR(g_position,4),vec3ShrR(block_pos_t,4),size.x >> 4,side) > RENDER_DISTANCE)
+                return;
 
+            if(!squareInScreenSpace(pos))
+                return;
+		
+            coord.x <<= 1;
+            coord.y <<= 1;
+        
+            drawSideRecursive(voxel,block_pos,side,vec2AddR(coord,(Vec2){0,0}),depth + 1,surface_angle,vec2ShrR(size,1));
+            drawSideRecursive(voxel,block_pos,side,vec2AddR(coord,(Vec2){0,1}),depth + 1,surface_angle,vec2ShrR(size,1));
+            drawSideRecursive(voxel,block_pos,side,vec2AddR(coord,(Vec2){1,0}),depth + 1,surface_angle,vec2ShrR(size,1));
+            drawSideRecursive(voxel,block_pos,side,vec2AddR(coord,(Vec2){1,1}),depth + 1,surface_angle,vec2ShrR(size,1));
+        
+            return;
+        }
+    }
+    
 	for(int i = 0;i < 4;i++){
-		if(((int*)&pos[i])[axis.x] < ((int*)&voxel_pos)[axis.x])
-			((int*)&pos[i])[axis.x] = ((int*)&voxel_pos)[axis.x];
-		if(((int*)&pos[i])[axis.y] < ((int*)&voxel_pos)[axis.y])
-			((int*)&pos[i])[axis.y] = ((int*)&voxel_pos)[axis.y];
+		if(pos[i].a[axis.x] < voxel_pos.a[axis.x])
+			pos[i].a[axis.x] = voxel_pos.a[axis.x];
+		if(pos[i].a[axis.y] < voxel_pos.a[axis.y])
+			pos[i].a[axis.y] = voxel_pos.a[axis.y];
 	}
 
 	Vec3 point_2[4];
@@ -249,25 +252,31 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 	point_2[2] = pointToScreenRenderer(pos[2],g_tri,g_position,g_options.fov);
 	point_2[3] = pointToScreenRenderer(pos[3],g_tri,g_position,g_options.fov);
 
-	mipmap = tClamp(mipmapGet(squarePointClosestPosition(pos[0],size,normal),normal,distance_max,surface_angle),26 - LUXEL_MAX_MIPMAP,31);
+	mipmap = tClamp(mipmapGet(squarePointClosestPosition(pos[0],size.x,normal),normal,distance_max,surface_angle),26 - LUXEL_MAX_MIPMAP,31);
 
 	Vec3 light_pos = pos[0];
-	((int*)&light_pos)[axis.x] += size / 2;
-	((int*)&light_pos)[axis.y] += size / 2;
+    light_pos.a[axis.x] += size.x / 2;
+    light_pos.a[axis.y] += size.y / 2;
 
 	Vec3 luxel_pos = vec3ShrR(light_pos,mipmap);
 	unsigned hash = luxelHashGet(luxel_pos,mipmap);
 	Luxel* luxel = luxelGet(hash);
 
 	Vec3 luminance;
-	if(voxel_s->flags & VOXEL_EMITER){
+	if(voxel_s->emiter){
 		luminance = voxel_s->side[side].custom ? voxel_s->side[side].color : voxel_s->color;
 	}
-	else{
+	else if(g_options.lighting_engine && g_options.smooth_lighting){
 		luminance = luxel->luminance;
 		if(!voxel_s->texture)
 			vec3Mul(&luminance,voxel_s->side[side].custom ? voxel_s->side[side].color : voxel_s->color);
 	}
+    else{
+		if(!voxel_s->texture)
+			luminance = vec3ShlR(voxel_s->side[side].custom ? voxel_s->side[side].color : voxel_s->color,4);
+        else
+            luminance = vec3Single(FIXED_ONE << 4);
+    }
 
 	vec3MulS(&luminance,g_exposure);
 
@@ -278,7 +287,7 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 		{point_2[2].x,point_2[2].y,point_2[2].z}
 	};
 
-	if(voxel_s->flags & VOXEL_EMITER){
+	if(voxel_s->emiter){
         drawPolygon3d(&g_surface,pos,luminance);
 		return;
 	}
@@ -290,10 +299,10 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 		luxel_pos,
 	};
 
-	((int*)&luxel_positions[1])[axis.y] += 1;
-	((int*)&luxel_positions[2])[axis.x] += 1;
-	((int*)&luxel_positions[3])[axis.x] += 1;
-	((int*)&luxel_positions[3])[axis.y] += 1;
+    luxel_positions[1].a[axis.y] += 1;
+    luxel_positions[2].a[axis.x] += 1;
+    luxel_positions[3].a[axis.x] += 1;
+    luxel_positions[3].a[axis.y] += 1;
 
 	unsigned luxel_hashes[] = {
 		0,
@@ -303,21 +312,21 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 	};
 
 	Vec3 luxel_colors[4];
-	
+    Texture* texture = voxel_s->side[side].custom ? voxel_s->side[side].texture : voxel_s->texture;
 	int c_index[] = {0,1,3,2};
 	for(int i = 0;i < 4;i++){
 		int x = i / 2;
 		int y = i % 2;
 		int index = c_index[i];
-		if(g_no_lighing){
-			luxel_colors[index] = vec3Single(FIXED_ONE << 4);
-			continue;
+		if(!g_options.lighting_engine){
+            luxel_colors[index] = texture ? vec3Single(FIXED_ONE << 4) : vec3ShlR(voxel_s->color,4);
+            continue;
 		}
 		Vec3 position = luxel_pos;
-		((int*)&position)[axis.x] += x;
-		((int*)&position)[axis.y] += y;
+	    position.a[axis.x] += x;
+	    position.a[axis.y] += y;
 
-		luxel_colors[index] = lightingGet(position,mipmap,axis);
+		luxel_colors[index] = luxelVoxelGet(position,mipmap,axis);
 
 		unsigned dynamic_hash = luxelHashGet(position,mipmap);
 		Luxel* luxel_dynamic = luxelDynamicGet(dynamic_hash);
@@ -334,13 +343,12 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 		int distance = bitScanReverse(vec3Distance(vec3ShrR(g_position,4),vec3ShrR(pos[index],4)) >> 4);
 	}
 
-	for(int i = 0;i < 4;i++){
+	for(int i = 0;i < 4;i++)
 		vec3MulS(luxel_colors + i,g_exposure);
-	}
 		
 	//luminance = vec3ShrR(vec3AddR(vec3AddR(luxel_colors[0],luxel_colors[1]),vec3AddR(luxel_colors[2],luxel_colors[3])),2);
 
-	if(g_render_lines && voxel->type != VOXEL_MENU && g_surface.backend != RENDER_BACKEND_GL){
+	if(g_options.gl_wireframe && voxel->type != VOXEL_MENU && g_surface.backend != RENDER_BACKEND_GL){
 		drawLine(&g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
 		drawLine(&g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
 		drawLine(&g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
@@ -348,11 +356,28 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 		return;
 	}
 
-	Texture* texture = voxel_s->side[side].custom ? voxel_s->side[side].texture : voxel_s->texture;
+    if(voxel->type == VOXEL_DOOR){
+        Vec2 texture_crd[4];
+        Vec2 scale = {
+            (size.x << 8) / (depthToSize(voxel->depth) >> 8),
+            (size.y << 8) / (depthToSize(voxel->depth) >> 8),
+        };
+        int texture_x = coord.x * scale.x;
+        int texture_y = coord.y * scale.y;
+        texture_crd[0] = (Vec2){texture_x,texture_y};
+        texture_crd[1] = (Vec2){texture_x,texture_y + scale.y};
+        texture_crd[2] = (Vec2){texture_x + scale.x,texture_y + scale.y};
+        texture_crd[3] = (Vec2){texture_x + scale.x,texture_y};
+        if(g_options.smooth_lighting && g_options.lighting_engine)
+            drawColoredTexturePolygon3d(&g_surface,texture,texture_crd,pos,luxel_colors,lightmap);
+        else
+            drawTexturePolygon3d(&g_surface,texture,texture_crd,pos,luminance,4);
+        return;
+    }
 
 	if(texture){
 		Vec2 texture_crd[4];
-		if(voxel_s->flags & VOXEL_TEXTUREFILL){
+		if(voxel_s->texturefill){
 			int size = FIXED_ONE >> depth;
 			int texture_x = coord.x * size;
 			int texture_y = coord.y * size;
@@ -362,8 +387,8 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 			texture_crd[3] = (Vec2){texture_x + size,texture_y};
 		}
 		else{
-			int texture_x = ((int*)&block_pos)[axis.x] / 16 + (coord.x << (25 - depth - voxel->depth) - 4);
-			int texture_y = ((int*)&block_pos)[axis.y] / 16 + (coord.y << (25 - depth - voxel->depth) - 4);
+			int texture_x = block_pos.a[axis.x] / 16 + (coord.x << (25 - depth - voxel->depth) - 4);
+			int texture_y = block_pos.a[axis.y] / 16 + (coord.y << (25 - depth - voxel->depth) - 4);
 			fixedMul(&texture_x,voxel_s->texture_size);
 			fixedMul(&texture_y,voxel_s->texture_size);
 			int texture_size = fixedMulR(1 << (25 - depth - voxel->depth) - 4,voxel_s->texture_size);
@@ -372,27 +397,31 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 			texture_crd[2] = (Vec2){texture_x + texture_size,texture_y + texture_size}; 
 			texture_crd[3] = (Vec2){texture_x + texture_size,texture_y}; 
 		}
-		
-        if(g_smooth_lighting)
-            drawColoredTexturePolygon3d(&g_surface,texture,texture_crd,d_point,luxel_colors);
+        drawColoredTexturePolygon3d(&g_surface,texture,texture_crd,pos,luxel_colors,lightmap);
+#if 0
+        if(g_options.smooth_lighting && g_options.lighting_engine)
+            drawColoredTexturePolygon3d(&g_surface,texture,texture_crd,pos,luxel_colors,lightmap);
         else
-            drawTexturePolygon3d(&g_surface,texture,texture_crd,d_point,luminance,4);
-			
+            drawTexturePolygon3d(&g_surface,texture,texture_crd,pos,luminance,4);
+#endif
+        
 	}
 	else{
-        if(g_smooth_lighting)
-            drawColoredPolygon3d(&g_surface,d_point,luxel_colors);
+        if(g_options.smooth_lighting && g_options.lighting_engine)
+            drawColoredPolygon3d(&g_surface,pos,luxel_colors,lightmap);
         else
-            drawPolygon3d(&g_surface,d_point,luminance);
+            drawPolygon3d(&g_surface,pos,luminance);
 	}
 }
+
+
 
 static Vec3 triangleNormal(Vec3 a,Vec3 b,Vec3 c){
     Vec3 u = vec3SubR(b,a);
     Vec3 v = vec3SubR(c,a);
     return vec3Normalize(vec3Cross(u,v));
 }
-
+#if 0
 static void drawSideRecursiveTraced(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,int depth,int surface_angle){
 	if(depth > 11)
 		return;
@@ -440,7 +469,7 @@ static void drawSideRecursiveTraced(Voxel* voxel,Vec3 block_pos,int side,Vec2 co
 
 	VoxelStatic* voxel_s = g_voxel_static + voxel->type;
 
-	if(depth < split && !(voxel_s->flags & VOXEL_EMITER)){
+	if(depth < split && !voxel_s->emiter){
 		Vec3 v_pos = vec3ShlR((Vec3){voxel->position_x,voxel->position_y,voxel->position_z},depth);
 		((int*)&v_pos)[axis.x] += coord.x;
 		((int*)&v_pos)[axis.y] += coord.y;
@@ -587,12 +616,12 @@ static void drawSideRecursiveTraced(Voxel* voxel,Vec3 block_pos,int side,Vec2 co
 		{point_2[2].x,point_2[2].y,point_2[2].z}
 	};
 
-	if(voxel_s->flags & VOXEL_EMITER){
+	if(voxel_s->emiter){
 		drawPolygon3d(&g_surface,d_point,luminance);
 		return;
 	}
 
-	if(g_render_lines && voxel->type != VOXEL_MENU && g_surface.backend != RENDER_BACKEND_GL){
+	if(g_options.gl_wireframe && voxel->type != VOXEL_MENU && g_surface.backend != RENDER_BACKEND_GL){
 		drawLine(&g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
 		drawLine(&g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
 		drawLine(&g_surface,point_2[0].x,point_2[0].y,point_2[1].x,point_2[1].y,pixelColorToColor(0xFF00FF));
@@ -604,7 +633,7 @@ static void drawSideRecursiveTraced(Voxel* voxel,Vec3 block_pos,int side,Vec2 co
 
     if(texture){
 		Vec2 texture_crd[4];
-		if(voxel_s->flags & VOXEL_TEXTUREFILL){
+		if(voxel_s->texturefill){
 			int size = FIXED_ONE >> depth;
 			int texture_x = coord.x * size;
 			int texture_y = coord.y * size;
@@ -635,57 +664,29 @@ static void drawSideRecursiveTraced(Voxel* voxel,Vec3 block_pos,int side,Vec2 co
 		}
 	}
 }
+#endif
 
-#include "font.h"
-
-static void drawConsoleLine(Voxel* voxel,int side,char* buffer,int buffer_index,int buffer_size,int offset_y){
-    int draw_length = 0;
-    int buffer_length = buffer_size - buffer_index;
-    for(int i = 0;i < buffer_length;i++){
-        if(draw_length > 0xE0000){
-            buffer_length = i;
-            break;
-        }
-        draw_length += g_vector_font[buffer[buffer_index + i]].width;
-    }
-    Vec2 uv = {0x1000,offset_y * 0x1000};
-    String draw_string = {.data = buffer + buffer_index,.size = buffer_length};
-    drawString3D(voxel,side,uv,draw_string,0x1000,0x400);
-}
-
-static void drawSide(Voxel* voxel,Vec3 block_pos,int side){
-    unsigned polygon_id = tRnd();
-	if(g_voxel_static[voxel->type].flags & VOXEL_TRANSLUCENT)
+static void drawSide(Voxel* voxel,Vec3 block_pos,int side,Vec2 size){
+#if 0
+	if((g_voxel_static[voxel->type].flags & VOXEL_TRANSLUCENT) && voxel->type != VOXEL_DOOR)
 		drawSideRecursiveTraced(voxel,block_pos,side,(Vec2){0},0,surfaceAngle(block_pos,g_normal_table[side]));
 	else
-		drawSideRecursive(voxel,block_pos,side,(Vec2){0},0,surfaceAngle(block_pos,g_normal_table[side]));
-    
-    if(voxel->type == VOXEL_STRING){
-        int size = 0x1000;
-        drawString3D(voxel,side,(Vec2){0x1000,FIXED_ONE - 0x800},voxel->string,size,0x400);
-    }
-    if(voxel->type == VOXEL_CONSOLE){
-        int offset_y = 2;
-        char buffer[0x100];
-        int buffer_index = countof(buffer) - 1;
-        for(ConsoleContent* content = g_console_content;content;content = content->next){
-            String string = {.data = content->string_data,.size = content->string_length};
-            for(int i = content->string_length;i--;){
-                if(content->string_data[i] == '\n'){
-                    drawConsoleLine(voxel,side,buffer,buffer_index,countof(buffer),offset_y);
-                    offset_y += 1;
-                    buffer_index = countof(buffer) - 1;
-                    if(offset_y == 17)
-                        goto end_console;
-                    continue;
-                }
-                buffer[buffer_index--] = content->string_data[i];
-            }
-        }
-        drawConsoleLine(voxel,side,buffer,buffer_index,countof(buffer),offset_y);
-    end_console:
-        String input = {.data = g_console_buffer,.size = g_console_buffer_index};
-        drawString3D(voxel,side,(Vec2){0x1000,0x1000},input,0x1000,0x400);
+		drawSideRecursive(voxel,block_pos,side,(Vec2){0},0,surfaceAngle(block_pos,g_normal_table[side]),size);
+#endif
+    drawSideRecursive(voxel,block_pos,side,(Vec2){0},0,surfaceAngle(block_pos,g_normal_table[side]),size);
+
+    switch(voxel->type){
+        case VOXEL_STRING:{
+            int size = 0x1000;
+            drawGuiString(voxel,side,(Vec2){0x1000,FIXED_ONE - 0x800},voxel->string,size,0x400);
+        } break;
+        case VOXEL_CONSOLE:{
+            consoleVoxelDraw(voxel,side);
+        } break;
+        case VOXEL_PRESSURE_PLATE:{
+            int color = voxel->animation ? 0x40C040 : 0xC04040; 
+            drawGuiRectangle(voxel,g_axis_table[side],block_pos,vec2Single(FIXED_ONE / 4),vec2Single(FIXED_ONE / 2),color,side);
+        } break;
     }
     
     voxelGuiDraw(voxel,block_pos,side);
@@ -717,6 +718,21 @@ static void drawSide(Voxel* voxel,Vec3 block_pos,int side){
 		drawGuiCircle(voxel,g_axis_table[side],block_pos,(Vec2){FIXED_ONE / 2,FIXED_ONE / 2 - 0x1C00},0x800,colorToPixelColor(color));
 		drawGuiCircle(voxel,g_axis_table[side],block_pos,(Vec2){FIXED_ONE / 2 + 0x600,FIXED_ONE / 2 - 0x1C00},0x800,colorToPixelColor(color));
 	}
+}
+
+static void drawBox(Voxel* voxel,Vec3 block_pos,Vec3 size){
+	if(g_position.x - block_pos.x < 0)
+		drawSide(voxel,block_pos,0,(Vec2){size.y,size.z});
+	if(g_position.x - block_pos.x - size.x > 0)
+		drawSide(voxel,vec3AddR(block_pos,(Vec3){size.x,0,0}),1,(Vec2){size.y,size.z});
+	if(g_position.y - block_pos.y < 0)
+		drawSide(voxel,block_pos,2,(Vec2){size.x,size.z});
+	if(g_position.y - block_pos.y - size.y > 0)
+		drawSide(voxel,vec3AddR(block_pos,(Vec3){0,size.y,0}),3,(Vec2){size.x,size.z});
+	if(g_position.z - block_pos.z < 0)
+		drawSide(voxel,block_pos,4,(Vec2){size.y,size.z});
+	if(g_position.z - block_pos.z - size.z > 0)
+		drawSide(voxel,vec3AddR(block_pos,(Vec3){0,0,size.z}),5,(Vec2){size.y,size.z});
 }
 
 void octreeDraw(Voxel* voxel){
@@ -768,22 +784,28 @@ void octreeDraw(Voxel* voxel){
 			else
 				block_pos.z -= fixedMulR(block_size,voxel->animation);
 		} break;
+        case VOXEL_DOOR:{
+            int door_size = fixedMulR(block_size,FIXED_ONE - voxel->animation) / 2;
+            if(voxel->opened)
+                door_size = block_size / 2 - door_size;
+            int door_size_inv = block_size / 2 - door_size;
+            int door_cove = fixedMulR(block_size,0x1000);
+            Vec3 size = {block_size - door_cove * 2,door_size,block_size};
+            if(g_position.y < block_pos.y + block_size / 2){
+                drawBox(voxel,(Vec3){block_pos.x + door_cove,block_pos.y + block_size / 2 + door_size_inv,block_pos.z},size);
+                drawBox(voxel,vec3AddR(block_pos,(Vec3){door_cove,0,0}),size);
+            }
+            else{                
+                drawBox(voxel,vec3AddR(block_pos,(Vec3){door_cove,0,0}),size);
+                drawBox(voxel,(Vec3){block_pos.x + door_cove,block_pos.y + block_size / 2 + door_size_inv,block_pos.z},size);
+            }
+        } return;
 		case VOXEL_WATER:{
 			block_pos.z -= FIXED_ONE / 4;
 			if(g_position.z - block_pos.z - block_size > 0)
-				drawSide(voxel,vec3AddR(block_pos,(Vec3){0,0,block_size}),5);
+				drawSide(voxel,vec3AddR(block_pos,(Vec3){0,0,block_size}),5,(Vec2){block_size,block_size});
 		} return;
 	}
-	if(g_position.x - block_pos.x < 0)
-		drawSide(voxel,block_pos,0);
-	if(g_position.x - block_pos.x - block_size > 0)
-		drawSide(voxel,vec3AddR(block_pos,(Vec3){block_size,0,0}),1);
-	if(g_position.y - block_pos.y < 0)
-		drawSide(voxel,block_pos,2);
-	if(g_position.y - block_pos.y - block_size > 0)
-		drawSide(voxel,vec3AddR(block_pos,(Vec3){0,block_size,0}),3);
-	if(g_position.z - block_pos.z < 0)
-		drawSide(voxel,block_pos,4);
-	if(g_position.z - block_pos.z - block_size > 0)
-		drawSide(voxel,vec3AddR(block_pos,(Vec3){0,0,block_size}),5);
+    drawBox(voxel,block_pos,vec3Single(block_size));
 }
+

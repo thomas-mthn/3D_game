@@ -2,6 +2,7 @@
 #include "octree.h"
 #include "main.h"
 #include "audio.h"
+#include <stdbool.h>
 
 void movementFly(void){
     if(g_voxel_interact)
@@ -33,67 +34,86 @@ static bool boxTreeCollisionRecursive(Vec3 pos,Vec3 size,Voxel* voxel,int* max_h
 	int block_size = depthToSize(voxel->depth);
 	Vec3 block_pos = voxelWorldPos(voxel);
 
-	if(voxel->type == VOXEL_PARENT){
-		bool collision = false;
-
-		if(!boxCubeIntersect(pos,size,block_pos,block_size))
-			return false;
-
-		for(int i = 0;i < 8;i++)
-			collision |= boxTreeCollisionRecursive(pos,size,voxel->child_s[i],max_height,flags);
-		return collision;
-	}
-
-	if(voxel->type == VOXEL_AIR)
-		return false;
-
-	if(voxel->type == VOXEL_MOVABLE){
-		Vec3 block_size_m = {
-			block_size,
-			block_size,
-			fixedMulR(block_size,voxel->opened ? voxel->animation : FIXED_ONE - voxel->animation),
-		};
-		if(!boxBoxIntersect(pos,size,block_pos,block_size_m))
-			return false;
-	}
-	else{
-		if(!boxCubeIntersect(pos,size,block_pos,block_size))
-			return false;
-	}
-
 	Vec3 block_size_water = {
 		block_size,
 		block_size,
 		block_size - FIXED_ONE / 4,
 	};
-
+    
 	if(flags){
 		if(voxel->type == VOXEL_LADDER)
  			*flags |= COLLISION_FLAG_LADDER;
 		if(voxel->type == VOXEL_WATER && boxBoxIntersect(pos,size,block_pos,block_size_water))
 			*flags |= COLLISION_FLAG_WATER;
 	}
+    
+    switch(voxel->type){
+        case VOXEL_PARENT:{
+            bool collision = false;
 
-	if(voxel->type == VOXEL_WATER){
-		if(!boxBoxIntersect(pos,size,block_pos,block_size_water))
-			return false;
-		if(!voxel->animation){
-			voxel->splash_position = (Vec2){pos.x,pos.y};
-			voxel->splash_tick = g_tick;
-			voxelTickListAdd(voxel);
-			voxel->animation = FIXED_ONE;
-		}
-		else if(voxel->collision_tick != g_tick && voxel->collision_tick != g_tick - 1){
-			voxel->splash_position = (Vec2){pos.x,pos.y};
-			voxel->splash_tick = g_tick;
-			voxel->animation = FIXED_ONE;
-		}
-		else{
-			voxel->animation = tMax(voxel->animation,FIXED_ONE / 2);
-		}
-		voxel->collision_tick = g_tick;
-		return false;
-	}
+            if(!boxCubeIntersect(pos,size,block_pos,block_size))
+                return false;
+
+            for(int i = 0;i < 8;i++)
+                collision |= boxTreeCollisionRecursive(pos,size,voxel->child_s[i],max_height,flags);
+            return collision;
+        } break;
+        case VOXEL_AIR:
+            return false;
+        case VOXEL_MOVABLE:{
+            Vec3 block_size_m = {
+                block_size,
+                block_size,
+                fixedMulR(block_size,voxel->opened ? voxel->animation : FIXED_ONE - voxel->animation),
+            };
+            if(!boxBoxIntersect(pos,size,block_pos,block_size_m))
+                return false;
+        } break;
+        case VOXEL_PRESSURE_PLATE:{
+            if(!boxCubeIntersect(pos,size,block_pos,block_size))
+                return false;
+            if(!voxel->animation){
+                voxelLinkSignal(voxel);
+                voxelTickListAdd(voxel);
+            }
+            voxel->animation = 0x08;
+        } break;
+        case VOXEL_DOOR:{
+            int door_size = fixedMulR(block_size,FIXED_ONE - voxel->animation) / 2;
+            if(voxel->opened)
+                door_size = block_size / 2 - door_size;
+            int door_size_inv = block_size / 2 - door_size;
+
+            bool box_1 = boxBoxIntersect(pos,size,block_pos,(Vec3){block_size,door_size,block_size});
+            bool box_2 = boxBoxIntersect(pos,size,(Vec3){block_pos.x,block_pos.y + block_size / 2 + door_size_inv,block_pos.z},(Vec3){block_size,door_size,block_size}); 
+
+            if(!box_1 && !box_2)
+                return false;
+        } break;
+        case VOXEL_WATER:{
+            if(!boxBoxIntersect(pos,size,block_pos,block_size_water))
+                return false;
+            if(!voxel->animation){
+                voxel->splash_position = (Vec2){pos.x,pos.y};
+                voxel->splash_tick = g_tick;
+                voxelTickListAdd(voxel);
+                voxel->animation = FIXED_ONE;
+            }
+            else if(voxel->collision_tick != g_tick && voxel->collision_tick != g_tick - 1){
+                voxel->splash_position = (Vec2){pos.x,pos.y};
+                voxel->splash_tick = g_tick;
+                voxel->animation = FIXED_ONE;
+            }
+            else{
+                voxel->animation = tMax(voxel->animation,FIXED_ONE / 2);
+            }
+            voxel->collision_tick = g_tick;
+        } return false;
+        default:{
+            if(!boxCubeIntersect(pos,size,block_pos,block_size))
+                return false;
+        } break;
+    }
 
 	if(max_height){
 		Vec3 voxel_position = voxelWorldPos(voxel);

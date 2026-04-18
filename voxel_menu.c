@@ -79,8 +79,8 @@ void spinningStaffSpin(void){
 	}
 }
 
-static void changeRenderBackendSoftware(VoxelGuiElement* self);
-static void changeRenderBackendGL(VoxelGuiElement* self);
+static void renderBackendButtonChangeSoftware(VoxelGuiElement* self);
+static void renderBackendButtonChangeGl(VoxelGuiElement* self);
 
 static void renderLines(VoxelGuiElement* self);
 static void goBack(VoxelGuiElement* self);
@@ -116,9 +116,9 @@ static VoxelGuiElement voxel_menu_gui[] = {
 };
 
 static VoxelGuiElement voxel_menu_render_backend_gui[] = {
-	{.type = VOXEL_GUI_BUTTON,.button.on_click = changeRenderBackendSoftware,.position = {0x1000,FIXED_ONE - 0x2000}},
+	{.type = VOXEL_GUI_BUTTON,.button.on_click = renderBackendButtonChangeSoftware,.position = {0x1000,FIXED_ONE - 0x2000}},
 	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x1C00},.string.string = STRING_LITERAL("software")},
-	{.type = VOXEL_GUI_BUTTON,.button.on_click = changeRenderBackendGL,.position = {0x1000,FIXED_ONE - 0x4000}},
+	{.type = VOXEL_GUI_BUTTON,.button.on_click = renderBackendButtonChangeGl,.position = {0x1000,FIXED_ONE - 0x4000}},
 	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x3C00},.string.string = STRING_LITERAL("opengl")},
 };
 
@@ -133,7 +133,7 @@ void antiAliasingLoadMenu(VoxelGuiElement* self){
 	int n_options = (bitScanReverse(g_smaa_max) + 1) * 2 + 1;
 	VoxelGuiElement* aa_menu = tMallocZero(sizeof(VoxelGuiElement) * n_options);
 	int iter = 0;
-	aa_menu[0].type   = VOXEL_GUI_STRING;
+	aa_menu[0].type = VOXEL_GUI_STRING;
 	aa_menu[0].string.string = (String)STRING_LITERAL("anti aliasing level");
 	aa_menu[0].position = (Vec2){FIXED_ONE - 0x2000,FIXED_ONE - 0x2000};
 	for(int i = g_smaa_max;i;i >>= 1){
@@ -167,7 +167,7 @@ static void goBack(VoxelGuiElement* self){
 }
 
 static void renderLines(VoxelGuiElement* self){
-	g_render_lines ^= true;
+	g_options.gl_wireframe ^= true;
 #if !defined(__wasm__) && !defined(__linux__)
 	if(g_surface.backend == RENDER_BACKEND_GL)
 		openglPolygonFill(!g_render_lines);
@@ -175,7 +175,7 @@ static void renderLines(VoxelGuiElement* self){
 }
 
 void toggleSmoothLighting(VoxelGuiElement* self){
-	g_smooth_lighting ^= true;
+	g_options.smooth_lighting ^= true;
 }
 
 void changeRenderBackend(VoxelGuiElement* self){
@@ -183,17 +183,27 @@ void changeRenderBackend(VoxelGuiElement* self){
 	g_voxel_static[VOXEL_MENU].n_gui = countof(voxel_menu_render_backend_gui);
 }
 
-static void changeRenderBackendSoftware(VoxelGuiElement* self){
+void renderBackendChangeSoftware(void){
 	surfaceChangeBackend(&g_surface,RENDER_BACKEND_SOFTWARE);
+    surfaceChangeSize(&g_surface,g_surface.width,g_surface.height);
 	voxelMenuMainSet();
-	g_options.render_backend = g_surface.backend;
+	g_options.render_backend = g_surface.backend;    
 }
 
-static void changeRenderBackendGL(VoxelGuiElement* self){
+void renderBackendChangeGl(void){
 #if !defined(__wasm__) && !defined(__linux__)
 	textureResetGL();
 #endif
 	surfaceChangeBackend(&g_surface,RENDER_BACKEND_GL);
 	voxelMenuMainSet();
 	g_options.render_backend = g_surface.backend;
+
+}
+
+static void renderBackendButtonChangeSoftware(VoxelGuiElement* self){
+    renderBackendChangeSoftware();
+}
+
+static void renderBackendButtonChangeGl(VoxelGuiElement* self){
+    renderBackendChangeGl();
 }

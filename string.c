@@ -1,4 +1,6 @@
 #include "string.h"
+#include "memory.h"
+#include "libc.h"
 
 static int numberStringLength(int number){
     int length = 0;
@@ -21,6 +23,47 @@ bool stringCompareSizeInsensitive(String string,String compare){
             return false;
     }
     return true;
+}
+
+String stringWordSlice(String string){
+    String word = {.data = string.data};
+    while(*string.data > ' ')
+        string.data += 1;
+    word.size = string.data - word.data;
+    return word;
+}
+
+void stringToUpper(String string){
+    for(int i = string.size;i--;)
+        string.data[i] = string.data[i] >= 'a' && string.data[i] <= 'z' ? string.data[i] & ~0x20 : string.data[i];
+}
+
+void stringToLower(String string){
+    for(int i = string.size;i--;)
+        string.data[i] = string.data[i] >= 'A' && string.data[i] <= 'Z' ? string.data[i] | 0x20 : string.data[i];
+}
+
+bool stringCompareSizeCaseInsensitive(String string,String compare){
+    if(string.size < compare.size)
+        return false;
+    for(int i = compare.size;i--;){
+        char c1 = string.data[i] >= 'a' && string.data[i] <= 'z' ? string.data[i] & ~0x20 : string.data[i];
+        char c2 = compare.data[i] >= 'a' && compare.data[i] <= 'z' ? compare.data[i] & ~0x20 : compare.data[i];
+        if(c1 != c2)
+            return false;
+    }
+    return true;
+}
+
+String stringConcat(String string,String append){
+    String string_new = {
+        .data = tMalloc(string.size + append.size),
+        .size = string.size + append.size,
+        .flags = STRING_MALLOC
+    };
+    tMemcpy(string_new.data,string.data,string.size);
+    tMemcpy(string_new.data + string.size,append.data,append.size);
+    return string_new;
 }
 
 String stringInString(String string_1,String string_2){

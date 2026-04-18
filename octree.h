@@ -6,6 +6,9 @@
 #include "entity.h"
 #include "langext.h"
 #include "voxel_gui.h"
+#include "memory.h"
+
+#define LINK_MAX 0x10
 
 static Vec2 g_axis_table[] = {
 	{VEC3_Y,VEC3_Z},
@@ -26,8 +29,8 @@ static Vec3 g_normal_table[] = {
 };
 
 typedef enum{
-	VOXEL_AIR = -2,
-	VOXEL_PARENT,
+    VOXEL_AIR,
+    VOXEL_PARENT,
 	VOXEL_BLOCK,
 	VOXEL_BLOCK_RED,
 	VOXEL_BLOCK_GREEN,
@@ -60,6 +63,8 @@ typedef enum{
 	VOXEL_BOSS,
     VOXEL_STRING,
     VOXEL_CONSOLE,
+    VOXEL_DOOR,
+    VOXEL_PRESSURE_PLATE,
     VOXEL_ECOUNT,
 } VoxelType;
 
@@ -82,7 +87,8 @@ structure(Voxel){
 		//voxel
 		struct{	
 			Voxel* next_voxel_tick;
-			Voxel* linked;
+            int n_link;
+            Voxel** links;
 			Voxel* next_voxel_link;
 			Entity* entity_list;
 			int animation;
@@ -92,12 +98,12 @@ structure(Voxel){
 			unsigned splash_tick;
 			unsigned collision_tick;
 
-             //chest
-			bool chest_open;
-			bool opened;
-
-             //string
-             String string;
+            //chest
+			bool chest_open : 1;
+			bool opened : 1;
+            
+            //string
+            String string;
 		};
 	};
 	//TODO: move this in a temporary structure to safe memory
@@ -106,12 +112,12 @@ structure(Voxel){
 
 structure(VoxelStatic){
 	Vec3 color;
-	enum{
-		VOXEL_EMITER        = 1 << 0,
-		VOXEL_TEXTUREFILL   = 1 << 1,
-		VOXEL_NO_BLOCKPLACE = 1 << 2,
-        VOXEL_TRANSLUCENT   = 1 << 3,
-	} flags;
+    
+    bool emiter : 1;
+    bool texturefill : 1;
+    bool no_blockplace : 1;
+    bool translucent : 1;
+    
 	Texture* texture;
 	int texture_size;
 	int n_gui;
@@ -136,7 +142,8 @@ structure(VoxelSerialized){
 
 structure(VoxelSerializedButton){
 	VoxelSerialized voxel;
-	int linked;
+    int n_link;
+	int links[];
 };
 
 structure(VoxelSerializedString){
@@ -179,19 +186,23 @@ extern Voxel g_voxel;
 extern Voxel* g_voxel_tick_list;
 extern VoxelStatic g_voxel_static[];
 extern VoxelGuiElement g_inventory_gui[];
+extern AllocatorFreeList g_allocator_world;
 
+Vec3 rayHitPosition(Voxel* voxel,Vec3 ray_position,Vec3 ray_direction,int side);
+
+void voxelLinkSignal(Voxel* voxel);
 void octreeSerialize(VoxelSerialized* voxel_serial_array,Voxel* voxel);
 void octreeSerializeRecursive2(void* voxel_serial_array,int* voxel_serial_index,Voxel* voxel,Vec3 position,int depth,int parent);
 Voxel* octreeDeserializeRecursive(VoxelSerializedParent* voxel_serial_array,int index,Voxel* parent,int depth,Vec3 position,Voxel** voxel_array,int* index_i);
 void octreeDeserializeLink(VoxelSerializedParent* voxel_serial_array,int index,int depth,Vec3 position,Voxel** voxel_array,int* index_i);
-int depthToSize(int depth);
+
 Vec3 posWorldPos(Vec3 position,int depth);
-Vec3 voxelWorldPos(Voxel* voxel);
 TraverseInit initTraverse(Vec3 pos);
 Voxel* treeRayTrace(Voxel* voxel,Vec3 position,Vec3 direction,int* side);
 Voxel* treeRayTraceAndInit(Vec3 position,Vec3 direction,int* side);
 int treeRayTraceIntersectCountAndInit(Vec3 position,Vec3 direction);
-Vec3 rayHitPosition(Voxel* voxel,Vec3 ray_position,Vec3 ray_direction,int side);
+
+void voxelFreeRecursive(Voxel* voxel);
 void voxelSet(Voxel* voxel,Vec3 pos,int depth,VoxelType type);
 Voxel* voxelGet(Vec3 position,int depth);
 Voxel* voxelPositionGet(Vec3 pos);
@@ -204,5 +215,14 @@ void voxelMenuMainSet(void);
 void voxelMenuStaffEditorDefault(void);
 
 bool lineOfSight(Vec3 position_1,Vec3 position_2);
+
+static int depthToSize(int depth){
+	return (FIXED_ONE << 8) * 2 >> depth;
+}
+
+static Vec3 voxelWorldPos(Voxel* voxel){
+	int size = depthToSize(voxel->depth);
+	return (Vec3){voxel->position_x * size,voxel->position_y * size,voxel->position_z * size};
+}
 
 #endif

@@ -5,33 +5,38 @@
 #include "octree.h"
 #include "span.h"
 
-void drawChar3D(Voxel* voxel,int side,Vec2 uv,char string_char,int scale,int thickness){
+void drawGuiChar(Voxel* voxel,int side,Vec2 uv,char string_char,int scale,int thickness){
     Vec2 axis = g_axis_table[side];
     int mirror = (int[]){
         1,-1,
         -1,1,
         1,-1,
     }[side];
-    //no idea why but 0xE0 seems to be the magic number
-    int offset_start = mirror > 0 ? 0 : -scale * 0xE0;
     int voxel_size = depthToSize(voxel->depth);
+    Vec3 c_pos = voxelWorldPos(voxel);
+    
+    if(side & 1)
+        c_pos.a[side >> 1] += voxel_size;
+    
+    if(mirror < 0)
+        uv.x = FIXED_ONE - uv.x;
+    
     for(int i = 0;g_vector_font[string_char].position[i][0];i++){
         uint8* coords = &g_vector_font[string_char].position[i][0];
-        int offset_f = mirror ? uv.y : uv.y;
-        Vec3 position = voxelWorldPos(voxel);
-        ((int*)&position)[axis.x] += fixedMulR(voxel_size,uv.x);
-        ((int*)&position)[axis.y] += fixedMulR(voxel_size,uv.y);
+        Vec3 position = c_pos;
+        position.a[axis.x] += fixedMulR(voxel_size,uv.x);
+        position.a[axis.y] += fixedMulR(voxel_size,uv.y);
         Vec3 points[] = {
             position,
             position,
         };        
-        ((int*)&points[1])[axis.y] -= fixedMulR(coords[0] << 8,fixedMulR(scale,voxel_size));
-        ((int*)&points[1])[axis.x] += fixedMulR(coords[1] << 8,fixedMulR(scale,voxel_size)) * mirror;
-        ((int*)&points[0])[axis.y] -= fixedMulR(coords[2] << 8,fixedMulR(scale,voxel_size));
-        ((int*)&points[0])[axis.x] += fixedMulR(coords[3] << 8,fixedMulR(scale,voxel_size)) * mirror;
+        points[1].a[axis.y] -= fixedMulR(coords[0] << 8,fixedMulR(scale,voxel_size));
+        points[1].a[axis.x] += fixedMulR(coords[1] << 8,fixedMulR(scale,voxel_size)) * mirror;
+        points[0].a[axis.y] -= fixedMulR(coords[2] << 8,fixedMulR(scale,voxel_size));
+        points[0].a[axis.x] += fixedMulR(coords[3] << 8,fixedMulR(scale,voxel_size)) * mirror;
 
-        Vec2 point_1 = {((int*)&points[0])[axis.x],((int*)&points[0])[axis.y]};
-        Vec2 point_2 = {((int*)&points[1])[axis.x],((int*)&points[1])[axis.y]};
+        Vec2 point_1 = {points[0].a[axis.x],points[0].a[axis.y]};
+        Vec2 point_2 = {points[1].a[axis.x],points[1].a[axis.y]};
 
         Vec2 direction = vec2MulRS(vec2Direction(point_1,point_2),thickness);
     				                                
@@ -47,24 +52,15 @@ void drawChar3D(Voxel* voxel,int side,Vec2 uv,char string_char,int scale,int thi
         if(points[0].z <= 0 || points[1].z <= 0)
             continue;
         for(int j = 0;j < 4;j++){
-            ((int*)(quad + j))[axis.x] = quad2d[j].x;
-            ((int*)(quad + j))[axis.y] = quad2d[j].y;
+            quad[j].a[axis.x] = quad2d[j].x;
+            quad[j].a[axis.y] = quad2d[j].y;
         }
         drawPolygon3d(&g_surface,quad,vec3MulRS(pixelColorToColor(0xFFFFFF),g_exposure));
     }
 }
 
-void drawString3D(Voxel* voxel,int side,Vec2 uv,String string,int scale,int thickness){
+void drawGuiString(Voxel* voxel,int side,Vec2 uv,String string,int scale,int thickness){
     Vec2 axis = g_axis_table[side];
-    int mirror = (int[]){
-        1,-1,
-        -1,1,
-        1,-1,
-    }[side];
-    //no idea why but 0xE0 seems to be the magic number
-    int offset_start = mirror > 0 ? 0 : -scale * 0xE0;
-    int down_offset = 0;
-    int offset = offset_start;
     Vec2 c_pos = uv;
 	for(int i = 0;i < string.size;i++){
 		char string_char = string.data[i];
@@ -73,41 +69,51 @@ void drawString3D(Voxel* voxel,int side,Vec2 uv,String string,int scale,int thic
             c_pos.y -= scale;
             continue;
         }
-        drawChar3D(voxel,side,c_pos,string_char,scale,thickness);
-        c_pos.x += fixedMulR(g_vector_font[string_char].width,scale) * mirror;
+        drawGuiChar(voxel,side,c_pos,string_char,scale,thickness);
+        c_pos.x += fixedMulR(g_vector_font[string_char].width,scale);
     }
 }
 
-static void drawNumber3D(DrawSurface surface,Voxel* voxel,int side,Vec3 block_pos,Vec2 uv,int number,int scale){
+static void drawNumber3D(Voxel* voxel,int side,Vec2 uv,int number,int scale){
 	char buffer[0x10];
     String string = intToString(buffer,number);
-	drawString3D(voxel,side,uv,string,scale,0x300);
+	drawGuiString(voxel,side,uv,string,scale,0x300);
 }
 
-static void drawGuiRectangle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color){
+void drawGuiRectangle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,int side){
+    int mirror = (int[]){
+        1,-1,
+        -1,1,
+        1,-1,
+    }[side];
+
+    if(mirror < 0)
+        uv.x = FIXED_ONE - uv.x;
+    
 	int voxel_size = depthToSize(voxel->depth);
 	Vec3 position = block_pos;
-	((int*)&position)[axis.x] += fixedMulR(voxel_size,uv.x);
-	((int*)&position)[axis.y] += fixedMulR(voxel_size,uv.y);
+    size = vec2MulRS(size,voxel_size);
+	position.a[axis.x] += fixedMulR(uv.x,voxel_size);
+	position.a[axis.y] += fixedMulR(uv.y,voxel_size);
 	Vec3 points[] = {
 		position,
 		position,
 		position,
 		position
 	};
-	((int*)&points[1])[axis.y] += size.y;
-	((int*)&points[2])[axis.x] += size.x;
-	((int*)&points[3])[axis.x] += size.x;
-	((int*)&points[3])[axis.y] += size.y;
+	points[1].a[axis.y] += size.y;
+	points[2].a[axis.x] += size.x * mirror;
+	points[3].a[axis.x] += size.x * mirror;
+	points[3].a[axis.y] += size.y;
 
     drawPolygon3d(&g_surface,points,pixelColorToColor(color));
 }
 
-void drawGuiFrame(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,int thickness){
-	drawGuiRectangle(voxel,axis,block_pos,(Vec2){uv.x,uv.y},(Vec2){size.x,thickness},color);
-	drawGuiRectangle(voxel,axis,block_pos,(Vec2){uv.x,uv.y},(Vec2){thickness,size.y},color);
-	drawGuiRectangle(voxel,axis,block_pos,(Vec2){uv.x,uv.y + size.y - thickness},(Vec2){size.x,thickness},color);
-	drawGuiRectangle(voxel,axis,block_pos,(Vec2){uv.x + size.x - thickness,uv.y},(Vec2){thickness,size.y},color);
+void drawGuiFrame(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,int thickness,int side){
+	drawGuiRectangle(voxel,axis,block_pos,(Vec2){uv.x,uv.y},(Vec2){size.x,thickness},color,side);
+	drawGuiRectangle(voxel,axis,block_pos,(Vec2){uv.x,uv.y},(Vec2){thickness,size.y},color,side);
+	drawGuiRectangle(voxel,axis,block_pos,(Vec2){uv.x,uv.y + size.y - thickness},(Vec2){size.x,thickness},color,side);
+	drawGuiRectangle(voxel,axis,block_pos,(Vec2){uv.x + size.x - thickness,uv.y},(Vec2){thickness,size.y},color,side);
 }
 
 static void drawGuiImage(Voxel* voxel,Texture* image,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size){
@@ -176,7 +182,7 @@ static bool rectInRect(Vec2 position_1,Vec2 size_1,Vec2 position_2,Vec2 size_2){
 
     return bound_x && bound_y;
 }
-
+#include "console.h"
 void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 	VoxelStatic* voxel_s = g_voxel_static + voxel->type;
 	int voxel_size = depthToSize(voxel->depth);
@@ -205,7 +211,7 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 					else
 						color = 0x20A0A0;
 				}
-				drawGuiFrame(voxel,g_axis_table[side],block_pos,element->position,(Vec2){0x2000,0x2000},color,0x200);
+				drawGuiFrame(voxel,g_axis_table[side],block_pos,element->position,(Vec2){0x2000,0x2000},color,0x200,side);
 				Vec2 spell_uv = vec2AddR(element->position,vec2Single(0x1000));
 				if(!element->inventory_slot.slot->type)
 					continue;
@@ -220,16 +226,16 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 						drawGuiCircle(voxel,g_axis_table[side],block_pos,spell_uv,0xA00,0x00FF00);
 					} break;
 					case SPELL_ADJ_SPEED:{
-						Vec2 string_uv = vec2AddR(spell_uv,(Vec2){-0x1000,-0x400});
-						drawString3D(voxel,side,string_uv,(String)STRING_LITERAL(">>"),0x800,0x300);
+						Vec2 string_uv = vec2AddR(spell_uv,(Vec2){-0x600,0x400});
+                        drawGuiString(voxel,side,string_uv,(String)STRING_LITERAL(">>"),0x800,0x300);
 					} break;
 					case SPELL_ADJ_DAMAGE:{
-						Vec2 string_uv = vec2AddR(spell_uv,(Vec2){-0x1000,-0x400});
-						drawString3D(voxel,side,string_uv,(String)STRING_LITERAL("#+"),0x800,0x300);
+						Vec2 string_uv = vec2AddR(spell_uv,(Vec2){-0x600,0x400});
+						drawGuiString(voxel,side,string_uv,(String)STRING_LITERAL("#+"),0x800,0x300);
 					} break;
 					case SPELL_ADJ_DOUBLER:{
-						Vec2 string_uv = vec2AddR(spell_uv,(Vec2){-0x1000,-0x400});
-						drawString3D(voxel,side,string_uv,(String)STRING_LITERAL("x2"),0x800,0x300);
+						Vec2 string_uv = vec2AddR(spell_uv,(Vec2){-0x600,0x400});
+						drawGuiString(voxel,side,string_uv,(String)STRING_LITERAL("x2"),0x800,0x300);
 					} break;
 					default:{
 						drawGuiCircle(voxel,g_axis_table[side],block_pos,spell_uv,0xA00,0xFF00FF);
@@ -251,15 +257,15 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 				else{
 					color = is_pointed ?  0xA0A0A0 : 0x808080;
 				}
-				drawGuiRectangle(voxel,axis,block_pos,element->position,vec2Single(0x1000),color);
+				drawGuiRectangle(voxel,axis,block_pos,element->position,vec2Single(0x1000),color,side);
 			} break;
             case VOXEL_GUI_RECTANGLE:{
                 Vec2 size = element->rectangle.size;
-                if(element->rectangle.flags & RECTANGLE_RELATIVE_SIZE_X)
-                    fixedMul(&size.x,voxel_size);
-                if(element->rectangle.flags & RECTANGLE_RELATIVE_SIZE_Y)
-                    fixedMul(&size.y,voxel_size);
-                drawGuiRectangle(voxel,axis,block_pos,element->position,size,element->rectangle.color);
+                if(element->rectangle.flags & RECTANGLE_ABSOLUTE_SIZE_X)
+                    fixedDiv(&size.x,voxel_size);
+                if(element->rectangle.flags & RECTANGLE_ABSOLUTE_SIZE_Y)
+                    fixedDiv(&size.y,voxel_size);
+                drawGuiRectangle(voxel,axis,block_pos,element->position,size,element->rectangle.color,side);
             } break;
 			case VOXEL_GUI_BUTTON:{
 				int color;
@@ -268,22 +274,21 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 					color = 0x90C090;
 				else
 					color = 0x809080;
-                drawGuiRectangle(voxel,axis,block_pos,element->position,vec2MulRS(button_size,voxel_size),color);
+                drawGuiRectangle(voxel,axis,block_pos,element->position,button_size,color,side);
 			} break;
 			case VOXEL_GUI_STRING:{
 				int size = !element->string.size ? 0x800 : element->string.size;
-
-				drawString3D(voxel,side,element->position,element->string.string,size,0x300);
+				drawGuiString(voxel,side,element->position,element->string.string,size,0x300);
 			} break;
 			case VOXEL_GUI_NUMBER:{
 				int size = !element->number.size ? 0x800 : element->number.size;
-				drawNumber3D(g_surface,voxel,side,block_pos,element->position,*element->number.number,size);	
+				drawNumber3D(voxel,side,element->position,*element->number.number,size);	
 			} break;
 		}
 	}
 	if(g_voxel_pointed.voxel == voxel && g_voxel_pointed.side == side){
-		drawGuiRectangle(voxel,axis,block_pos,vec2SubR(g_voxel_pointed.uv,vec2Single(0x150)),vec2Single(0x300),0x000000);
-		drawGuiRectangle(voxel,axis,block_pos,vec2SubR(g_voxel_pointed.uv,vec2Single(0x100)),vec2Single(0x200),0xFFFFFF);
+		drawGuiRectangle(voxel,axis,block_pos,vec2SubR(g_voxel_pointed.uv,vec2Single(0x150)),vec2Single(0x300),0x000000,side);
+		drawGuiRectangle(voxel,axis,block_pos,vec2SubR(g_voxel_pointed.uv,vec2Single(0x100)),vec2Single(0x200),0xFFFFFF,side);
 	}
 }
 
@@ -320,7 +325,7 @@ bool voxelGuiOnClick(Voxel* voxel,int side){
 			case VOXEL_GUI_BUTTON:{
 				Vec2 button_size = element->button.size ? vec2Single(element->button.size) : vec2Single(0x1000);
 				if(rectInRect(element->position,button_size,g_voxel_pointed.uv,vec2Single(0x200)) && element->button.on_click){
-					element->button,voxel = voxel;
+					element->button.voxel = voxel;
 					element->button.on_click(element);
 					return true;
 				}

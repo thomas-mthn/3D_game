@@ -43,17 +43,19 @@ GameOptions g_options = {
     .multi_thread = true,
 	.editor = true,
 	.fast_startup = false,
+    .lighting_engine = true,
 	.fov = {FIXED_ONE / 2,FIXED_ONE / 3},
 	.render_backend = RENDER_BACKEND_SOFTWARE,
+    .gl_wireframe = false,
 };
 
 bool g_movement_fly;
 bool g_voxel_placement;
 int g_edit_depth = 10;
 
-VoxelType g_voxel_select = VOXEL_CONSOLE;
+VoxelType g_voxel_select = VOXEL_GRASS;
 
-#define PLAYER_SPAWN_POSITION {(FIXED_ONE << 8) - FIXED_ONE * 20 - FIXED_ONE * 2,(FIXED_ONE << 8) - FIXED_ONE * 20 - FIXED_ONE * 2,(FIXED_ONE << 8) + FIXED_ONE * 4}
+#define PLAYER_SPAWN_POSITION {0x0F10000,0x1060000,0x1020000}
 #define PLAYER_SPAWN_ANGLE {FIXED_ONE / 2,FIXED_ONE / 2}
 
 Vec3 g_position = PLAYER_SPAWN_POSITION;
@@ -63,11 +65,6 @@ int g_exposure = FIXED_ONE;
 int g_tri[4];
 
 int g_health = FIXED_ONE;
-#ifdef __wasm__
-bool g_smooth_lighting = true;
-#else
-bool g_smooth_lighting = true;
-#endif
 bool g_luminance_overlay;
 
 uint8 g_key[0x100];
@@ -267,6 +264,16 @@ void tickRun(void){
 	Voxel* previous = 0;
 	for(Voxel* voxel = g_voxel_tick_list;voxel;voxel = voxel->next_voxel_tick){
 		switch(voxel->type){
+            case VOXEL_PRESSURE_PLATE:{
+                voxel->animation -= 1;
+                if(voxel->animation <= 0){                    
+                    if(previous)
+						previous->next_voxel_tick = voxel->next_voxel_tick;
+					else
+						g_voxel_tick_list = voxel->next_voxel_tick;
+					continue;
+                }
+            } break;
 			case VOXEL_WATER:{
 				voxel->animation -= 0x40;
 				if(voxel->animation <= 0){
@@ -277,6 +284,35 @@ void tickRun(void){
 					continue;
 				}
 			} break;
+            case VOXEL_DOOR:{
+                voxel->animation -= 8 << voxel->depth;
+                int block_size = depthToSize(voxel->depth);
+                Vec3 block_pos = voxelWorldPos(voxel);
+                int door_size = fixedMulR(block_size,FIXED_ONE - voxel->animation) / 2;
+                if(voxel->opened)
+                    door_size = block_size / 2 - door_size;
+                int door_size_inv = block_size / 2 - door_size;
+                bool box_1 = boxBoxIntersect(g_position,PLAYER_SIZE,block_pos,(Vec3){block_size,door_size,block_size});
+
+                if(box_1){
+                    voxel->animation += 16 << voxel->depth;
+                    g_velocity.y += 0x100;
+                }
+
+                bool box_2 = boxBoxIntersect(g_position,PLAYER_SIZE,(Vec3){block_pos.x,block_pos.y + block_size / 2 + door_size_inv,block_pos.z},(Vec3){block_size,door_size,block_size});
+                if(box_2){
+                    voxel->animation += 16 << voxel->depth;
+                    g_velocity.y -= 0x100;
+                }
+                
+                if(voxel->animation <= 0){
+					if(previous)
+						previous->next_voxel_tick = voxel->next_voxel_tick;
+					else
+						g_voxel_tick_list = voxel->next_voxel_tick;
+					continue;
+				}
+            } break;
 			case VOXEL_MOVABLE:{
 				voxel->animation -= 8 << voxel->depth;
 				if(voxel->animation <= 0){
@@ -316,23 +352,6 @@ void tickRun(void){
 	g_tick += 1;
 }
 
-/*
-int leadingZeroCount(unsigned value){
-#if defined(__GNUC__) || defined(__clang__)
-    return _lzcnt_u32(value);
-#elif !defined(__wasm__)
-    return _lzcnt_u32(value);
-#else
-	int index = 0;
-    while(value){
-        index += 1;
-	    value >>= 1;
-    }
-	return index - 1;
-#endif
-}
-*/
-
 int bitScanReverse(unsigned value){
 	if(!value)
 		return 0;
@@ -352,7 +371,6 @@ int bitScanReverse(unsigned value){
 #endif
 	return index;
 }
-
 
 unsigned g_tick;
 
@@ -430,11 +448,11 @@ void applicationQuit(void){
 
 static char keyTranslate(char key){
     char key_char_table[] = {
-        [KEY_A] = 'a',[KEY_B] = 'b',[KEY_C] = 'c',[KEY_D] = 'd',[KEY_E] = 'e',[KEY_F] = 'f',
-        [KEY_G] = 'g',[KEY_H] = 'h',[KEY_I] = 'i',[KEY_J] = 'j',[KEY_K] = 'k',[KEY_L] = 'l',
-        [KEY_M] = 'm',[KEY_N] = 'n',[KEY_O] = 'o',[KEY_P] = 'p',[KEY_Q] = 'q',[KEY_R] = 'r',
-        [KEY_S] = 's',[KEY_T] = 't',[KEY_U] = 'u',[KEY_V] = 'w',[KEY_W] = 'w',[KEY_X] = 'x',
-        [KEY_Y] = 'y',[KEY_Z] = 'z',
+        [KEY_A] = 'A',[KEY_B] = 'B',[KEY_C] = 'C',[KEY_D] = 'D',[KEY_E] = 'E',[KEY_F] = 'F',
+        [KEY_G] = 'G',[KEY_H] = 'H',[KEY_I] = 'I',[KEY_J] = 'J',[KEY_K] = 'K',[KEY_L] = 'L',
+        [KEY_M] = 'M',[KEY_N] = 'N',[KEY_O] = 'O',[KEY_P] = 'P',[KEY_Q] = 'Q',[KEY_R] = 'R',
+        [KEY_S] = 'S',[KEY_T] = 'T',[KEY_U] = 'U',[KEY_V] = 'W',[KEY_W] = 'W',[KEY_X] = 'X',
+        [KEY_Y] = 'Y',[KEY_Z] = 'Z',
         [KEY_1] = '1',[KEY_2] = '2',[KEY_3] = '3',[KEY_4] = '4',[KEY_5] = '5',
         [KEY_6] = '6',[KEY_7] = '7',[KEY_8] = '8',[KEY_9] = '9',[KEY_0] = '0',
         [KEY_SPACE] = ' ',[KEY_RETURN] = '\n',
@@ -551,6 +569,10 @@ void keyPress(int key){
 		} break;
 		case KEY_F3:{
 			g_test_bool ^= true;
+            if(g_test_bool)
+                print((String)STRING_LITERAL("true"));
+            else
+                print((String)STRING_LITERAL("false"));
 		} break;
 		case KEY_LEFT:{
 			g_voxel_select -= 1;
@@ -639,6 +661,17 @@ Entity* g_boss;
 
 void lButtonDown(void){
 	Voxel* voxel = g_voxel_pointed.voxel;
+    if(!voxel)
+		return;
+    if(keyDown(KEY_LMENU)){
+        if(voxel->type == VOXEL_CONSOLE || voxel->type == VOXEL_STRING)
+            g_voxel_interact = voxel;
+        return;
+    }
+    if(g_voxel_interact){
+        g_voxel_interact = 0;
+        return;
+    }
 	if(!g_voxel_placement){
 		if(voxelGuiOnClick(voxel,g_voxel_pointed.side)){
 			g_gui_clicked = true;
@@ -721,18 +754,25 @@ void lButtonDown(void){
 			}
 		}
 	}
-	if(!voxel)
-		return;
 	VoxelStatic* voxel_s = g_voxel_static + voxel->type;
 	if(g_voxel_placement){
 		if(button_link){
-			if(voxel->type == VOXEL_MOVABLE)
-				button_link->linked = voxel;
+			if(voxel->type == VOXEL_MOVABLE || voxel->type == VOXEL_DOOR){
+                if(!button_link->links){
+                    button_link->links = tMalloc(LINK_MAX * sizeof(int));
+                    button_link->next_voxel_link = g_voxel_link_list;
+                    g_voxel_link_list = button_link;
+                }
+                button_link->links[button_link->n_link++] = voxel;
+                if(!voxel->links)
+                    voxel->links = tMalloc(LINK_MAX * sizeof(int));
+                voxel->links[voxel->n_link++] = button_link;
+            }
 
 			button_link = 0;
 			return;
 		}
-		else if(voxel->type == VOXEL_BUTTON){
+		else if(voxel->type == VOXEL_BUTTON || voxel->type == VOXEL_PRESSURE_PLATE){
 			button_link = voxel;
 			return;
 		}
@@ -741,21 +781,12 @@ void lButtonDown(void){
 	if(!g_voxel_placement)
 		return;
 
-	if(voxel_s->flags & VOXEL_NO_BLOCKPLACE)
+	if(voxel_s->no_blockplace)
 		return;
 	
 	Vec3 octree_position;
 	if(!blockOutlinePositionGet(&octree_position))
 		return;
-    if(keyDown(KEY_LMENU)){
-        if(voxel->type == VOXEL_CONSOLE || voxel->type == VOXEL_STRING)
-            g_voxel_interact = voxel;
-        return;
-    }
-    if(g_voxel_interact){
-        g_voxel_interact = 0;
-        return;
-    }
 	if(keyDown(KEY_LCONTROL)){
 		static struct{
 			Vec3 position;
@@ -918,7 +949,7 @@ static void generateBlockOutline(Vec3 sub_block_pos,int sub_block_size){
 
 	g_voxel_pointed.uv = uv;
 
-	if((g_voxel_static[g_voxel_pointed.voxel->type].flags & VOXEL_NO_BLOCKPLACE) || !g_voxel_placement)
+	if(g_voxel_static[g_voxel_pointed.voxel->type].no_blockplace || !g_voxel_placement)
 		return;
 
 	int edit_size = depthToSize(g_edit_depth);
@@ -956,16 +987,67 @@ static void generateBlockOutline(Vec3 sub_block_pos,int sub_block_size){
 
 #define GEN_SIZE (1 << 4)
 
+void worldDestroy(void){
+    allocatorFreeListFreeAll(&g_allocator_world);
+    g_voxel_link_list = 0;
+    g_voxel_tick_list = 0;
+    g_voxel = (Voxel){0};
+}
+
 void worldDefaultGenerate(void){
+    voxelSet(&g_voxel,(Vec3){64,64,64},7,VOXEL_CONSOLE);
     voxelSet(&g_voxel,(Vec3){0,0,0},1,VOXEL_BLOCK);
 	voxelSet(&g_voxel,(Vec3){0,1,0},1,VOXEL_BLOCK);
 	voxelSet(&g_voxel,(Vec3){1,1,0},1,VOXEL_BLOCK);
 	voxelSet(&g_voxel,(Vec3){1,0,0},1,VOXEL_BLOCK);
 }
 
+static String worldNameToPath(String name){
+    String path = STRING_LITERAL("world/");
+    String path_name = stringConcat(path,name);
+    String path_name_ext = stringConcat(path_name,(String)STRING_LITERAL(".octvxl\0"));
+    return path_name_ext;
+}
+
+bool worldExist(String name){
+    return linuxOctreeDeserialize(worldNameToPath(name).data).content;
+}
+
+bool worldLoad(String name){
+    String path = STRING_LITERAL("world/");
+    String path_name = stringConcat(path,name);
+    String path_name_ext = stringConcat(path_name,(String)STRING_LITERAL(".octvxl\0"));
+#ifdef __linux__
+    FileContent world = linuxOctreeDeserialize(path_name_ext.data);
+#else
+    return false;
+#endif
+    if(!world.content)
+        return false;
+    Voxel** voxel_array = virtualAllocate(sizeof(Voxel*) * world.size);
+	int index_i = 0;
+	g_voxel = *octreeDeserializeRecursive((void*)world.content,0,0,0,(Vec3){0,0,0},voxel_array,&index_i);
+	index_i = 0;
+	octreeDeserializeLink((void*)world.content,0,0,(Vec3){0,0,0},voxel_array,&index_i);
+	virtualFree(voxel_array,sizeof(Voxel*) * world.size);
+    return true;
+}
+
+void worldSave(String name){
+    String path = STRING_LITERAL("world/");
+    String path_name = stringConcat(path,name);
+    String path_name_ext = stringConcat(path_name,(String)STRING_LITERAL(".octvxl"));
+#ifdef __linux__
+    linuxOctreeSerialize(&g_voxel,path_name_ext.data);
+#endif
+}
+
 char g_voxel_lighting_tree[0x100000];
 
 void mainInit(void){
+    if(!worldLoad((String)STRING_LITERAL("world_1")))
+        worldDefaultGenerate();
+    
     threadInit();
 	if(g_options.editor){
 		g_movement_fly = true;
@@ -1012,30 +1094,9 @@ structure(RayTracePixelsArg){
 	int trace_tick;
 	int trace_size;
 };
-/*
-static THREAD_ENTRY rayTracePixels(void* args_void){
-	RayTracePixelsArg* args = args_void;
-	int tri[] = {tCos(args->trace_angle.x),tSin(args->trace_angle.x),tCos(args->trace_angle.y),tSin(args->trace_angle.y)};
-	for(int i = args->offset;i < args->offset + args->amount;i++){
-		int x = i / args->trace_size;
-		int y = i % args->trace_size;
 
-		int n_x = x * FIXED_ONE / (args->trace_size / 2) - FIXED_ONE;
-		int n_y = y * FIXED_ONE / (args->trace_size / 2) - FIXED_ONE;
-
-		n_x += (tRnd() % FIXED_ONE) / (args->trace_size / 2);
-		n_y += (tRnd() % FIXED_ONE) / (args->trace_size / 2);
-
-		Vec3 direction = screenRayDirection(tri,n_x,n_y,g_options.fov.x,g_options.fov.y);
-
-		Vec3 color = vec3ShlR(rayLuminanceTrace(args->trace_position,vec3Normalize(direction)),4);
-
-		args->buffer[i] = vec3Mix(args->buffer[i],color,FIXED_ONE / (args->trace_tick + 1));
-	}
-}
-*/
 static void nextSpellDraw(void){
-	drawString(&g_surface,FIXED_ONE - FIXED_ONE / 8 - 0x1A00,FIXED_ONE - FIXED_ONE / 8 + 0x1000,(String)STRING_LITERAL("next spell"),0x800,pixelColorToColor(0xFFFFFF),0x800);
+	drawString(&g_surface,FIXED_ONE - FIXED_ONE / 8 - 0x1A00,FIXED_ONE - FIXED_ONE / 8 + 0x1000,(String)STRING_LITERAL("next spell"),0x1000,COLOR_WHITE);
 
 	int i = 0;
 		
@@ -1088,15 +1149,15 @@ static void nextSpellDraw(void){
 			} break;
 			case SPELL_ADJ_SPEED:{
 				Vec2 string_uv = vec2AddR((Vec2){x,y},(Vec2){-0x600,-0x600});
-				drawString(&g_surface,string_uv.x,string_uv.y,(String)STRING_LITERAL(">>"),0x800,pixelColorToColor(0xFFFFFF),0xC0);
+				drawString(&g_surface,string_uv.x,string_uv.y,(String)STRING_LITERAL(">>"),0x1000,COLOR_WHITE);
 			} break;
 			case SPELL_ADJ_DAMAGE:{
 				Vec2 string_uv = vec2AddR((Vec2){x,y},(Vec2){-0x600,-0x600});
-				drawString(&g_surface,string_uv.x,string_uv.y,(String)STRING_LITERAL("#+"),0x800,pixelColorToColor(0xFFFFFF),0xC0);
+				drawString(&g_surface,string_uv.x,string_uv.y,(String)STRING_LITERAL("#+"),0x1000,COLOR_WHITE);
 			} break;
 			case SPELL_ADJ_DOUBLER:{
 				Vec2 string_uv = vec2AddR((Vec2){x,y},(Vec2){-0x600,-0x600});
-				drawString(&g_surface,string_uv.x,string_uv.y,(String)STRING_LITERAL("x2"),0x800,pixelColorToColor(0xFFFFFF),0xC0);
+				drawString(&g_surface,string_uv.x,string_uv.y,(String)STRING_LITERAL("x2"),0x1000,COLOR_WHITE);
 			} break;
 			default:{
 				drawEllipses(&g_surface,x,y,fixedMulR(FIXED_ONE / 10,g_options.fov.x),fixedMulR(FIXED_ONE / 10,g_options.fov.y),pixelColorToColor(0xFF00FF));
@@ -1111,6 +1172,8 @@ static void nextSpellDraw(void){
 }
 
 void frameRender(void){
+    if(g_options.gl_wireframe)
+		surfaceClear(&g_surface);
 	g_tri[0] = tCos(g_angle.x);
 	g_tri[1] = tSin(g_angle.x);
 	g_tri[2] = tCos(g_angle.y);
@@ -1119,6 +1182,7 @@ void frameRender(void){
 	setViewPlanes();
 
 	lightingOctree();
+
 #if !defined(__wasm__) && !defined(__linux__)
 	if(g_surface.backend == RENDER_BACKEND_GL)
 		antiAliasingEnableGL(false);
@@ -1137,17 +1201,17 @@ void frameRender(void){
 				g_position,
 			};
 
-			((int*)(coordinates + 1))[g_axis_table[k].x] += size * 2;
-			((int*)(coordinates + 2))[g_axis_table[k].x] += size * 2;
-			((int*)(coordinates + 2))[g_axis_table[k].y] += size * 2;
-			((int*)(coordinates + 3))[g_axis_table[k].y] += size * 2;
+		    coordinates[1].a[g_axis_table[k].x] += size * 2;
+		    coordinates[3].a[g_axis_table[k].x] += size * 2;
+		    coordinates[3].a[g_axis_table[k].y] += size * 2;
+		    coordinates[2].a[g_axis_table[k].y] += size * 2;
 
 			Vec3 color[4];
 
 			for(int j = 0;j < countof(coordinates);j++){
-				((int*)(coordinates + j))[g_axis_table[k].x] += i / SKYBOX_POLYGON_SIZE * size * 2 - FIXED_ONE;
-				((int*)(coordinates + j))[g_axis_table[k].y] += i % SKYBOX_POLYGON_SIZE * size * 2 - FIXED_ONE;
-				((int*)(coordinates + j))[k >> 1] += k % 2 ? -FIXED_ONE : FIXED_ONE;
+			    coordinates[j].a[g_axis_table[k].x] += i / SKYBOX_POLYGON_SIZE * size * 2 - FIXED_ONE;
+				coordinates[j].a[g_axis_table[k].y] += i % SKYBOX_POLYGON_SIZE * size * 2 - FIXED_ONE;
+				coordinates[j].a[k >> 1] += k % 2 ? -FIXED_ONE : FIXED_ONE;
 			}
 
 			if(
@@ -1157,13 +1221,12 @@ void frameRender(void){
 				!pointInScreenSpace(coordinates[3])
 			)
 				continue;
-
+            
 			for(int j = 0;j < countof(coordinates);j += 1){
 				color[j] = vec3ShlR(skyboxSample(vec3Direction(g_position,coordinates[j])),4);
 				vec3MulS(color + j,g_exposure);
-				coordinates[j] = pointToScreenRenderer(coordinates[j],g_tri,g_position,g_options.fov);
 			}
-
+            
 			Vec2 texture_coordinates[] = {
 				{x,y},
 				{x + size,y},
@@ -1178,8 +1241,6 @@ void frameRender(void){
 		antiAliasingEnableGL(true);
 #endif
 	entityDynamicLighting();
-	if(g_render_lines)
-		surfaceClear(&g_surface);
 
 	entityVoxelInsert();
 	
@@ -1204,112 +1265,36 @@ void frameRender(void){
 	}
 	else{
 		octreeDraw(&g_voxel);
-		spanDrawList();
-		/*
-#define SIZE 512
-		static int c[SIZE * SIZE * 2];
-		openglDownloadFramebuffer((Texture){.pixel_data = c,.size = SIZE});
-		Vec2 crd[] = {{-FIXED_ONE,-FIXED_ONE},{-FIXED_ONE,FIXED_ONE},{FIXED_ONE,FIXED_ONE},{FIXED_ONE,-FIXED_ONE}};
-		for(int i = 0;i < SIZE * SIZE;i++)
-			c[i] &= ~0xFF000000;
-		generateMipmaps(&(Texture){.pixel_data = c,.size = SIZE});
-		markovTextureRemix((Texture){.pixel_data = c,.size = SIZE},2);
-		drawTexturePolygon(g_surface,&(Texture){.pixel_data = c,.size = SIZE},g_texture_coordinates_fill,crd,vec3Single(FIXED_ONE << 4),4);
-		*/
+        if(g_surface.backend == RENDER_BACKEND_SOFTWARE)
+            spanDrawList();
 	}
 
-	//raytracing
-	/*
-#define TRACE_SIZE 512
-	static Vec3 buffer[TRACE_SIZE * TRACE_SIZE];
-	static int n_trace_tick = 0;
-	static Vec2 trace_angle;
-	static Vec3 trace_position;
-
-	void* threads[16];
-	RayTracePixelsArg thread_arguments[countof(threads)];
-	int n_thread = tClamp(g_n_threads - 1,1,countof(threads));
-
-	for(int i = 0;i < n_thread;i++){
-		thread_arguments[i] = (RayTracePixelsArg){
-			.buffer = buffer,
-			.amount = TRACE_SIZE * TRACE_SIZE / n_thread,
-			.offset = TRACE_SIZE * TRACE_SIZE / n_thread * i,
-			.trace_size = TRACE_SIZE,
-			.trace_tick = n_trace_tick,
-			.trace_angle = trace_angle,
-			.trace_position = trace_position,
-		};
-		threads[i] = CreateThread(0,0,rayTracePixels,thread_arguments + i,0,0);
-	}
-
-	WaitForMultipleObjects(n_thread,threads,true,INFINITE);
-
-	for(int i = 0;i < n_thread;i++)
-		CloseHandle(threads[i]);
-	static Texture render_texture;
-	textureDestroy(render_texture);
-	render_texture = textureCreate(TRACE_SIZE);
-
-	for(int i = 0;i < TRACE_SIZE * TRACE_SIZE;i++)
-		render_texture.pixel_data[i] = colorToPixelColor(buffer[i]);
-
-	Vec2 screen_coordinates[] = {
-		{FIXED_ONE,FIXED_ONE},
-		{FIXED_ONE,-FIXED_ONE},
-		{-FIXED_ONE,-FIXED_ONE},
-		{-FIXED_ONE,FIXED_ONE},
-	};
-
-	drawTexturePolygon(g_surface,&render_texture,g_texture_coordinates_fill,screen_coordinates,vec3Single(FIXED_ONE << 4),4);
-	
-	n_trace_tick += 1;
-	if(keyDown('W') || keyDown('D') || keyDown('A') || keyDown('S')){
-		n_trace_tick = 0;
-		trace_angle = g_angle;
-		trace_position = g_position;
-	}
-	*/
 	voxelEntityRemove();
 
-	int brightness_acc = 0;
+    if(g_options.lighting_engine){
+        int brightness_acc = 0;
 
-	TraverseInit init = initTraverse(g_position);
+        TraverseInit init = initTraverse(g_position);
 
-	int exposure_samle_row_size = 32;
+        int exposure_samle_row_size = 32;
 
-	for(int i = 0;i < exposure_samle_row_size * exposure_samle_row_size;i++){
-		int x = i / exposure_samle_row_size;
-		int y = i % exposure_samle_row_size;
+        for(int i = 0;i < exposure_samle_row_size * exposure_samle_row_size;i++){
+            int x = i / exposure_samle_row_size;
+            int y = i % exposure_samle_row_size;
 
-		int n_x = x * FIXED_ONE / (exposure_samle_row_size / 2) - FIXED_ONE;
-		int n_y = y * FIXED_ONE / (exposure_samle_row_size / 2) - FIXED_ONE;
+            int n_x = x * FIXED_ONE / (exposure_samle_row_size / 2) - FIXED_ONE;
+            int n_y = y * FIXED_ONE / (exposure_samle_row_size / 2) - FIXED_ONE;
 
-		Vec3 luminance = rayLuminanceInit(init,g_position,screenRayDirection(g_tri,n_x,n_y,g_options.fov.x,g_options.fov.y));
+            Vec3 luminance = rayLuminanceInit(init,g_position,screenRayDirection(g_tri,n_x,n_y,g_options.fov.x,g_options.fov.y));
 
-		brightness_acc += tMax(luminance.x,tMax(luminance.y,luminance.z)) >> 4;
-	}
+            brightness_acc += tMax(luminance.x,tMax(luminance.y,luminance.z)) >> 4;
+        }
 
-	if(brightness_acc){
-		g_exposure = tMix(g_exposure,fixedDivR(FIXED_ONE,brightness_acc >> 4),FIXED_ONE / 0x100);
-		g_exposure = tMix(g_exposure,FIXED_ONE,FIXED_ONE / 0x40);
-	}
-
-	/*
-	for(int i = 0;i < 256 * 256;i++){
-		int x = i / 256;
-		int y = i % 256;
-
-		int n_x = x * FIXED_ONE / 128 - FIXED_ONE;
-		int n_y = y * FIXED_ONE / 128 - FIXED_ONE;
-
-		int voxel_intersect = treeRayTraceIntersectCountAndInit(g_position,screenRayDirection(g_tri,n_x,n_y,g_options.fov.x,g_options.fov.y));
-
-		Vec3 color = {0,0,voxel_intersect << 14};
-
-		drawRectangle(g_surface,n_x / 2 - FIXED_ONE + FIXED_ONE / 2,n_y / 2 - FIXED_ONE + FIXED_ONE / 2,FIXED_ONE / 64,FIXED_ONE / 64,color);
-	}
-	*/
+        if(brightness_acc){
+            g_exposure = tMix(g_exposure,fixedDivR(FIXED_ONE,brightness_acc >> 4),FIXED_ONE / 0x100);
+            g_exposure = tMix(g_exposure,FIXED_ONE,FIXED_ONE / 0x40);
+        }
+    }
 
 	if(g_luminance_overlay){
 		for(int i = 0;i < 64 * 64;i++){
@@ -1326,13 +1311,13 @@ void frameRender(void){
 	}
 	if(g_options.editor){
 		for(Voxel* voxel = g_voxel_link_list;voxel;voxel = voxel->next_voxel_link){
-			if(!voxel->linked)
-				continue;
-			Vec3 p1 = pointToScreen(vec3AddRS(voxelWorldPos(voxel),depthToSize(voxel->depth) / 2));
-			Vec3 p2 = pointToScreen(vec3AddRS(voxelWorldPos(voxel->linked),depthToSize(voxel->linked->depth) / 2));
-			if(p1.z <= 0 || p2.z <= 0)
-				continue;
-			drawLine(&g_surface,p1.x,p1.y,p2.x,p2.y,pixelColorToColor(0xFF00FF));
+            for(int i = 0;i < voxel->n_link;i++){
+                Vec3 p1 = pointToScreen(vec3AddRS(voxelWorldPos(voxel),depthToSize(voxel->depth) / 2));
+                Vec3 p2 = pointToScreen(vec3AddRS(voxelWorldPos(voxel->links[i]),depthToSize(voxel->links[i]->depth) / 2));
+                if(p1.z <= 0 || p2.z <= 0)
+                    continue;
+                drawLine(&g_surface,p1.x,p1.y,p2.x,p2.y,pixelColorToColor(0xFF00FF));    
+            }
 		}
 		entityDrawHitbox();
 	}
@@ -1344,18 +1329,18 @@ void frameRender(void){
 	if(g_equipped_staff){
 		int progress = (fixedDivR(g_mana,g_equipped.mana_max)) / 4;
 		
-		drawRectangle(&g_surface,-FIXED_ONE + FIXED_ONE / 8,0xA000,FIXED_ONE / 24,progress,pixelColorToColor(0xA060FF));
-		drawFrame(&g_surface,-FIXED_ONE + FIXED_ONE / 8,0xA000,FIXED_ONE / 24,FIXED_ONE / 3,pixelColorToColor(0x808080),0x100);
+		drawRectangle(&g_surface,-FIXED_ONE + FIXED_ONE / 8,-0xF000,FIXED_ONE / 24,progress,pixelColorToColor(0xA060FF));
+		drawFrame(&g_surface,-FIXED_ONE + FIXED_ONE / 8,-0xF000,FIXED_ONE / 24,FIXED_ONE / 3,pixelColorToColor(0x808080),0x100);
 
-		drawString(&g_surface,-FIXED_ONE + FIXED_ONE / 8 + 0x200,0xA300,(String)STRING_LITERAL("mana"),0x800,pixelColorToColor(0xFFFFFF),0xF0);
+		drawString(&g_surface,-FIXED_ONE + FIXED_ONE / 8 + 0x200,-0xA300,(String)STRING_LITERAL("mana"),0x800,COLOR_WHITE);
 	}
 
 	int progress = (fixedDivR(g_health,FIXED_ONE)) / 3;
 		
-	drawRectangle(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,0xA000,FIXED_ONE / 24,progress,pixelColorToColor(0xFF3030));
-	drawFrame(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,0xA000,FIXED_ONE / 24,FIXED_ONE / 3,pixelColorToColor(0x808080),0x100);
+	drawRectangle(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,-0xF000,FIXED_ONE / 24,progress,pixelColorToColor(0xFF3030));
+	drawFrame(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,-0xF000,FIXED_ONE / 24,FIXED_ONE / 3,pixelColorToColor(0x808080),0x100);
 
-	drawString(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,0xA300,(String)STRING_LITERAL("health"),0xB00,pixelColorToColor(0x401010),0xF0);
+	drawString(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,-0xA300,(String)STRING_LITERAL("health"),0xA00,pixelColorToColor(0x401010));
     
 	if(button_link){
 		Vec3 p1 = (Vec3){0};
@@ -1387,11 +1372,13 @@ void frameRender(void){
 		drawRectangle(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,-(progress) + FIXED_ONE / 4,FIXED_ONE / 16,progress,pixelColorToColor(0x3030FF));
 		drawFrame(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,-FIXED_ONE / 4,FIXED_ONE / 16,FIXED_ONE / 2,pixelColorToColor(0x808080),0x100);
 
-		drawString(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,FIXED_ONE / 8,(String)STRING_LITERAL("boss"),0x1000,pixelColorToColor(0xFFFFFF),0xC0);
+		drawString(&g_surface,-FIXED_ONE + FIXED_ONE / 8 - 0xA00,FIXED_ONE / 8,(String)STRING_LITERAL("boss"),0x1000,COLOR_WHITE);
 	}
 
 	drawLine(&g_surface,-0x200,0,0x200,0,pixelColorToColor(0x00FF00));
 	drawLine(&g_surface,0,-0x200,0,0x200,pixelColorToColor(0x00FF00));
+    
+    memoryArenaFree(&g_arena_frame);
 }
 
 

@@ -2,7 +2,6 @@
 
 long systemOpen(char* filename,int flags,int mode){
     long ret;
-    
     asm volatile(
         "syscall"
         : "=a" (ret)
@@ -62,7 +61,7 @@ void* systemMemoryMap(void* address,size_t length,int protection,int flags,int f
 
     register long r10 __asm__("r10") = (long)flags;
     register long r8  __asm__("r8")  = (long)fd;
-    register long r9  __asm__("r8")  = (long)offset;
+    register long r9  __asm__("r9")  = (long)offset;
     
     asm volatile(
         "syscall"
@@ -91,6 +90,19 @@ long systemMemoryUnmap(void* address,size_t length){
           "S"(length)
         : "rcx","r11","memory"
     );
+    return ret;
+}
+
+long systemSignalAction(SignalType signal,SignalAction* action,SignalAction* old_action){
+    long ret;
+    register long r10 __asm__("r10") = (long)sizeof(sigset__t);
+    asm volatile(
+        "syscall"
+        : "=a" (ret)
+        : "a"(0x0D),"D"(signal),"S"(action),"d"(old_action),"r"(r10)
+        : "rcx", "r11", "memory"
+    );
+    return ret;
 }
 
 long systemGetdents(unsigned file_descriptor,char* buffer,int buffer_length){

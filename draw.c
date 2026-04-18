@@ -36,17 +36,6 @@ static bool (*createSurface[])(DrawSurface*) = {
 #endif
 };
 
-int transformDraw(int size,int v){
-    v *= size / 2;
-    v >>= FIXED_PRECISION;
-    v += size / 2;
-    return v;
-}
-
-int scaleDraw(int size,int v){
-    return v * (size / 2) >> FIXED_PRECISION;
-}
-
 void surfaceInit(DrawSurface* surface){
 	if(!createSurface[surface->backend])
 	    return;
@@ -64,9 +53,7 @@ void surfaceDestroy(DrawSurface* surface){
 
 void surfaceClear(DrawSurface* surface){
     void (*vtable[])(DrawSurface*) = {
-#if !defined(__wasm__) && !defined(__linux__)
         [RENDER_BACKEND_GL] = surfaceClearGL,
-#endif
         [RENDER_BACKEND_SOFTWARE] = softSurfaceClear,
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
@@ -80,9 +67,6 @@ void surfaceChangeSize(DrawSurface* surface,int width,int height){
     void (*vtable[])(DrawSurface*,int,int) = {
         [RENDER_BACKEND_SOFTWARE] = softSurfaceSizeChange,
         [RENDER_BACKEND_GL] = changeSurfaceSizeGL,
-#if !defined(__wasm__) && !defined(__linux__)
-        
-#endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
@@ -142,9 +126,6 @@ void drawSegment(DrawSurface* surface,int x1,int y1,int x2,int y2,int thickness,
 void drawSegment3d(DrawSurface* surface,Vec3* coordinats,int thickness,Vec3 color){
 	void (*vtable[])(DrawSurface*,Vec3*,int,Vec3) = {
         [RENDER_BACKEND_GL] = drawSegment3dGL,
-#if !defined(__wasm__) && !defined(__linux__)
-        
-#endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
@@ -155,9 +136,6 @@ void drawPolygon(DrawSurface* surface,Vec2* coordinats,int n_point,Vec3 color){
     void (*vtable[])(DrawSurface*,Vec2*,int,Vec3) = {
 		[RENDER_BACKEND_SOFTWARE] = drawPolygonSoft,
         [RENDER_BACKEND_GL] = drawPolygonGL,
-#if !defined(__wasm__) && !defined(__linux__)
-        
-#endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
@@ -168,9 +146,6 @@ void drawPolygon3d(DrawSurface* surface,Vec3* coordinats,Vec3 color){
     void (*vtable[])(DrawSurface*,Vec3*,Vec3) = {
 		[RENDER_BACKEND_SOFTWARE] = spanQuad3dAdd,
         [RENDER_BACKEND_GL] = drawPolygon3dGL,
-#if !defined(__wasm__) && !defined(__linux__)
-        
-#endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
@@ -181,35 +156,26 @@ void drawColoredPolygon(DrawSurface* surface,Vec2* coordinats,Vec3* color,int n_
     void (*vtable[])(DrawSurface*,Vec2*,Vec3*,int) = {
 		[RENDER_BACKEND_SOFTWARE] = drawColoredPolygonSoft,
         [RENDER_BACKEND_GL] = drawColoredPolygonGL,
-#if !defined(__wasm__) && !defined(__linux__)
-        
-#endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
 	vtable[surface->backend](surface,coordinats,color,n_point);
 }
 
-void drawColoredPolygon3d(DrawSurface* surface,Vec3* coordinats,Vec3* color){
-    void (*vtable[])(DrawSurface*,Vec3*,Vec3*) = {
+void drawColoredPolygon3d(DrawSurface* surface,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
+    void (*vtable[])(DrawSurface*,Vec3*,Vec3*,LightmapTree*) = {
 		[RENDER_BACKEND_SOFTWARE] = spanQuad3dLightingAdd,
         [RENDER_BACKEND_GL] = drawColoredPolygon3dGL,
-#if !defined(__wasm__) && !defined(__linux__)
-        
-#endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface->backend](surface,coordinats,color);
+	vtable[surface->backend](surface,coordinats,color,lightmap);
 }
 
 void drawTexturePolygon(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3 color,int n_point){
     void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec2*,Vec3,int) = {
 		[RENDER_BACKEND_SOFTWARE] = drawTexturePolygonSoft,
         [RENDER_BACKEND_GL] = drawTexturePolygonGL,
-#if !defined(__wasm__) && !defined(__linux__)
-        
-#endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
@@ -218,11 +184,8 @@ void drawTexturePolygon(DrawSurface* surface,Texture* texture,Vec2* texture_coor
 
 void drawTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point){
     void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec3*,Vec3,int) = {
-		[RENDER_BACKEND_SOFTWARE] = drawTexturePolygon3dSoft,
+        [RENDER_BACKEND_SOFTWARE] = spanQuad3dTextureAdd,
         [RENDER_BACKEND_GL] = drawTexturePolygon3dGL,
-#if !defined(__wasm__) && !defined(__linux__)
-       
-#endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
@@ -233,31 +196,27 @@ void drawColoredTexturePolygon(DrawSurface* surface,Texture* texture,Vec2* textu
     void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec2*,Vec3*,int) = {
 		[RENDER_BACKEND_SOFTWARE] = drawColoredTexturePolygonSoft,
         [RENDER_BACKEND_GL] = drawColoredTexturePolygonGL,
-#if !defined(__wasm__) && !defined(__linux__)
-        
-#endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
 	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color,n_point);
 }
 
-void drawColoredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color){
-    void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec3*,Vec3*) = {
+void drawColoredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
+    void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec3*,Vec3*,LightmapTree*) = {
 		[RENDER_BACKEND_SOFTWARE] = spanQuad3dLightingTextureAdd,
         [RENDER_BACKEND_GL] = drawColoredTexturePolygon3dGL,
-#if !defined(__wasm__) && !defined(__linux__)
-       
-#endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color);
+	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color,lightmap);
 }
 
 void drawSkyboxPolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color){
     void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec3*,Vec3*) = {
+#if 0
 		[RENDER_BACKEND_SOFTWARE] = spanQuad3dLightingTextureAdd,
+#endif
         [RENDER_BACKEND_GL] = drawColoredTextureSkyboxPolygon3dGL,
 #if !defined(__wasm__) && !defined(__linux__)
         
@@ -288,9 +247,6 @@ void drawCircle(DrawSurface* surface,int x,int y,int radius,Vec3 color){
 void drawCircle3d(DrawSurface* surface,Vec3* coordinates,Vec3 color){
 	void (*vtable[])(DrawSurface*,Vec3*,Vec3) = {
         [RENDER_BACKEND_GL] = drawCircle3dGL,
-#if !defined(__wasm__) && !defined(__linux__)
-        
-#endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
@@ -312,7 +268,6 @@ void drawRectangle(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 c
         [RENDER_BACKEND_GL] = drawRectangleGL,
 #if !defined(__wasm__) && !defined(__linux__)
 	    [RENDER_BACKEND_GDI] = drawRectangleGDI,
-        
 #endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
@@ -320,7 +275,7 @@ void drawRectangle(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 c
 	vtable[surface->backend](surface,x,y,size_x,size_y,color);
 }
 
-void drawString(DrawSurface* surface,int x,int y,String string,int scale,Vec3 color,int thickness){
+void drawStringEx(DrawSurface* surface,int x,int y,String string,int scale,Vec3 color,int thickness){
     int down_offset = 0;
     int offset = 0;
     for(int j = 0;j < string.size;j++){
@@ -335,18 +290,18 @@ void drawString(DrawSurface* surface,int x,int y,String string,int scale,Vec3 co
                 int offset_transform = fixedMulR(offset,scale);
                 int offset_transform_x = fixedMulR(down_offset,scale);
                 int coord_transform[] = {
-                    (coords[0] * scale >> 8) + x + offset_transform_x,(coords[1] * scale >> 8) + y + offset_transform,
-                    (coords[2] * scale >> 8) + x + offset_transform_x,(coords[3] * scale >> 8) + y + offset_transform
+                    (coords[0] * scale >> 8) + x + offset_transform_x,(-coords[1] * scale >> 8) + y + offset_transform,
+                    (coords[2] * scale >> 8) + x + offset_transform_x,(-coords[3] * scale >> 8) + y + offset_transform
                 };
-                drawSegment(surface,coord_transform[0],coord_transform[1],coord_transform[2],coord_transform[3],thickness,color);
+                drawSegment(surface,coord_transform[0],coord_transform[1],coord_transform[2],coord_transform[3],fixedMulR(thickness,scale),color);
             }
         }
-        offset += g_vector_font[string_char].width;
+        offset -= g_vector_font[string_char].width;
     }
 }
 
 void drawNumber(DrawSurface* surface,int x,int y,int number,int scale){
 	char buffer[0x10];
     String string = intToString(buffer,number);
-    drawString(surface,x,y,string,scale,pixelColorToColor(0xFFFFFF),0xC0);
+    drawStringEx(surface,x,y,string,scale,pixelColorToColor(0xFFFFFF),0x2000);
 }

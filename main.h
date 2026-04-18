@@ -18,10 +18,13 @@ typedef enum{
     KEY_LMENU,KEY_SPACE,KEY_CAPITAL,
     KEY_F1,KEY_F2,KEY_F3,KEY_F4,KEY_F5,KEY_F6,KEY_F7,KEY_F8,KEY_F9,KEY_F10,
     KEY_NUMLOCK,KEY_SCROLL,KEY_HOME,KEY_UP,KEY_PRIOR,KEY_SUBTRACT,
-    KEY_LEFT,KEY_CLEAR,KEY_RIGHT,KEY_ADD,KEY_END,KEY_DOWN,KEY_NEXT,
+    KEY_LEFT_OLD,KEY_CLEAR,KEY_RIGHT_OLD,KEY_ADD,KEY_END,KEY_DOWN,KEY_NEXT,
     KEY_INSERT,KEY_DELETE,KEY_SNAPSHOT,
     KEY_OEM_10 = (0x56 + 8),KEY_F11,KEY_F12,
 } KeyType;
+
+#define KEY_LEFT 113
+#define KEY_RIGHT 114
 
 #define KEY_LBUTTON 191
 #define KEY_RBUTTON 192
@@ -79,7 +82,7 @@ enum{
 
 #define KEY_OEM_1 0xBA	
 #define KEY_OEM_2 0xBF
-#define KEY_OEM_3    0xC0
+#define KEY_OEM_3 0xC0
 #define KEY_OEM_4 0xDB
 #define KEY_OEM_5 0xDC
 #define KEY_OEM_6 0xDD
@@ -94,8 +97,13 @@ enum{
 #include "vec3.h"
 #include "octree.h"
 #include "geometry.h"
-#include "inventory.h"
+#include "staff.h"
 #include "draw.h"
+
+structure(FileContent){
+    size_t size;
+    char* content;
+};
 
 structure(VoxelPointed){
 	Voxel* voxel;
@@ -110,6 +118,9 @@ structure(GameOptions){
 	RenderBackend render_backend;
     int multi_sample;
     bool multi_thread;
+    bool lighting_engine;
+    bool smooth_lighting;
+    bool gl_wireframe;
 };
 
 void applicationQuit(void);
@@ -150,7 +161,11 @@ void mainInit(void);
 void frameRender(void);
 void tickRun(void);
 
+void worldDestroy(void);
 void worldDefaultGenerate(void);
+bool worldExist(String name);
+bool worldLoad(String name);
+void worldSave(String name);
 
 void voxelTickListAdd(Voxel* voxel);
 
@@ -164,6 +179,8 @@ static Vec3 pixelColorToColor(int color){
 	return (Vec3){(color >> 0 & 0xFF) << 12,(color >> 8 & 0xFF) << 12,(color >> 16 & 0xFF) << 12};
 }
 
+#define COLOR_WHITE (Vec3){1 << 14,1 << 14,1 << 14}
+
 extern char g_voxel_lighting_tree[];
 
 extern bool g_test_bool;
@@ -175,7 +192,6 @@ extern int g_tri[];
 extern Vec2 g_angle;
 extern Vec3 g_velocity;
 extern int g_health;
-extern bool g_smooth_lighting;
 extern bool g_luminance_overlay;
 extern uint8 g_key[];
 extern Vec2 g_cursor;
