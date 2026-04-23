@@ -35,7 +35,7 @@ void voxelLinkSignal(Voxel* voxel){
 		else{
 			door->animation = FIXED_ONE - door->animation;
 		}
-    skip:
+    skip:;
     }
 }
 
@@ -44,16 +44,56 @@ static void voxelButtonExecute(VoxelGuiElement* self){
 }
 
 static VoxelGuiElement voxel_menu_gui[] = {
-	{.type = VOXEL_GUI_BUTTON,.button.on_click = toggleSmoothLighting,.position = {0x1000,FIXED_ONE - 0x2000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2800,FIXED_ONE - 0x1400},.string.string = STRING_LITERAL("toggle smooth lighting")},
-	{.type = VOXEL_GUI_BUTTON,.button.on_click = changeRenderBackend,.position = {0x1000,FIXED_ONE - 0x4000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2800,FIXED_ONE - 0x3400},.string.string = STRING_LITERAL("render backend")},
-	{.type = VOXEL_GUI_BUTTON,.button.on_click = antiAliasingLoadMenu,.position = {0x1000,FIXED_ONE - 0x6000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2800,FIXED_ONE - 0x5400},.string.string = STRING_LITERAL("anti aliasing")},
-	{.type = VOXEL_GUI_BUTTON,.button.on_click = toggleVsync,.position = {0x1000,FIXED_ONE - 0x8000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2800,FIXED_ONE - 0x7400},.string.string = STRING_LITERAL("toggle vsync")},
-	{.type = VOXEL_GUI_BUTTON,.button.on_click = debugOptions,.position = {0x1000,FIXED_ONE - 0xA000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2800,FIXED_ONE - 0x9400},.string.string = STRING_LITERAL("debug options")},
+	{
+        .type = VOXEL_GUI_BUTTON,
+        .button.on_click = toggleSmoothLighting,
+        .position = {0x1000,FIXED_ONE - 0x2000}
+    },
+	{
+        .type = VOXEL_GUI_STRING,
+        .position = {0x2800,FIXED_ONE - 0x1400},
+        .string.string = STRING_LITERAL("toggle smooth lighting")
+    },
+	{
+        .type = VOXEL_GUI_BUTTON,
+        .button.on_click = changeRenderBackend,
+        .position = {0x1000,FIXED_ONE - 0x4000}
+    },
+	{
+        .type = VOXEL_GUI_STRING,
+        .position = {0x2800,FIXED_ONE - 0x3400},
+        .string.string = STRING_LITERAL("render backend")
+    },
+	{
+        .type = VOXEL_GUI_BUTTON,
+        .button.on_click = antiAliasingLoadMenu,
+        .position = {0x1000,FIXED_ONE - 0x6000}
+    },
+	{
+        .type = VOXEL_GUI_STRING,
+        .position = {0x2800,FIXED_ONE - 0x5400},
+        .string.string = STRING_LITERAL("anti aliasing")
+    },
+	{
+        .type = VOXEL_GUI_BUTTON,
+        .button.on_click = toggleVsync,
+        .position = {0x1000,FIXED_ONE - 0x8000}
+    },
+	{
+        .type = VOXEL_GUI_STRING,
+        .position = {0x2800,FIXED_ONE - 0x7400},
+        .string.string = STRING_LITERAL("toggle vsync")
+    },
+	{
+        .type = VOXEL_GUI_BUTTON,
+        .button.on_click = debugOptions,
+        .position = {0x1000,FIXED_ONE - 0xA000}
+    },
+	{
+        .type = VOXEL_GUI_STRING,.
+        position = {0x2800,FIXED_ONE - 0x9400},
+        .string.string = STRING_LITERAL("debug options")
+    },
 };
 
 static VoxelGuiElement voxel_button_gui[] = {
@@ -61,7 +101,12 @@ static VoxelGuiElement voxel_button_gui[] = {
 };
 
 static VoxelGuiElement staff_inspector_gui[] = {
-	{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x1C00},.string.size = 0x1000,.string.string = STRING_LITERAL("staff editor")},
+	{
+        .type = VOXEL_GUI_STRING,
+        .position = {0x1000,FIXED_ONE - 0x1C00},
+        .string.size = 0x1000,
+        .string.string = STRING_LITERAL("staff editor")
+    },
 };
 
 #define FRAME_SIZE 0x400
@@ -91,27 +136,29 @@ static VoxelGuiElement voxel_string_gui[] = {
     },
 };
 
+#define CONSOLE_FRAME_SIZE 0x200
+
 static VoxelGuiElement voxel_console_gui[] = {
     {
         .type = VOXEL_GUI_RECTANGLE,
-        .rectangle.size = {FIXED_ONE,FRAME_SIZE},
+        .rectangle.size = {FIXED_ONE,CONSOLE_FRAME_SIZE},
         .rectangle.color = 0x20F020
     },
     {
         .type = VOXEL_GUI_RECTANGLE,
-        .rectangle.size = {FRAME_SIZE,0x1800},
+        .rectangle.size = {CONSOLE_FRAME_SIZE,0x1000},
         .rectangle.color = 0x20F020
     },
     {
         .type = VOXEL_GUI_RECTANGLE,
-        .position = {0,0x1800},
-        .rectangle.size = {FIXED_ONE,FRAME_SIZE},
+        .position = {0,0x1000},
+        .rectangle.size = {FIXED_ONE,CONSOLE_FRAME_SIZE},
         .rectangle.color = 0x20F020
     },
     {
         .type = VOXEL_GUI_RECTANGLE,
-        .position = {FIXED_ONE - FRAME_SIZE},
-        .rectangle.size = {FRAME_SIZE,0x1800},
+        .position = {FIXED_ONE - CONSOLE_FRAME_SIZE},
+        .rectangle.size = {CONSOLE_FRAME_SIZE,0x1000},
         .rectangle.color = 0x20F020
     },
 };
@@ -191,10 +238,11 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 	},
 	[VOXEL_PLANKS] = {
 		.texture = g_textures + TEXTURE_PLANKS,
-		.texture_size = FIXED_ONE * 4,
+		.texture_size = FIXED_ONE,
 	},
 	[VOXEL_MIRROR] = {
 		.color = {0xF000,0xF000,0xF000},
+        .rd_trace = true,
 	},
 	[VOXEL_METALLIC] = {
 		.color = {0xF000,0xF000,0xF000},
@@ -265,6 +313,7 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 	},
     [VOXEL_WATER] = {
         .translucent = true,
+        .rd_trace = true,
     },
     [VOXEL_STRING] = {
         .color = {0x1F00,0x1F00,0x1F00},
@@ -272,6 +321,10 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
     },
     [VOXEL_CONSOLE] = {
         GUI_ADD(voxel_console_gui),
+    },
+    [VOXEL_GLASS] = {
+        .translucent = true,
+        .rd_trace = true,
     },
 };
 
@@ -377,12 +430,12 @@ void octreeDeserializeLink(VoxelSerializedParent* voxel_serial_array,int index,i
 		VoxelSerializedButton* voxel_serial_button = (void*)voxel_serial;
 		Voxel* button = voxel_array[*index_i];
         if(voxel_serial_button->n_link){
-            button->links = tMalloc(sizeof(*button->links) * LINK_MAX);
+            button->links = tMallocZero(sizeof(*button->links) * LINK_MAX);
             button->n_link = voxel_serial_button->n_link;
             for(int i = voxel_serial_button->n_link;i--;){
                 button->links[i] = voxel_array[voxel_serial_button->links[i]];
                 if(!button->links[i]->n_link)
-                    button->links[i]->links = tMalloc(sizeof(*button->links) * LINK_MAX);
+                    button->links[i]->links = tMallocZero(sizeof(*button->links) * LINK_MAX);
                 button->links[i]->links[button->links[i]->n_link++] = button;
             }
         
@@ -443,7 +496,7 @@ int voxelMemoryCountRecursive(Voxel* voxel){
 Voxel* voxelGet(Vec3 position,int depth){
 	Voxel* voxel = &g_voxel;
 	for(int i = depth - 1;i >= 0;i--){
-		Vec3 sub_coord = vec3ShrR(position,i);
+		Vec3 sub_coord = vec3Shr(position,i);
 		sub_coord = (Vec3){sub_coord.x & 1,sub_coord.y & 1,sub_coord.z & 1};
 		voxel = voxel->child[sub_coord.z][sub_coord.y][sub_coord.x];
 		if(voxel->type != VOXEL_PARENT)
@@ -496,7 +549,7 @@ bool squareVisible(Vec3 position,int depth,int side,VoxelType voxel_type){
 Vec3 rayHitPosition(Voxel* voxel,Vec3 ray_position,Vec3 ray_direction,int side){
 	Plane plane = getPlane(voxel,ray_direction,side);
 	int distance = rayPlaneIntersection(ray_position,ray_direction,plane) - (((int*)&ray_direction)[side] < 0 ? 0x10 : -0x10);
-	return vec3AddR(ray_position,vec3MulRS(ray_direction,distance));
+	return vec3Add(ray_position,vec3MulS(ray_direction,distance));
 }
 
 Vec3 posWorldPos(Vec3 position,int depth){
@@ -516,7 +569,7 @@ Voxel* voxelPositionGet(Vec3 pos){
 			break;
 		}
 		voxel = child_ptr;
-		vec3Shl(&pos,1);
+		pos = vec3Shl(pos,1);
 	}
 	return voxel;
 }
@@ -531,7 +584,7 @@ TraverseInit initTraverse(Vec3 pos){
 		if(child_ptr->type != VOXEL_PARENT)
 			break;
 		voxel = child_ptr;
-		vec3Shl(&pos,1);
+		pos = vec3Shl(pos,1);
 	}
 	pos.x = fixedFract(pos.x / 2) * 2;
 	pos.y = fixedFract(pos.y / 2) * 2;
@@ -569,10 +622,8 @@ Voxel* treeRayTrace(Voxel* voxel,Vec3 position,Vec3 direction,int* side){
 			if(!voxel->depth)
 				return 0;
 
- 			ray.pos.x >>= 1;
-			ray.pos.y >>= 1;
-			ray.pos.z >>= 1;
-
+            ray.pos = vec3Shr(ray.pos,1);
+            
 			ray.pos.x += (voxel->position_x & 1) * FIXED_ONE;
 			ray.pos.y += (voxel->position_y & 1) * FIXED_ONE;
 			ray.pos.z += (voxel->position_z & 1) * FIXED_ONE;
@@ -582,7 +633,7 @@ Voxel* treeRayTrace(Voxel* voxel,Vec3 position,Vec3 direction,int* side){
 			iterateRay3(&ray);
 			continue;
 		}
-	sh:
+	sh:;
 		int index = ray.square_pos.z * 4 + ray.square_pos.y * 2 + ray.square_pos.x;
 		Voxel* child = voxel->child_s[index];
 		if(child->type == VOXEL_AIR){
@@ -619,9 +670,7 @@ static int treeRayTraceIntersectCount(Voxel* voxel,Vec3 position,Vec3 direction)
 			if(!voxel->depth)
 				return count;
 
- 			ray.pos.x >>= 1;
-			ray.pos.y >>= 1;
-			ray.pos.z >>= 1;
+ 		    ray.pos = vec3Shr(ray.pos,1);
 
 			ray.pos.x += (voxel->position_x & 1) * FIXED_ONE;
 			ray.pos.y += (voxel->position_y & 1) * FIXED_ONE;
@@ -644,11 +693,11 @@ static int treeRayTraceIntersectCount(Voxel* voxel,Vec3 position,Vec3 direction)
 			int x = (int[]){VEC3_Y,VEC3_X,VEC3_X}[ray.square_side];
 			int y = (int[]){VEC3_Z,VEC3_Z,VEC3_Y}[ray.square_side];
 
-			int side_delta = ((int*)&ray.side)[ray.square_side] - ((int*)&ray.delta)[ray.square_side];
+			int side_delta = ((int*)&ray.side)[ray.square_side] - ray.delta.a[ray.square_side];
 
-			((int*)&ray.pos)[x] = fixedFract(((int*)&ray.pos)[x] + fixedMulR(side_delta,((int*)&ray.dir)[x])) << 1;
-			((int*)&ray.pos)[y] = fixedFract(((int*)&ray.pos)[y] + fixedMulR(side_delta,((int*)&ray.dir)[y])) << 1;
-			((int*)&ray.pos)[ray.square_side] = ((int*)&ray.dir)[ray.square_side] < 0 ? FIXED_ONE * 2 - 1 : 0;
+			ray.pos.a[x] = fixedFract(ray.pos.a[x] + fixedMulR(side_delta,ray.dir.a[x])) << 1;
+			ray.pos.a[y] = fixedFract(ray.pos.a[y] + fixedMulR(side_delta,ray.dir.a[y])) << 1;
+			ray.pos.a[ray.square_side] = ray.dir.a[ray.square_side] < 0 ? FIXED_ONE * 2 - 1 : 0;
 
 			voxel = child;
 			recalculateRay3(&ray);
@@ -680,8 +729,7 @@ void voxelFreeRecursive(Voxel* voxel){
         for(Voxel* v = voxel;v;v = v->parent)
             v->emission -= emission;
     }
-    
-	tFree(voxel);
+	allocatorFreeListFree(&g_allocator_world,voxel);
 }
 
 void voxelSet(Voxel* voxel,Vec3 pos,int depth,VoxelType type){
@@ -694,7 +742,7 @@ void voxelSet(Voxel* voxel,Vec3 pos,int depth,VoxelType type){
 			continue;
 		}
 		for(int j = 0;j < 8;j++){
-			Voxel* node_new = allocatorFreeListAlloc(&g_allocator_world,sizeof(Voxel));
+			Voxel* node_new = allocatorFreeListAllocZero(&g_allocator_world,sizeof(Voxel));
             node_new->position_x = (pos.x >> i + 1 << 1) + (j >> 0 & 1);
 			node_new->position_y = (pos.y >> i + 1 << 1) + (j >> 1 & 1);
 			node_new->position_z = (pos.z >> i + 1 << 1) + (j >> 2 & 1);

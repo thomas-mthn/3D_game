@@ -7,10 +7,17 @@
 #include "texture_markov.h"
 
 #ifdef __linux__
+
 #include "linux/l_main.h"
-#elif !defined(__wasm__)
-#include "win32/w_draw_opengl.h"
+
+#elif defined(__wasm__)
+
+#include "wasm/wasm.h"
+
+#elif defined(_MSC_VER)
+
 #include "win32/w_main.h"
+
 #endif
 
 Vec2 g_texture_coordinates_fill[] = {
@@ -72,12 +79,12 @@ void generateMipmaps(Texture* texture){
 
 			Vec3 color = {0};
 
-			vec3Add(&color,pixelColorToColor(texture->pixel_data[offset + (x * 2 + 0) * size_i + (y * 2 + 0)]));
-			vec3Add(&color,pixelColorToColor(texture->pixel_data[offset + (x * 2 + 0) * size_i + (y * 2 + 1)]));
-			vec3Add(&color,pixelColorToColor(texture->pixel_data[offset + (x * 2 + 1) * size_i + (y * 2 + 0)]));
-			vec3Add(&color,pixelColorToColor(texture->pixel_data[offset + (x * 2 + 1) * size_i + (y * 2 + 1)]));
+			color = vec3Add(color,pixelColorToColor(texture->pixel_data[offset + (x * 2 + 0) * size_i + (y * 2 + 0)]));
+			color = vec3Add(color,pixelColorToColor(texture->pixel_data[offset + (x * 2 + 0) * size_i + (y * 2 + 1)]));
+			color = vec3Add(color,pixelColorToColor(texture->pixel_data[offset + (x * 2 + 1) * size_i + (y * 2 + 0)]));
+			color = vec3Add(color,pixelColorToColor(texture->pixel_data[offset + (x * 2 + 1) * size_i + (y * 2 + 1)]));
 
-			vec3Shr(&color,2);
+			color = vec3Shr(color,2);
 
 			int alpha = 0;
 			alpha += (texture->pixel_data[offset + (x * 2 + 0) * size_i + (y * 2 + 0)] >> 24);
@@ -105,11 +112,11 @@ int textureLookup(Texture* texture,int x,int y,int mipmap){
 }
 
 void textureAllocate(Texture* texture){
-	texture->pixel_data = tMallocZero(texture->size * texture->size * 2 * sizeof(*texture->pixel_data));
+	texture->pixel_data = virtualAllocate(texture->size * texture->size * 2 * sizeof(*texture->pixel_data));
 }
 
 Texture textureCreate(int size){
-	return (Texture){.size = size,.pixel_data = tMallocZero(size * size * 2 * sizeof(int))};
+	return (Texture){.size = size,.pixel_data = virtualAllocate(size * size * 2 * sizeof(int))};
 }
 
 void textureDestroy(Texture texture){
@@ -122,38 +129,43 @@ void textureDestroy(Texture texture){
 static Texture textureDiskLoad(char* path){
     Texture texture;
 #ifdef __linux__
+    //texture = (Texture){0};
     texture = linuxLoadImage(path);
-#elif !defined(__wasm__)
+#elif defined(_MSC_VER)
     texture = win32LoadImage(path);
-#else
-    return (Texture){0};
+#elif defined(__wasm__)
+    texture = wasmLoadImage(stringMake(path));
+    //texture = (Texture){0};
 #endif
     if(texture.pixel_data)
         return texture;
-    //fallback code 
-    int* pixel_data = tMalloc(0x400 * 2);
-    for(int i = 0;i < 0x100;i++){
-        int x = i / 0x10;
-        int y = i % 0x10;
-        pixel_data[i] = x ^ y ? 0xFF00FF : 0x000000;
+    //fallback code
+
+    int texture_size = 0x20;
+    
+    int* pixel_data = virtualAllocate((texture_size * texture_size) * 2 * sizeof(*pixel_data));
+    for(int i = 0;i < texture_size * texture_size;i++){
+        int x = i / texture_size;
+        int y = i % texture_size;
+        pixel_data[i] = (x ^ y) & 1 ? 0xFF00FF : 0x000000;
     }
-    return (Texture){.pixel_data = pixel_data,.size = 0x20};
+    return (Texture){.pixel_data = pixel_data,.size = texture_size};
 }
 
 static void textureGenerate(char* path,int size,TextureType type){
     Texture texture = textureDiskLoad(path);
     
 	generateMipmaps(&texture);
-g_textures[type] = texture;
-    if(g_options.fast_startup){
-        
-        
-    }
-    else{
+
+    if(!g_options.fast_startup){
         markovInit();
         markovTextureTrain(texture);
+        g_textures[type] = textureCreate(size);
         markovTextureGenerate(g_textures[type],texture);
         markovFree();
+    }
+    else{
+        g_textures[type] = texture;
     }
 }
 
@@ -192,8 +204,8 @@ void texturesGenerate(void){
         grass_markov.pixel_data[i] = colorToPixelColor(luminance);
     }
 
-    textureGenerate("img/grass.bmp",128,TEXTURE_GRASS);
-
+    textureGenerate("img/grass.bmp",1024,TEXTURE_GRASS);
+    softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_STONE;
 
 	for(int i = 0;i < texture->size * texture->size;i++){
@@ -252,8 +264,8 @@ void texturesGenerate(void){
 
 		int luminance = bilinearScalar((Vec2){x,y},(int[]){v00,v01,v10,v11}) / 2 + FIXED_ONE / 2;
 
-		Vec3 color = vec3MulRS((Vec3){FIXED_ONE / 3 + FIXED_ONE / 12 << 4,FIXED_ONE / 4 << 4,FIXED_ONE / 12 << 4},luminance);
-		vec3Add(&color,vec3Single(tRnd() % (FIXED_ONE / 2) - FIXED_ONE / 4));
+		Vec3 color = vec3MulS((Vec3){FIXED_ONE / 3 + FIXED_ONE / 12 << 4,FIXED_ONE / 4 << 4,FIXED_ONE / 12 << 4},luminance);
+		color = vec3Add(color,vec3Single(tRnd() % (FIXED_ONE / 2) - FIXED_ONE / 4));
 		texture->pixel_data[i] = colorToPixelColor(color);
 	}
 
@@ -262,7 +274,7 @@ void texturesGenerate(void){
 			for(int k = 0;k < 8;k++){
 				Vec3 color = pixelColorToColor(texture->pixel_data[((texture->size / 8) * k + j) * texture->size + i]);
 
-				vec3MulS(&color,FIXED_ONE / 8 * tAbs(j - 2) + FIXED_ONE / 2);
+				color = vec3MulS(color,FIXED_ONE / 8 * tAbs(j - 2) + FIXED_ONE / 2);
 
 				texture->pixel_data[((texture->size / 8) * k + j) * texture->size + i] = colorToPixelColor(color);
 			}
@@ -297,7 +309,7 @@ void texturesGenerate(void){
 				texture->pixel_data[i] = colorToPixelColor(vec3Single(FIXED_ONE << 4));
 				continue;
 			}
-			Vec3 position = vec3MulRS(ray_direction,distance);
+			Vec3 position = vec3MulS(ray_direction,distance);
 
 			int luminance = 0;
 
@@ -329,8 +341,8 @@ void texturesGenerate(void){
 		}
 	}
 
-    textureGenerate("img/planks.bmp",128,TEXTURE_PLANKS);
-	
+    textureGenerate("img/planks.bmp",1024,TEXTURE_PLANKS);
+	softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_STONE_BRICK;
 	surface = (DrawSurface){
 		.data = texture->pixel_data,
@@ -349,7 +361,7 @@ void texturesGenerate(void){
 			for(int k = 0;k < 4;k++){
 				Vec3 color = pixelColorToColor(texture->pixel_data[((texture->size / 4) * k + j) * texture->size + i]);
 
-				vec3MulS(&color,FIXED_ONE / 8 * tAbs(j - 2) + FIXED_ONE / 2);
+				color = vec3MulS(color,FIXED_ONE / 8 * tAbs(j - 2) + FIXED_ONE / 2);
 
 				texture->pixel_data[((texture->size / 4) * k + j) * texture->size + i] = colorToPixelColor(color);
 			}
@@ -364,14 +376,14 @@ void texturesGenerate(void){
 
 					Vec3 color = pixelColorToColor(texture->pixel_data[texture->size * (i + l * texture->size / 4) + (texture->size / 2 * k + j) + offset]);
 
-					vec3MulS(&color,FIXED_ONE / 8 * tAbs(j - 2) + FIXED_ONE / 2);
+					color = vec3MulS(color,FIXED_ONE / 8 * tAbs(j - 2) + FIXED_ONE / 2);
 
 					texture->pixel_data[texture->size * (i + l * texture->size / 4) + (texture->size / 2 * k + j) + offset] = colorToPixelColor(color);
 				}
 			}
 		}
 	}
-    textureGenerate("img/brick_alt2.bmp",128,TEXTURE_STONE_BRICK);
+    textureGenerate("img/brick_alt2.bmp",1024,TEXTURE_STONE_BRICK);
     softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_CHEST;
 	surface = (DrawSurface){
@@ -382,11 +394,11 @@ void texturesGenerate(void){
 	surfaceInit(&surface);
 	drawSquare(&surface,-FIXED_ONE,-FIXED_ONE,FIXED_ONE * 2,pixelColorToColor(0xC0C0C0));
 	drawRectangle(&surface,FIXED_ONE / 3,-FIXED_ONE,0x2000,FIXED_ONE * 2,pixelColorToColor(0x808080));
-	drawRectangle(&surface,FIXED_ONE / 3 - 0x3000,-0x3000,0xA800,FIXED_ONE / 3 + 0xA00,pixelColorToColor(0xA0F0F0));
+	drawRectangle(&surface,FIXED_ONE / 3 - 0x3000,-0x3000,0xA800,FIXED_ONE / 3 + 0xA00,pixelColorToColor(0xF0F0A0));
 	drawRectangle(&surface,FIXED_ONE / 3 - 0x2800,-0x2800,0x9800,FIXED_ONE / 3 - 0x400,pixelColorToColor(0x505050));
 	
-	drawRectangle(&surface,FIXED_ONE - 0x9800,-FIXED_ONE + 0x2000,0x9800,FIXED_ONE / 3 - 0x400,pixelColorToColor(0x3070D0));
-	drawRectangle(&surface,FIXED_ONE - 0x9800,FIXED_ONE - (FIXED_ONE / 3 - 0x400) - 0x2000,0x9800,FIXED_ONE / 3 - 0x400,pixelColorToColor(0x3070D0));
+	drawRectangle(&surface,FIXED_ONE - 0x9800,-FIXED_ONE + 0x2000,0x9800,FIXED_ONE / 3 - 0x400,pixelColorToColor(0xD07030));
+	drawRectangle(&surface,FIXED_ONE - 0x9800,FIXED_ONE - (FIXED_ONE / 3 - 0x400) - 0x2000,0x9800,FIXED_ONE / 3 - 0x400,pixelColorToColor(0xD07030));
 	softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_PICKUP;
 	surface = (DrawSurface){

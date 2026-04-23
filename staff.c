@@ -76,6 +76,7 @@ void staffGenerate(Vec3 position){
 		.mana_max = tRnd() % 0x40000 + 4000,
 		.delay = tRnd() % (FIXED_ONE / 256) + FIXED_ONE / 1024,
 		.reload = tRnd() % FIXED_ONE + FIXED_ONE / 2,
+        .recoil = tRnd() % FIXED_ONE,
 		.model = staff_model,
 	};
 	staff->staff.spell_array[0].spell_type = tRnd() % SPELL_ECOUNT;
@@ -164,6 +165,8 @@ void staffFire(void){
 	if(spell_slot->type != INVENTORY_SPELL)
 		return;
 
+    if(g_mana < cost)
+        return;
 	g_mana -= cost;
 
 	Entity* spell = entityCreate(g_position,spell_entity[spell_slot->spell_type]);
@@ -172,8 +175,8 @@ void staffFire(void){
 
 	spell->adj_speed  = adj_table[SPELL_ADJ_SPEED].amount;
 	spell->adj_damage = adj_table[SPELL_ADJ_DAMAGE].amount;
-	spell->velocity = vec3ShrR(direction,2);
-	vec3MulS(&spell->velocity,FIXED_ONE * (adj_table[SPELL_ADJ_SPEED].amount + 1));
+	spell->velocity = vec3Shr(direction,2);
+	spell->velocity = vec3MulS(spell->velocity,FIXED_ONE * (adj_table[SPELL_ADJ_SPEED].amount + 1));
 
 	g_attack_animation = FIXED_ONE;
 

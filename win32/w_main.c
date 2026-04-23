@@ -70,7 +70,7 @@ static void cursorClipAndHide(void){
 void win32OctreeSerialize(Voxel* root_voxel){
 	int voxel_mem_count = voxelMemoryCountRecursive(root_voxel);
 	int voxel_count = voxelChildCountRecursive(root_voxel);
-	VoxelSerialized* voxel_diskdata = memoryScratchGet(MEMORY_SCRATCH_MAX_SIZE);
+	VoxelSerialized* voxel_diskdata = virtualAllocate(sizeof(voxel_count) + voxel_mem_count);
 	octreeSerialize(voxel_diskdata,root_voxel);
 	void* file = CreateFileA("world/world_1.octvxl",GENERIC_WRITE,0,0,CREATE_ALWAYS,0,0);
 	WriteFile(file,&voxel_count,sizeof voxel_count,0,0);
@@ -78,24 +78,18 @@ void win32OctreeSerialize(Voxel* root_voxel){
 	CloseHandle(file);
 }
 
-bool win32OctreeDeserialize(void){
-	void* file = CreateFileA("world/world_1.octvxl",GENERIC_READ,0,0,OPEN_EXISTING,0,0);
+FileContent win32OctreeDeserialize(char* path){
+	void* file = CreateFileA(path,GENERIC_READ,0,0,OPEN_EXISTING,0,0);
 	if(file == INVALID_HANDLE_VALUE)
-		return false;
+		return (FileContent){0};
 	unsigned file_size = GetFileSize(file,0);
-	VoxelSerializedParent* voxel_diskdata = memoryScratchGet(MEMORY_SCRATCH_MAX_SIZE);
+	VoxelSerializedParent* voxel_diskdata = virtualAllocate(file_size);
 	int voxel_count;
 	ReadFile(file,&voxel_count,sizeof(voxel_count),0,0);
 	ReadFile(file,voxel_diskdata,file_size - sizeof(voxel_count),0,0);
 	CloseHandle(file);
 	//TODO: remove malloc
-	Voxel** voxel_array = tMallocZero(sizeof(Voxel*) * voxel_count);
-	int index_i = 0;
-	g_voxel = *octreeDeserializeRecursive(voxel_diskdata,0,0,0,(Vec3){0,0,0},voxel_array,&index_i);
-	index_i = 0;
-	octreeDeserializeLink(voxel_diskdata,0,0,(Vec3){0,0,0},voxel_array,&index_i);
-	tFree(voxel_array);
-	return true;
+	return (FileContent){.content = (void*)voxel_diskdata,.size = voxel_count};
 }
 
 Voxel* win32LoadModel(char* path){
@@ -103,7 +97,7 @@ Voxel* win32LoadModel(char* path){
 	if(file == INVALID_HANDLE_VALUE)
 		return 0;
 	unsigned file_size = GetFileSize(file,0);
-	VoxelSerializedParent* voxel_diskdata = memoryScratchGet(MEMORY_SCRATCH_MAX_SIZE);
+	VoxelSerializedParent* voxel_diskdata = virtualAllocate(file_size);
 	ReadFile(file,voxel_diskdata,file_size,0,0);
 	CloseHandle(file);
 	Voxel* result = octreeDeserializeRecursive(voxel_diskdata,0,0,0,(Vec3){0,0,0},0,0);
@@ -114,36 +108,12 @@ static Lresult stdcall windowMessageHandler(void* window,unsigned msg,Wparam wpa
     switch(msg){
 		case WM_KEYDOWN:{
 			switch(wparam){
-				case KEY_ESCAPE:{
+                	case KEY_ESCAPE:{
 					if(!cursor_out_window){
 						cursor_out_window = true;
 						showCursor(true);
 						ClipCursor(0);
 					}
-				} break;
-				case KEY_F7:{
-					if(!g_options.editor)
-						break;
-					Vec3 block_pos;
-					if(!blockOutlinePositionGet(&block_pos))
-						break;
-					Voxel* voxel = voxelGet(block_pos,g_edit_depth);
-					int sub_voxel_count = voxelMemoryCountRecursive(voxel);
-					VoxelSerialized* voxel_serial = memoryScratchGet(MEMORY_SCRATCH_MAX_SIZE);
-					octreeSerialize(voxel_serial,voxel);
-					void* file = CreateFileA("model/created.octvxl",GENERIC_WRITE,0,0,CREATE_ALWAYS,0,0);
-					WriteFile(file,voxel_serial,sub_voxel_count,0,0);
-					CloseHandle(file);
-				} break;
-				case KEY_F8:{
-					if(!g_options.editor)
-						break;
-					win32OctreeDeserialize();
-				} break;
-				case KEY_F9:{
-					if(!g_options.editor)
-						break;
-					win32OctreeSerialize(&g_voxel);
 				} break;
 				case KEY_F11:{
 					ShowWindow(g_window,IsZoomed(g_window) ? SW_NORMAL : SW_MAXIMIZE);
@@ -179,6 +149,12 @@ static Lresult stdcall windowMessageHandler(void* window,unsigned msg,Wparam wpa
 				RawMouse* mouse = &raw_input->data.mouse;
 				mouseMove(mouse->last_x,mouse->last_y);
 			}
+            else if(raw_input->header.type == RIM_TYPEKEYBOARD){
+                RawKeyboard* keyboard = &raw_input->data.keyboard;
+                g_key[keyboard->make_code & 0xFF] = !(keyboard->flags & 1) << 7;
+                if(!(keyboard->flags & 1))
+                    keyPress(keyboard->make_code & 0xFF);
+            }
 		} break;
 		case WM_SIZE:{
 			if(!initialized)
@@ -201,8 +177,6 @@ static Lresult stdcall windowMessageHandler(void* window,unsigned msg,Wparam wpa
     }
     return DefWindowProcA(window,msg,wparam,lparam);
 }
-
-#define ICON_SIZE 16
 
 static void* iconGenerate(void){
     DrawSurface surface = {
@@ -265,7 +239,7 @@ static void* iconGenerate(void){
 	};
 
 	for(int i = 0;i < countof(polygon);i++)
-		drawPolygon3d(surface,polygon[i].coordinates,pixelColorToColor(polygon[i].color));
+		drawPolygon3d(&surface,polygon[i].coordinates,pixelColorToColor(polygon[i].color));
 
     BitmapInfoHeader bitmap_header = {
         .size = sizeof(BitmapInfoHeader),
@@ -282,7 +256,7 @@ static void* iconGenerate(void){
 
 	void* bitmap_color = CreateDIBitmap(hdc,&bitmap_info.bmi_header,CBM_INIT,surface.data,&bitmap_info,0);
 
-    uint8* mask_data = memoryScratchGet(ICON_SIZE * ICON_SIZE / CHAR_BIT); //tMallocZero(ICON_SIZE * ICON_SIZE / CHAR_BIT);
+    uint8* mask_data = virtualAllocate(ICON_SIZE * ICON_SIZE / CHAR_BIT);
     void* bitmap_mask = CreateBitmap(ICON_SIZE,ICON_SIZE,1,1,mask_data);
 
 	IconInfo icon_info = {
@@ -294,6 +268,7 @@ static void* iconGenerate(void){
 	void* is_icon = CreateIconIndirect(&icon_info);
 	
 	surfaceDestroy(&surface);
+	virtualFree(mask_data,ICON_SIZE * ICON_SIZE / CHAR_BIT);
 
 	return is_icon;
 }
@@ -315,6 +290,13 @@ void createWindow(void){
 		.target = g_window,
 	};
 	RegisterRawInputDevices(&input_device,1,sizeof input_device);
+
+    RawInputDevice input_keyboard = {
+        .usage_page = HID_USAGE_PAGE_GENERIC,
+        .usage = HID_USAGE_GENERIC_KEYBOARD,
+        .target = g_window,
+    }; 
+    RegisterRawInputDevices(&input_keyboard, 1, sizeof input_keyboard);
 
 	cursorClipAndHide();
 }
@@ -360,9 +342,6 @@ int main(void){
 
 	RegisterClassA(&windowclass);
 
-	SystemInfo system_info;
-	GetSystemInfo(&system_info);
-	g_n_threads = system_info.number_of_processors;
 	createWindow();
 
 	initialized = true;
@@ -375,9 +354,6 @@ int main(void){
 		ReadFile(config_file,&g_options,sizeof g_options,0,0);
 		CloseHandle(config_file);
 	}
-        
-	if(!win32OctreeDeserialize())
-		worldDefaultGenerate();
 
 	initOpenCL();
 	mainInit();
@@ -406,7 +382,6 @@ int main(void){
 
 		if(GetForegroundWindow() == g_window){
             g_cursor = getCursorPosition();
-            GetKeyboardState(g_key);
         }
 
 		unsigned tick = getTick();
@@ -434,10 +409,10 @@ int main(void){
 		counter += 1;
 		if(counter % 0x20 == 0)
 			fps = frequency / (time_post[0] - time_pre[0]);
-
-		drawString(g_surface,-FIXED_ONE + 0x800,FIXED_ONE - 0x4000,(String)STRING_LITERAL("fps"),0x800,pixelColorToColor(0xFFFFFF),0xC0);
-		drawNumber(g_surface,-FIXED_ONE + 0x800,FIXED_ONE - 0x2000,fps,0x800);
-
-        surfaceBlit(g_surface);
+		/*
+		drawString(&g_surface,-FIXED_ONE + 0x800,FIXED_ONE - 0x4000,(String)STRING_LITERAL("fps"),0x800,pixelColorToColor(0xFFFFFF),0xC0);
+		drawNumber(&g_surface,-FIXED_ONE + 0x800,FIXED_ONE - 0x2000,fps,0x800);
+		*/
+        surfaceBlit(&g_surface);
 	}
 }

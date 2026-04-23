@@ -128,12 +128,12 @@ static bool boxTreeCollisionRecursive(Vec3 pos,Vec3 size,Voxel* voxel,int* max_h
 }
 
 bool boxTreeCollision(Vec3 pos,Vec3 size,int* max_height,CollisionFlags* flags){
-	vec3Sub(&pos,vec3ShrR(size,1));
+	pos = vec3Sub(pos,vec3Shr(size,1));
 	return boxTreeCollisionRecursive(pos,size,&g_voxel,max_height,flags);
 }
 
 Vec3 playerHitboxGet(void){
-	return vec3AddR(g_position,(Vec3){.z = -(FIXED_ONE / 2 + FIXED_ONE / 4)});
+	return vec3Add(g_position,(Vec3){.z = -(FIXED_ONE / 2 + FIXED_ONE / 4)});
 }
 
 #define JUMP_HEIGHT (FIXED_ONE / 4)
@@ -150,10 +150,10 @@ void movementNormal(void){
 	bool down_z = g_velocity.z < 0;
 	CollisionFlags collision_flags = 0;
 	Vec3 hitbox = playerHitboxGet();
-	hit[VEC3_X] = boxTreeCollision(vec3AddR(hitbox,(Vec3){g_velocity.x,0,0}),PLAYER_SIZE,&max_height_x,&collision_flags);
-	hit[VEC3_Y] = boxTreeCollision(vec3AddR(hitbox,(Vec3){0,g_velocity.y,0}),PLAYER_SIZE,&max_height_y,&collision_flags);
-	hit[VEC3_Z] = boxTreeCollision(vec3AddR(hitbox,(Vec3){0,0,g_velocity.z}),PLAYER_SIZE,0,0);
-	vec3Add(&g_position,g_velocity);
+	hit[VEC3_X] = boxTreeCollision(vec3Add(hitbox,(Vec3){g_velocity.x,0,0}),PLAYER_SIZE,&max_height_x,&collision_flags);
+	hit[VEC3_Y] = boxTreeCollision(vec3Add(hitbox,(Vec3){0,g_velocity.y,0}),PLAYER_SIZE,&max_height_y,&collision_flags);
+	hit[VEC3_Z] = boxTreeCollision(vec3Add(hitbox,(Vec3){0,0,g_velocity.z}),PLAYER_SIZE,0,0);
+	g_position = vec3Add(g_position,g_velocity);
 
 	if(hit[VEC3_X]){
 		int height_difference = max_height_x - g_position.z + PLAYER_SIZE.z / 2 + FIXED_ONE / 2 + FIXED_ONE / 4;
@@ -179,7 +179,7 @@ void movementNormal(void){
 	}
 	if(hit[VEC3_Z]){
 		if(g_velocity.z < -FIXED_ONE / 4)
-			audioPlay(vec3AddR(g_position,(Vec3){0,0,-FIXED_ONE}),AUDIO_LAND);
+			audioPlay(vec3Add(g_position,(Vec3){0,0,-FIXED_ONE}),AUDIO_LAND);
 
 		//fall damage
 		if(g_velocity.z < -FIXED_ONE / 3)
@@ -190,7 +190,7 @@ void movementNormal(void){
 		if(down_z){
 			static bool pressed;
 			if(keyDown(KEY_SPACE)){
-				audioPlay(vec3AddR(g_position,(Vec3){0,0,-FIXED_ONE}),AUDIO_JUMP);
+				audioPlay(vec3Add(g_position,(Vec3){0,0,-FIXED_ONE}),AUDIO_JUMP);
 				g_velocity.z = 0;
 				g_velocity.z += JUMP_HEIGHT;
 				pressed = false;
@@ -207,7 +207,7 @@ void movementNormal(void){
 			g_velocity.z += FIXED_ONE / 16;
 	}
 	if(collision_flags & COLLISION_FLAG_WATER){
-		vec3MulS(&g_velocity,PHYSICS_FRICTION_WATER);
+		g_velocity = vec3MulS(g_velocity,PHYSICS_FRICTION_WATER);
 		if(keyDown(KEY_LSHIFT))
 			g_velocity.z -= FIXED_ONE / 64;
 		if(keyDown(KEY_SPACE))
@@ -218,7 +218,7 @@ void movementNormal(void){
 	if(!in_air){
 		moved += vec3Dot(g_velocity,g_velocity);
 		if(moved > FIXED_ONE / 8){
-			audioPlay(vec3AddR(g_position,(Vec3){0,0,-FIXED_ONE}),AUDIO_FOOTSTEP);
+			audioPlay(vec3Add(g_position,(Vec3){0,0,-FIXED_ONE}),AUDIO_FOOTSTEP);
 			moved = 0;
 		}
 	}
@@ -253,7 +253,7 @@ void movementNormal(void){
 		g_velocity.x += fixedMulR(tCos(g_angle.x + FIXED_ONE / 4),mod * 2);
 		g_velocity.y += fixedMulR(tSin(g_angle.x + FIXED_ONE / 4),mod * 2);
 	}
-	vec3MulS(&g_velocity,!hit[VEC3_Z] || hit[VEC3_Z] && !down_z ? PHYSICS_FRICTION_AIR : PHYSICS_FRICTION_GROUND);
+	g_velocity = vec3MulS(g_velocity,!hit[VEC3_Z] || hit[VEC3_Z] && !down_z ? PHYSICS_FRICTION_AIR : PHYSICS_FRICTION_GROUND);
 	if(g_velocity.x < 0)
 		g_velocity.x += 1;
 	if(g_velocity.y < 0)

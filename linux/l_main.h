@@ -8,7 +8,7 @@
 structure(Voxel);
 
 void linuxOctreeSerialize(Voxel* root_voxel,char* file_name);
-FileContent linuxOctreeDeserialize(char* file_name);
+FileContent linuxFileRead(char* file_name);
 
 void linuxBlit(int* data,int width,int height);
 Texture linuxLoadImage(char* path);

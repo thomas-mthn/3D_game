@@ -5,6 +5,28 @@
 #include "octree.h"
 #include "span.h"
 
+Vec2 uvMirror(Vec2 uv,int side){
+    int mirror = (int[]){
+        1,-1,
+        -1,1,
+        1,-1,
+    }[side];
+    if(mirror < 0)
+        uv.x = FIXED_ONE - uv.x;
+    return uv;
+}
+
+Vec2 voxelGuiPositionGet(Voxel* voxel,Vec3 position,Vec3 dir,int side){
+    int block_size = depthToSize(voxel->depth);
+	Vec3 pos = voxelWorldPos(voxel);
+    Vec2 axis = g_axis_table[side << 1];
+    Plane plane = getPlane(voxel,dir,side);
+    int dst = rayPlaneIntersection(position,dir,plane);
+    Vec3 hit_pos = vec3Add(position,vec3MulS(dir,dst));
+	Vec2 uv = vec2DivS((Vec2){((int*)&hit_pos)[axis.x] - ((int*)&pos)[axis.x],((int*)&hit_pos)[axis.y] - ((int*)&pos)[axis.y]},block_size);
+	return uvMirror(uv,side << 1 | dir.a[side] < 0);
+}
+
 void drawGuiChar(Voxel* voxel,int side,Vec2 uv,char string_char,int scale,int thickness){
     Vec2 axis = g_axis_table[side];
     int mirror = (int[]){
@@ -18,8 +40,7 @@ void drawGuiChar(Voxel* voxel,int side,Vec2 uv,char string_char,int scale,int th
     if(side & 1)
         c_pos.a[side >> 1] += voxel_size;
     
-    if(mirror < 0)
-        uv.x = FIXED_ONE - uv.x;
+    uv = uvMirror(uv,side);
     
     for(int i = 0;g_vector_font[string_char].position[i][0];i++){
         uint8* coords = &g_vector_font[string_char].position[i][0];
@@ -38,15 +59,15 @@ void drawGuiChar(Voxel* voxel,int side,Vec2 uv,char string_char,int scale,int th
         Vec2 point_1 = {points[0].a[axis.x],points[0].a[axis.y]};
         Vec2 point_2 = {points[1].a[axis.x],points[1].a[axis.y]};
 
-        Vec2 direction = vec2MulRS(vec2Direction(point_1,point_2),thickness);
+        Vec2 direction = vec2MulS(vec2Direction(point_1,point_2),thickness);
     				                                
         Vec3 quad[] = {points[0],points[1],points[0],points[1]};
     				                
         Vec2 quad2d[] = {
-            vec2AddR(point_1,vec2Rotate(direction,FIXED_ONE / 8 * 3)),
-            vec2AddR(point_2,vec2Rotate(direction,FIXED_ONE / 8 * 1)),
-            vec2AddR(point_1,vec2Rotate(direction,FIXED_ONE / 8 * 5)),
-            vec2AddR(point_2,vec2Rotate(direction,FIXED_ONE / 8 * 7)),
+            vec2Add(point_1,vec2Rotate(direction,FIXED_ONE / 8 * 3)),
+            vec2Add(point_2,vec2Rotate(direction,FIXED_ONE / 8 * 1)),
+            vec2Add(point_1,vec2Rotate(direction,FIXED_ONE / 8 * 5)),
+            vec2Add(point_2,vec2Rotate(direction,FIXED_ONE / 8 * 7)),
         };
 
         if(points[0].z <= 0 || points[1].z <= 0)
@@ -55,7 +76,7 @@ void drawGuiChar(Voxel* voxel,int side,Vec2 uv,char string_char,int scale,int th
             quad[j].a[axis.x] = quad2d[j].x;
             quad[j].a[axis.y] = quad2d[j].y;
         }
-        drawPolygon3d(&g_surface,quad,vec3MulRS(pixelColorToColor(0xFFFFFF),g_exposure));
+        drawPolygon3d(&g_surface,quad,vec3MulS(pixelColorToColor(0xFFFFFF),g_exposure));
     }
 }
 
@@ -92,7 +113,7 @@ void drawGuiRectangle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,in
     
 	int voxel_size = depthToSize(voxel->depth);
 	Vec3 position = block_pos;
-    size = vec2MulRS(size,voxel_size);
+    size = vec2MulS(size,voxel_size);
 	position.a[axis.x] += fixedMulR(uv.x,voxel_size);
 	position.a[axis.y] += fixedMulR(uv.y,voxel_size);
 	Vec3 points[] = {
@@ -145,7 +166,7 @@ static void drawGuiImage(Voxel* voxel,Texture* image,Vec2 axis,Vec3 block_pos,Ve
 	};
 	if(points[0].z <= 0 || points[1].z <= 0 || points[2].z <= 0 || points[3].z <= 0)
 		return;
-	drawTexturePolygon(&g_surface,image,g_texture_coordinates_fill,d_point,vec3MulRS(vec3Single(FIXED_ONE << 4),g_exposure),4);
+	drawTexturePolygon(&g_surface,image,g_texture_coordinates_fill,d_point,vec3MulS(vec3Single(FIXED_ONE << 4),g_exposure),4);
 }
 
 void drawGuiCircle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,int radius,int color){
@@ -173,7 +194,7 @@ void drawGuiCircle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,int radius,int 
 	points[2] = pointToScreenRenderer(points[2],g_tri,g_position,g_options.fov);
 	points[3] = pointToScreenRenderer(points[3],g_tri,g_position,g_options.fov);
 
-	drawCircle3d(&g_surface,points,vec3MulRS(pixelColorToColor(color),g_exposure));
+	drawCircle3d(&g_surface,points,vec3MulS(pixelColorToColor(color),g_exposure));
 }
 
 static bool rectInRect(Vec2 position_1,Vec2 size_1,Vec2 position_2,Vec2 size_2){
@@ -182,7 +203,7 @@ static bool rectInRect(Vec2 position_1,Vec2 size_1,Vec2 position_2,Vec2 size_2){
 
     return bound_x && bound_y;
 }
-#include "console.h"
+
 void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 	VoxelStatic* voxel_s = g_voxel_static + voxel->type;
 	int voxel_size = depthToSize(voxel->depth);
@@ -212,7 +233,7 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 						color = 0x20A0A0;
 				}
 				drawGuiFrame(voxel,g_axis_table[side],block_pos,element->position,(Vec2){0x2000,0x2000},color,0x200,side);
-				Vec2 spell_uv = vec2AddR(element->position,vec2Single(0x1000));
+				Vec2 spell_uv = vec2Add(element->position,vec2Single(0x1000));
 				if(!element->inventory_slot.slot->type)
 					continue;
 				switch(element->inventory_slot.slot->spell_type){
@@ -226,15 +247,15 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 						drawGuiCircle(voxel,g_axis_table[side],block_pos,spell_uv,0xA00,0x00FF00);
 					} break;
 					case SPELL_ADJ_SPEED:{
-						Vec2 string_uv = vec2AddR(spell_uv,(Vec2){-0x600,0x400});
+						Vec2 string_uv = vec2Add(spell_uv,(Vec2){-0x600,0x400});
                         drawGuiString(voxel,side,string_uv,(String)STRING_LITERAL(">>"),0x800,0x300);
 					} break;
 					case SPELL_ADJ_DAMAGE:{
-						Vec2 string_uv = vec2AddR(spell_uv,(Vec2){-0x600,0x400});
+						Vec2 string_uv = vec2Add(spell_uv,(Vec2){-0x600,0x400});
 						drawGuiString(voxel,side,string_uv,(String)STRING_LITERAL("#+"),0x800,0x300);
 					} break;
 					case SPELL_ADJ_DOUBLER:{
-						Vec2 string_uv = vec2AddR(spell_uv,(Vec2){-0x600,0x400});
+						Vec2 string_uv = vec2Add(spell_uv,(Vec2){-0x600,0x400});
 						drawGuiString(voxel,side,string_uv,(String)STRING_LITERAL("x2"),0x800,0x300);
 					} break;
 					default:{
@@ -261,10 +282,6 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 			} break;
             case VOXEL_GUI_RECTANGLE:{
                 Vec2 size = element->rectangle.size;
-                if(element->rectangle.flags & RECTANGLE_ABSOLUTE_SIZE_X)
-                    fixedDiv(&size.x,voxel_size);
-                if(element->rectangle.flags & RECTANGLE_ABSOLUTE_SIZE_Y)
-                    fixedDiv(&size.y,voxel_size);
                 drawGuiRectangle(voxel,axis,block_pos,element->position,size,element->rectangle.color,side);
             } break;
 			case VOXEL_GUI_BUTTON:{
@@ -287,8 +304,8 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 		}
 	}
 	if(g_voxel_pointed.voxel == voxel && g_voxel_pointed.side == side){
-		drawGuiRectangle(voxel,axis,block_pos,vec2SubR(g_voxel_pointed.uv,vec2Single(0x150)),vec2Single(0x300),0x000000,side);
-		drawGuiRectangle(voxel,axis,block_pos,vec2SubR(g_voxel_pointed.uv,vec2Single(0x100)),vec2Single(0x200),0xFFFFFF,side);
+		drawGuiRectangle(voxel,axis,block_pos,vec2Sub(g_voxel_pointed.uv,vec2Single(0x150)),vec2Single(0x300),0x000000,side);
+		drawGuiRectangle(voxel,axis,block_pos,vec2Sub(g_voxel_pointed.uv,vec2Single(0x100)),vec2Single(0x200),0xFFFFFF,side);
 	}
 }
 

@@ -2,7 +2,7 @@
 #include "octree.h"
 
 bool pointBoxIntersection(Vec3 point,Vec3 box_position,Vec3 box_size){
-	vec3Sub(&box_position,vec3ShrR(box_size,1));
+	box_position = vec3Sub(box_position,vec3Shr(box_size,1));
 
 	bool x = point.x > box_position.x && point.x < box_position.x + box_size.x;
 	bool y = point.y > box_position.y && point.y < box_position.y + box_size.y;
@@ -12,12 +12,12 @@ bool pointBoxIntersection(Vec3 point,Vec3 box_position,Vec3 box_size){
 }
 
 int rayBoxIntersection(Vec3 box_position,Vec3 box_size,Vec3 ro,Vec3 rd){
-	ro = vec3SubR(ro,box_position);
-    Vec3 m = vec3DivR(vec3Single(FIXED_ONE),rd);
-    Vec3 n = vec3MulR(m,ro);
-	Vec3 k = vec3MulR((Vec3){tAbs(m.x),tAbs(m.y),tAbs(m.z)},box_size);
-    Vec3 t1 = vec3SubR((Vec3){-n.x,-n.y,-n.z},k);
-    Vec3 t2 = vec3AddR((Vec3){-n.x,-n.y,-n.z},k);
+	ro = vec3Sub(ro,box_position);
+    Vec3 m = vec3Div(vec3Single(FIXED_ONE),rd);
+    Vec3 n = vec3Mul(m,ro);
+	Vec3 k = vec3Mul((Vec3){tAbs(m.x),tAbs(m.y),tAbs(m.z)},box_size);
+    Vec3 t1 = vec3Sub((Vec3){-n.x,-n.y,-n.z},k);
+    Vec3 t2 = vec3Add((Vec3){-n.x,-n.y,-n.z},k);
     int tN = tMax(tMax(t1.x,t1.y),t1.z);
     int tF = tMin(tMin(t2.x,t2.y),t2.z);
 	if(tN > tF || tF < 0)
@@ -26,10 +26,10 @@ int rayBoxIntersection(Vec3 box_position,Vec3 box_size,Vec3 ro,Vec3 rd){
 }
 
 int sdSegment(Vec2 p,Vec2 a,Vec2 b){
-    Vec2 pa = vec2SubR(p,a);
-    Vec2 ba = vec2SubR(b,a);
+    Vec2 pa = vec2Sub(p,a);
+    Vec2 ba = vec2Sub(b,a);
     int h = tClamp(fixedDivR(vec2Dot(pa,ba),vec2Dot(ba,ba)),0.0,FIXED_ONE);
-    return vec2Length(vec2SubR(pa,vec2MulRS(ba,h)));
+    return vec2Length(vec2Sub(pa,vec2MulS(ba,h)));
 }
 
 int sdSquare(Vec3 p,Vec3 square_pos,int square_size,unsigned side){ 
@@ -48,8 +48,8 @@ int sdPlane(Vec3 p,Vec3 n,int h){
 }
 
 int sdVoxel(Vec3 point,Vec3 voxel_position,int voxel_size){
-	Vec3 p = vec3SubR(vec3AddRS(voxel_position,voxel_size / 2),point);
-	Vec3 q = vec3SubRS((Vec3){tAbs(p.x),tAbs(p.y),tAbs(p.z)},voxel_size);
+	Vec3 p = vec3Sub(vec3AddS(voxel_position,voxel_size / 2),point);
+	Vec3 q = vec3SubS((Vec3){tAbs(p.x),tAbs(p.y),tAbs(p.z)},voxel_size);
 	return vec3Length((Vec3){tMax(q.x,0),tMax(q.y,0),tMax(q.z,0)}) + tMin(tMax(q.x,tMax(q.y,q.z)),0);
 }
 
@@ -59,12 +59,12 @@ int rayVoxelIntersection(Voxel* voxel,Vec3 ro,Vec3 rd,Vec3* normal){
 		voxel->position_y * FIXED_ONE * 2 >> voxel->depth,
 		voxel->position_z * FIXED_ONE * 2 >> voxel->depth,
 	};
-	ro = vec3SubR(ro,vec3AddRS(voxel_pos,FIXED_ONE >> voxel->depth));
-    Vec3 m = vec3DivR(vec3Single(FIXED_ONE),rd);
-    Vec3 n = vec3MulR(m,ro);
-	Vec3 k = vec3MulRS((Vec3){tAbs(m.x),tAbs(m.y),tAbs(m.z)},FIXED_ONE >> voxel->depth);
-    Vec3 t1 = vec3SubR((Vec3){-n.x,-n.y,-n.z},k);
-    Vec3 t2 = vec3AddR((Vec3){-n.x,-n.y,-n.z},k);
+	ro = vec3Sub(ro,vec3AddS(voxel_pos,FIXED_ONE >> voxel->depth));
+    Vec3 m = vec3Div(vec3Single(FIXED_ONE),rd);
+    Vec3 n = vec3Mul(m,ro);
+	Vec3 k = vec3MulS((Vec3){tAbs(m.x),tAbs(m.y),tAbs(m.z)},FIXED_ONE >> voxel->depth);
+    Vec3 t1 = vec3Sub((Vec3){-n.x,-n.y,-n.z},k);
+    Vec3 t2 = vec3Add((Vec3){-n.x,-n.y,-n.z},k);
     int tN = tMax(tMax(t1.x,t1.y),t1.z);
     int tF = tMin(tMin(t2.x,t2.y),t2.z);
 	if(tN > tF || tF < 0)
@@ -88,7 +88,7 @@ int rayPlaneIntersection(Vec3 pos,Vec3 dir,Plane plane){
 }
 
 int raySphereIntersection(Vec3 ray_position,Vec3 ray_direction,Vec3 sphere_position,int radius){
-    Vec3 oc = vec3SubR(sphere_position,ray_position);
+    Vec3 oc = vec3Sub(sphere_position,ray_position);
     int a = vec3Dot(ray_direction,ray_direction);
     int b = 2 * vec3Dot(oc,ray_direction);
     int c = vec3Dot(oc,oc) - fixedMulR(radius,radius);
@@ -100,8 +100,8 @@ int raySphereIntersection(Vec3 ray_position,Vec3 ray_direction,Vec3 sphere_posit
 }
 
 bool boxBoxIntersect(Vec3 box1_pos,Vec3 box1_size,Vec3 box2_pos,Vec3 box2_size){
-	Vec3 box_max = vec3AddR(box1_pos,box1_size);
-	Vec3 cube_max = vec3AddR(box2_pos,box2_size);
+	Vec3 box_max = vec3Add(box1_pos,box1_size);
+	Vec3 cube_max = vec3Add(box2_pos,box2_size);
 	bool x = box1_pos.x <= cube_max.x && box_max.x >= box2_pos.x;
 	bool y = box1_pos.y <= cube_max.y && box_max.y >= box2_pos.y;
 	bool z = box1_pos.z <= cube_max.z && box_max.z >= box2_pos.z;

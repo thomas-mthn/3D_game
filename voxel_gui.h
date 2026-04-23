@@ -53,10 +53,6 @@ structure(VoxelGuiElement){
         struct{
             Vec2 size;
             int color;
-            enum{
-                RECTANGLE_ABSOLUTE_SIZE_X = (1 << 0),
-                RECTANGLE_ABSOLUTE_SIZE_Y = (1 << 1),
-            } flags;
         } rectangle;
     };
 };
@@ -70,6 +66,9 @@ void drawGuiFrame(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,int co
 void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side);
 bool voxelGuiOnClick(Voxel* voxel,int side);
 void voxelGuiOnRelease(Voxel* voxel,int side);
+
+Vec2 uvMirror(Vec2 uv,int side);
+Vec2 voxelGuiPositionGet(Voxel* voxel,Vec3 position,Vec3 dir,int side);
 
 extern SpellType g_spell_hold;
 

@@ -117,6 +117,7 @@ structure(VoxelStatic){
     bool texturefill : 1;
     bool no_blockplace : 1;
     bool translucent : 1;
+    bool rd_trace : 1;
     
 	Texture* texture;
 	int texture_size;

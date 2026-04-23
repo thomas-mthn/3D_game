@@ -1,17 +1,22 @@
 #include "memory.h"
 #include "libc.h"
+#include "tmath.h"
 
 #ifdef __linux__
+
 #include "linux/l_syscall.h"
 
-#elif !defined(__wasm__)
+#elif defined(_MSC_VER)
+
 #include "win32/w_kernel.h"
 #include "win32/w_user.h"
 #include "win32/w_main.h"
 
 #endif
 
-MemoryArena g_arena_frame;
+#define OS_BACKED defined(__linux__) || defined(_MSC_VER)
+
+MemoryArena g_arena_frame = {.min_capacity = 0x1000000};
 
 static void errorBox(void){
 #if !defined(__wasm__) && !defined(__linux__)
@@ -35,24 +40,30 @@ static size_t alignValue(size_t value,int alignment){
 }
 
 void virtualFree(void* address,size_t size){
-#ifdef __linux__
+#if !OS_BACKED
+    tFree(address);
+#elif defined(__linux__)
     systemMemoryUnmap(address,size);
-#elif !defined(__wasm__)
+#elif defined(_MSC_VER)
     if(!VirtualFree(address,0,MEM_RELEASE))
         errorBox();
+#else
+    tFree(address);
 #endif
 }
 
 void* virtualAllocate(size_t size){
-#ifdef __linux__
+#if !OS_BACKED  
+    return tMallocZero(size);
+#elif defined(__linux__)
     return systemMemoryMap(0,size,PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS,-1,0);
-#elif !defined(__wasm__)
+#elif defined(_MSC_VER)
     void* mem = VirtualAlloc(0,size,MEM_COMMIT | MEM_RESERVE,PAGE_READWRITE);;
     if(!mem)
         errorBox();
     return mem;
 #else
-    return nullptr;
+    return tMalloc(size);
 #endif
 }
 
@@ -68,6 +79,9 @@ static int pages_allocated;
 void* memoryArenaAllocate(MemoryArena* arena,size_t size){
     size = alignValue(size,sizeof(void*));
     if(arena->pointer + size > arena->capacity){
+        if(!arena->data && arena->min_capacity)
+            size = tMax(size,arena->min_capacity);
+        
         size_t allocation_size = alignValue(size + sizeof(ArenaChunkHeader),PAGE_SIZE);
         ArenaChunkHeader* new_data = virtualAllocate(allocation_size);
         
@@ -83,15 +97,35 @@ void* memoryArenaAllocate(MemoryArena* arena,size_t size){
     return allocation;
 }
 
+void* memoryArenaAllocateZero(MemoryArena* arena,size_t size){
+    void* memory = memoryArenaAllocate(arena,size);
+    tMemset(memory,0,size);
+    return memory;
+}
+
 void memoryArenaFree(MemoryArena* arena){
-    for(ArenaChunkHeader* header = (void*)arena->data;header;){
+    ArenaChunkHeader* header = (void*)arena->data;
+    if(!header)
+        return;
+    while(header && header->previous){
         void* previous = header->previous;
         virtualFree(header,header->size);
         header = previous;
     }
-    arena->capacity = 0;
-    arena->pointer = 0;
-    arena->data = 0;
+    
+    size_t min_cap = alignValue(arena->min_capacity + sizeof(ArenaChunkHeader),PAGE_SIZE);
+    
+    if(!arena->min_capacity || header->size != min_cap){
+        virtualFree(header,header->size);
+        arena->capacity = 0;
+        arena->data = 0;
+        arena->pointer = 0;
+    }
+    else{
+        arena->capacity = min_cap;
+        arena->data = (void*)header;
+        arena->pointer = sizeof *header;
+    }
 }
 
 structure(MemoryBlock){
@@ -106,6 +140,11 @@ structure(MemoryBlock){
     };
 };
 
+#if !OS_BACKED
+static char memory[0x4000000];
+static char* memory_ptr = memory;
+#endif
+
 static AllocatorFreeList generic;
 
 static size_t blockSize(MemoryBlock* block){
@@ -117,7 +156,7 @@ void* allocatorFreeListAlloc(AllocatorFreeList* free_list,size_t size){
         return nullptr;
     //alignment
     size = alignValue(size,sizeof(void*));
-	MemoryBlock* block_previous = 0;
+    MemoryBlock* block_previous = 0;
 	for(MemoryBlock* block = free_list->free_list;block;block = block->next_free){
 		if(blockSize(block) >= size){
             if(block_previous)
@@ -147,7 +186,18 @@ void* allocatorFreeListAlloc(AllocatorFreeList* free_list,size_t size){
 		}
 		block_previous = block;
 	}
+#if OS_BACKED
 	MemoryBlock* block = memoryArenaAllocate(&free_list->arena,sizeof(MemoryBlock) + size);
+#else
+    MemoryBlock* block;
+    if(free_list == &generic){
+        block = (void*)memory_ptr;
+        memory_ptr += (sizeof(MemoryBlock) + size);
+    }
+    else{
+        block = memoryArenaAllocate(&free_list->arena,sizeof(MemoryBlock) + size);
+    }
+#endif
     block->size = size;
 	block->next = 0;
     block->next_free = 0;
@@ -214,7 +264,7 @@ void* tMallocZero(size_t size){
     return memory;
 }
 
-void* allocatorFreeListZero(AllocatorFreeList* free_list,size_t size){
+void* allocatorFreeListAllocZero(AllocatorFreeList* free_list,size_t size){
     char* memory = allocatorFreeListAlloc(free_list,size);
     tMemset(memory,0,size);
     return memory;

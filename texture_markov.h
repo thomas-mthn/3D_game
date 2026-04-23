@@ -33,8 +33,8 @@ static int offsets_up[][2] = {
 
 structure(GraphNode){
     uint8 position[DIMENSIONS];
-    int neighbours[0x10];
-    int next;
+    int32 neighbours[0x10];
+    int32 next;
     struct{
         int n_sample;
         int color;

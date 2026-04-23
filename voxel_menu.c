@@ -11,18 +11,77 @@ Texture g_spinning_staff = {.size = 0x100};
 
 void staffEditorCreateMenu(struct Staff* staff){
 	VoxelGuiElement menu_static[] = {
-		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x1C00},.string.size = 0x1000,.string.string = STRING_LITERAL("staff editor")},
-		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x3C00},.string.size = 0x800,.string.string = STRING_LITERAL("reload   =")},
-		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x3C00},.string.size = 0x800,.number = &g_equipped.reload},
-		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x4C00},.string.size = 0x800,.string.string = STRING_LITERAL("delay    =")},
-		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x4C00},.string.size = 0x800,.number = &g_equipped.delay},
-		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x5C00},.string.size = 0x800,.string.string = STRING_LITERAL("capacity =")},
-		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x5C00},.string.size = 0x800,.number = &g_equipped.capacity},
-		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x6C00},.string.size = 0x800,.string.string = STRING_LITERAL("mana gen =")},
-		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x6C00},.string.size = 0x800,.number = &g_equipped.mana_generation},
-		{.type = VOXEL_GUI_STRING,.position = {0x1000,FIXED_ONE - 0x7C00},.string.size = 0x800,.string.string = STRING_LITERAL("mana max =")},
-		{.type = VOXEL_GUI_NUMBER,.position = {0x6800,FIXED_ONE - 0x7C00},.string.size = 0x800,.number = &g_equipped.mana_max},
-		{.type = VOXEL_GUI_IMAGE,.position = {0x1000,FIXED_ONE - 0xCC00},.image = &g_spinning_staff},
+		{
+            .type = VOXEL_GUI_STRING,
+            .position = {0x1000,FIXED_ONE - 0x1C00},
+            .string.size = 0x1000,
+            .string.string = STRING_LITERAL("staff editor")
+        },
+		{
+            .type = VOXEL_GUI_STRING,
+            .position = {0x1000,FIXED_ONE - 0x3C00},
+            .string.size = 0x800,
+            .string.string = STRING_LITERAL("reload   =")
+        },
+		{
+            .type = VOXEL_GUI_NUMBER,
+            .position = {0x6800,FIXED_ONE - 0x3C00},
+            .string.size = 0x800,
+            .number = &g_equipped.reload
+        },
+		{
+            .type = VOXEL_GUI_STRING,
+            .position = {0x1000,FIXED_ONE - 0x4C00},
+            .string.size = 0x800,
+            .string.string = STRING_LITERAL("delay    =")
+        },
+		{
+            .type = VOXEL_GUI_NUMBER,
+            .position = {0x6800,FIXED_ONE - 0x4C00},
+            .string.size = 0x800,
+            .number = &g_equipped.delay
+        },
+		{
+            .type = VOXEL_GUI_STRING,
+            .position = {0x1000,FIXED_ONE - 0x5C00},
+            .string.size = 0x800,
+            .string.string = STRING_LITERAL("capacity  =")
+        },
+		{
+            .type = VOXEL_GUI_NUMBER,
+            .position = {0x6800,FIXED_ONE - 0x5C00},
+            .string.size = 0x800,
+            .number = &g_equipped.capacity
+        },
+		{
+            .type = VOXEL_GUI_STRING,
+            .position = {0x1000,FIXED_ONE - 0x6C00},
+            .string.size = 0x800,
+            .string.string = STRING_LITERAL("mana gen  =")
+        },
+		{
+            .type = VOXEL_GUI_NUMBER,
+            .position = {0x6800,FIXED_ONE - 0x6C00},
+            .string.size = 0x800,
+            .number = &g_equipped.mana_generation
+        },
+		{
+            .type = VOXEL_GUI_STRING,
+            .position = {0x1000,FIXED_ONE - 0x7C00},
+            .string.size = 0x800,
+            .string.string = STRING_LITERAL("mana max  =")
+        },
+		{
+            .type = VOXEL_GUI_NUMBER,
+            .position = {0x6800,FIXED_ONE - 0x7C00},
+            .string.size = 0x800,
+            .number = &g_equipped.mana_max
+        },
+		{
+            .type = VOXEL_GUI_IMAGE,
+            .position = {0x1000,FIXED_ONE - 0xCC00},
+            .image.image = &g_spinning_staff
+        },
 	};
 	VoxelGuiElement* menu = tMalloc(sizeof(*menu) * (countof(menu_static) + staff->capacity));
 	for(int i = 0;i < countof(menu_static);i++)
@@ -59,7 +118,7 @@ void spinningStaffSpin(void){
 		surface_model.data = g_spinning_staff.pixel_data;
 		int camera_distance = FIXED_ONE * 2;
 		Vec3 direction = vec3Normalize(getLookDirection(angle));
-		Vec3 camera_position = vec3AddRS(vec3MulRS((Vec3){-direction.x,-direction.y,-direction.z},camera_distance * 2),FIXED_ONE);
+		Vec3 camera_position = vec3AddS(vec3MulS((Vec3){-direction.x,-direction.y,-direction.z},camera_distance * 2),FIXED_ONE);
 		Vec3 luminance[] = {
 			vec3Single(FIXED_ONE / 2),
 			vec3Single(FIXED_ONE / 3),
@@ -70,9 +129,9 @@ void spinningStaffSpin(void){
 		};
 		voxelModelRasterize(&surface_model,angle,luminance,g_equipped.model,camera_position,camera_distance);
 		generateMipmaps(&g_spinning_staff);
-#if !defined(__wasm__) && !defined(__linux__)
+
 		textureUpdateGL(&g_spinning_staff);
-#endif
+
 		//g_spinning_staff
 		surface_model.data = 0;
 		surfaceDestroy(&surface_model);
@@ -170,7 +229,7 @@ static void renderLines(VoxelGuiElement* self){
 	g_options.gl_wireframe ^= true;
 #if !defined(__wasm__) && !defined(__linux__)
 	if(g_surface.backend == RENDER_BACKEND_GL)
-		openglPolygonFill(!g_render_lines);
+		openglPolygonFill(g_options.gl_wireframe);
 #endif
 }
 

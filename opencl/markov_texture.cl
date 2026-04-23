@@ -389,4 +389,3 @@ kernel void inferenceBruteForce(global GraphNode* graph,global int* data,global 
     }
     data[mipmap_offset + x * mipmap_size + y] = 0x00FF00;
 }
-

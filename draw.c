@@ -7,9 +7,12 @@
 #include "span.h"
 #include "opengl.h"
 
-#if !defined(__wasm__) && !defined(__linux__)
+#ifdef _MSC_VER
 #include "win32/w_draw_gdi.h"
-#include "win32/w_draw_opengl.h"
+#endif
+
+#ifdef __wasm__
+#include "wasm/wasm.h"
 #endif
 
 DrawSurface g_surface = {
@@ -136,6 +139,9 @@ void drawPolygon(DrawSurface* surface,Vec2* coordinats,int n_point,Vec3 color){
     void (*vtable[])(DrawSurface*,Vec2*,int,Vec3) = {
 		[RENDER_BACKEND_SOFTWARE] = drawPolygonSoft,
         [RENDER_BACKEND_GL] = drawPolygonGL,
+#if defined(__wasm__)
+        [RENDER_BACKEND_WEBGL] = wasmPolygon,
+#endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
@@ -146,6 +152,9 @@ void drawPolygon3d(DrawSurface* surface,Vec3* coordinats,Vec3 color){
     void (*vtable[])(DrawSurface*,Vec3*,Vec3) = {
 		[RENDER_BACKEND_SOFTWARE] = spanQuad3dAdd,
         [RENDER_BACKEND_GL] = drawPolygon3dGL,
+#if defined(__wasm__)
+        [RENDER_BACKEND_WEBGL] = wasmPolygon3d,
+#endif
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
@@ -212,11 +221,9 @@ void drawColoredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* tex
 	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color,lightmap);
 }
 
-void drawSkyboxPolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color){
-    void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec3*,Vec3*) = {
-#if 0
+void drawSkyboxPolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
+    void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec3*,Vec3*,LightmapTree*) = {
 		[RENDER_BACKEND_SOFTWARE] = spanQuad3dLightingTextureAdd,
-#endif
         [RENDER_BACKEND_GL] = drawColoredTextureSkyboxPolygon3dGL,
 #if !defined(__wasm__) && !defined(__linux__)
         
@@ -224,7 +231,7 @@ void drawSkyboxPolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coo
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color);
+	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color,lightmap);
 }
 
 void drawEllipses(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color){
@@ -305,3 +312,5 @@ void drawNumber(DrawSurface* surface,int x,int y,int number,int scale){
     String string = intToString(buffer,number);
     drawStringEx(surface,x,y,string,scale,pixelColorToColor(0xFFFFFF),0x2000);
 }
+
+

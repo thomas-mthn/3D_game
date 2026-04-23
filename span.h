@@ -18,6 +18,6 @@ void spanQuad3dLightingTextureAdd(DrawSurface* surface,Texture* texture,Vec2* te
 void spanQuad3dTextureAdd(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point);
 void spanSegmentAdd(DrawSurface* surface,int x1,int y1,int x2,int y2,int thickness,Vec3 color);
 
-void spanDrawList(void);
+void spanDrawList(DrawSurface* surface);
 
 #endif

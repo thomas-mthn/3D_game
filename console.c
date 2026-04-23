@@ -8,23 +8,26 @@
 #include "font.h"
 #include "opengl.h"
 
-
 #ifdef __linux__
 #include "linux/l_main.h"
+#elif defined(_MSC_VER)
+#include "win32/w_main.h"
 #endif
 
 static MemoryArena console_content_arena;
 
 static ConsoleContent* console_content;
 
+#define FONT_SIZE 0x800
+
 void print(String string){
-    /*
+#if 0
     ConsoleContent* content = memoryArenaAllocate(&console_content_arena,string.size + sizeof(ConsoleContent));
     content->string_length = string.size;
     tMemcpy(content->string_data,string.data,string.size);
     content->next = console_content;
     console_content = content;
-    */
+#endif
 #ifdef __linux__
     linuxPrint(string);
 #elif !defined(__wasm__)
@@ -107,21 +110,21 @@ static void drawConsoleLine(Voxel* voxel,int side,char* buffer,int buffer_index,
     int draw_length = 0;
     int buffer_length = buffer_size - buffer_index;
     for(int i = 0;i < buffer_length;i++){
-        if(draw_length > 0xE0000){
+        if(draw_length > 0x1E0000){
             buffer_length = i;
             break;
         }
         draw_length += g_vector_font[buffer[buffer_index + i]].width;
     }
-    Vec2 uv = {0x1000,offset_y * 0x1000};
+    Vec2 uv = {FONT_SIZE,offset_y * (FONT_SIZE + FONT_SIZE / 4)};
     String draw_string = {.data = buffer + buffer_index,.size = buffer_length};
-    drawGuiString(voxel,side,uv,draw_string,0x1000,0x400);
+    drawGuiString(voxel,side,uv,draw_string,FONT_SIZE,0x200);
 }
 
 static bool blink_prevention;
 
 void consoleVoxelDraw(Voxel* voxel,int side){
-    int offset_y = 2;
+    int offset_y = 3;
     char buffer[0x100];
     int buffer_index = countof(buffer) - 1;
     for(ConsoleContent* content = console_content;content;content = content->next){
@@ -131,7 +134,7 @@ void consoleVoxelDraw(Voxel* voxel,int side){
                 drawConsoleLine(voxel,side,buffer,buffer_index + 1,countof(buffer),offset_y);
                 offset_y += 1;
                 buffer_index = countof(buffer) - 1;
-                if(offset_y == 17)
+                if(offset_y == 34)
                     goto end_console;
                 continue;
             }
@@ -139,12 +142,13 @@ void consoleVoxelDraw(Voxel* voxel,int side){
         }
     }
     drawConsoleLine(voxel,side,buffer,buffer_index + 1,countof(buffer),offset_y);
+    
  end_console:
     String input = {.data = console_buffer,.size = console_buffer_index};
     if(g_voxel_interact == voxel && (g_tick >> 6 & 1) || blink_prevention > 0)
         input = stringConcat(input,(String)STRING_LITERAL("_"));
-    drawGuiString(voxel,side,(Vec2){0x1800,0x1600},input,0x1000,0x400);
-    drawGuiChar(voxel,side,(Vec2){0xC00,0x1600},'>',0x1000,0x400);
+    drawGuiString(voxel,side,(Vec2){0x1000,0x0D00},input,FONT_SIZE,0x200);
+    drawGuiChar(voxel,side,(Vec2){0x800,0x0D00},'>',FONT_SIZE,0x200);
     if(g_voxel_interact == voxel && (g_tick >> 6 & 1) || blink_prevention > 0)
         tFree(input.data);
     if(g_tick >> 6 & 1)
@@ -154,6 +158,7 @@ void consoleVoxelDraw(Voxel* voxel,int side){
 #define COMMAND_LIST                                                  \
     X(QUIT) X(MULTITHREAD) X(LIGHTING_ENGINE) X(RENDERBACKEND)\
         X(SMOOTH_LIGHTING) X(GL_WIREFRAME) X(SPELL) X(LOAD) X(SAVE) X(CREATE) \
+        X(FAST_STARTUP) X(TEXTURES)
 
 void consoleInput(char key){
     if(!key)
@@ -163,9 +168,10 @@ void consoleInput(char key){
         console_buffer_index -= 1;
         return;
     }
-    console_buffer[console_buffer_index++] = key;
-    if(key != '\n')
+    if(key != '\n'){
+        console_buffer[console_buffer_index++] = key;
         return;
+    }
     enum{
 #define X(name) COMMAND_##name,
         COMMAND_LIST
@@ -177,18 +183,30 @@ void consoleInput(char key){
 #undef X
     };
     String command = {.data = console_buffer,.size = console_buffer_index};
-    print(command);
     for(int i = countof(commands);i--;){
         if(!stringCompareSizeInsensitive(command,commands[i]))
             continue;
         switch(i){
+            case COMMAND_TEXTURES:{
+                changeBooleanSetting(&g_options.textures);
+            } break;
+            case COMMAND_FAST_STARTUP:{
+                changeBooleanSetting(&g_options.fast_startup);
+            } break;
             case COMMAND_CREATE:{
                 worldDestroy();
                 worldDefaultGenerate();
                 g_voxel_interact = 0;
             } break;
             case COMMAND_SAVE:{
-                worldSave(stringWordSlice(stringForwardSlice(command,commands[i].size + 1)));
+                String world_name = stringForwardSlice(command,commands[i].size + 1);
+                world_name = stringWordSlice(stringConcat(world_name,(String)STRING_LITERAL("\n")));
+                if(!world_name.size)
+                    world_name = (String)STRING_LITERAL("world_1");
+                else
+                    stringToLower(world_name);
+                printNL(world_name);
+                worldSave(world_name);
             } break;
             case COMMAND_LOAD:{
                 String world_name = stringWordSlice(stringForwardSlice(command,commands[i].size + 1));
@@ -225,7 +243,7 @@ void consoleInput(char key){
                 for(int j = countof(backends);j--;){
                     if(!backends[j].size)
                         continue;
-                    if(!stringCompareSizeInsensitive(backend,backends[j]))
+                    if(!stringCompareSizeCaseInsensitive(backend,backends[j]))
                         continue;
                     switch(j){
                         case RENDER_BACKEND_GL:{
@@ -250,10 +268,15 @@ void consoleInput(char key){
                 changeBooleanSetting(&g_options.smooth_lighting);
             } break;
             case COMMAND_QUIT:{
-                applicationQuit();
+                applicationExit();
             } break;
         }
+        goto executed;
     }
+    print((String)STRING_LITERAL("command not found\n"));
+    return;
+    
+ executed:
     console_buffer_index = 0;
     return;
 }

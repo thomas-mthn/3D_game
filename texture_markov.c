@@ -4,6 +4,7 @@
 #include "memory.h"
 #include "main.h"
 #include "thread.h"
+#include "opencl.h"
 
 #if !defined(__wasm__) && !defined(__linux__)
 #include "win32/w_kernel.h"
@@ -345,6 +346,7 @@ static void setGraph(Graph* graph,GraphNode* node,uint8* position){
     connectToGraph(graph,node,position);
 }
 
+static MemoryArena arena;
 static Graph graph_color[0x10];
 
 #define MARGIN 4
@@ -380,6 +382,7 @@ static void extractImageColor(int* data,int width,int height,int mipmap,int offs
         GraphNode* graph_node = graphInference(graph_color + mipmap,position);
         if(!graph_node || !probabilityCompare(graph_color + mipmap,graph_node,position)){
             GraphNode* graph_node = graph_color[mipmap].entry + graph_color[mipmap].n_nodes++;
+            graph_color[mipmap].n_nodes++;
             for(int j = 0;j < DIMENSIONS;j++)
                 graph_node->position[j] = position[j];
 
@@ -626,7 +629,7 @@ void generateColorInitLayer(int* data,int* indices,int mipmap,int image_size){
 }
 
 static void generateColor(int* data,int mipmap,int image_size){
-    for(int i = 0;i < tMin(1 << mipmap * 2,256);i++){
+    for(int i = 0;i < 2;i++){
         int mipmap_size = image_size >> mipmap;
         if(!mipmap_size)
             return;
@@ -725,10 +728,10 @@ void markovTextureGenerate(Texture texture,Texture sampler){
         return;
 
     //int t = __rdtsc() >> 24;
-#if !defined(__wasm__) && !defined(__linux__)
-    if(g_opencl_loaded)
+
+    if(g_opencl_lib)
         markovInferenceInitOpenCL(texture,graph_color,texture.size);
-#endif
+
     for(int i = 0;i < 0x10;i++){
         graph_color[i].n_candidates_inference = 0x100;
         graph_color[i].n_search_inference = 16;
@@ -747,11 +750,10 @@ void markovTextureGenerate(Texture texture,Texture sampler){
         else
         */
             //generateColor(texture.pixel_data,mipmap,texture.size);
-#if !defined(__wasm__) && !defined(__linux__)
-        if(texture.size >> mipmap >= 256 && g_opencl_loaded)
-            markovInferenceOpenCL(texture,graph_color,g_indices,mipmap,texture.size,16,graph_color[mipmap].n_nodes);
+
+        if(g_opencl_lib)
+            markovInferenceBruteforceOpenCL(texture,graph_color,g_indices,mipmap,texture.size,graph_color[mipmap].n_nodes);
         else
-#endif
             generateColor(texture.pixel_data,mipmap,texture.size);
 
         //markovInferenceOpenCL(texture,g_graph_color,g_indices,mipmap,texture.size,16,g_graph_color[mipmap].n_nodes);
@@ -763,50 +765,45 @@ void markovTextureRemix(Texture texture,int remix_mipmap){
     if(g_options.fast_startup)
         return;
     //int t = __rdtsc() >> 24;
-#if !defined(__wasm__) && !defined(__linux__)
-    if(g_opencl_loaded)
+
+    if(g_opencl_lib)
         markovInferenceInitOpenCL(texture,graph_color,texture.size);
-#endif
+
     for(int mipmap = remix_mipmap;mipmap--;){
         graph_color[mipmap].n_candidates_inference = 16;
         graph_color[mipmap].n_search_inference = 16;
         generateColorInit(texture.pixel_data,mipmap,texture.size);
 
         //markovInferenceBruteforceOpenCL(texture,g_graph_color,g_indices,mipmap,texture.size,g_graph_color[mipmap].n_nodes);
-#if !defined(__wasm__) && !defined(__linux__)
-        if(texture.size >> mipmap >= 256 && g_opencl_loaded)
+
+        if(texture.size >> mipmap >= 256 && g_opencl_lib)
             markovInferenceOpenCL(texture,graph_color,g_indices,mipmap,texture.size,16,graph_color[mipmap].n_nodes);
         else
-#endif
             generateColor(texture.pixel_data,mipmap,texture.size);
     }
     //printNumberNL((__rdtsc() >> 24) - t);
-#if !defined(__wasm__) && !defined(__linux__)
+
     markovInferenceDeInitOpenCL();
-#endif
+
 }
 
 void markovInit(void){
     if(g_options.fast_startup)
         return;
-    /*
     for(int i = 0;i < 0x10;i++)
-        graph_color[i].entry = memoryArenaGet();
-    */
+        graph_color[i].entry = virtualAllocate(sizeof(GraphNode) * 0x40000 >> i * 2);
 }
 
 void markovFree(void){
     if(g_options.fast_startup)
         return;
-    /*
+    
     for(int i = 0;i < 0x10;i++){
-        memoryArenaFree(graph_color[i].entry);
+        virtualFree(graph_color[i].entry,sizeof(GraphNode) * 0x40000 >> i * 2);
         graph_color[i].entry = 0;
         graph_color[i].n_nodes = 0;
     }
-#if !defined(__wasm__) && !defined(__linux__)
-    if(g_opencl_loaded)
+    
+    if(g_opencl_lib)
         markovInferenceDeInitOpenCL();
-#endif
-    */
 }

@@ -4,12 +4,13 @@
 #include "../langext.h"
 #include "../string.h"
 #include "../texture.h"
+#include "../main.h"
 
 structure(Voxel);
 
 void showCursor(bool show);
 void createWindow(void);
-bool win32OctreeDeserialize(void);
+FileContent win32OctreeDeserialize(char* path);
 void win32OctreeSerialize(Voxel* root_voxel);
 Voxel* win32LoadModel(char* path);
 Texture win32LoadImage(char* path);

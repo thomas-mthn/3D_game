@@ -32,6 +32,33 @@ typedef enum{
 
 #else
 
+typedef enum{
+    KEY_ESCAPE = 1,
+    KEY_1,KEY_2,KEY_3,KEY_4,KEY_5,KEY_6,KEY_7,KEY_8,KEY_9,KEY_0,
+    KEY_OEM_4,KEY_OEM_2,KEY_BACK,KEY_TAB,
+    KEY_Q,KEY_W,KEY_E,KEY_R,KEY_T,KEY_Y,KEY_U,KEY_I,KEY_O,KEY_P,
+    KEY_OEM_6,KEY_OEM_1,KEY_RETURN,KEY_LCONTROL,
+    KEY_A,KEY_S,KEY_D,KEY_F,KEY_G,KEY_H,KEY_J,KEY_K,KEY_L,
+    KEY_OEM_PLUS,KEY_OEM_3,KEY_OEM_7,KEY_LSHIFT,KEY_OEM_5,
+    KEY_Z,KEY_X,KEY_C,KEY_V,KEY_B,KEY_N,KEY_M,
+    KEY_OEM_COMMA,KEY_OEM_PERIOD,KEY_OEM_MINUS,KEY_RSHIFT,KEY_MULTIPLY,
+    KEY_LMENU,KEY_SPACE,KEY_CAPITAL,
+    KEY_F1,KEY_F2,KEY_F3,KEY_F4,KEY_F5,KEY_F6,KEY_F7,KEY_F8,KEY_F9,KEY_F10,
+    KEY_NUMLOCK,KEY_SCROLL,KEY_HOME,KEY_UP,KEY_PRIOR,KEY_SUBTRACT,
+    KEY_LEFT_OLD,KEY_CLEAR,KEY_RIGHT_OLD,KEY_ADD,KEY_END,KEY_DOWN,KEY_NEXT,
+    KEY_INSERT,KEY_DELETE,KEY_SNAPSHOT,
+    KEY_OEM_10 = (0x56 + 8),KEY_F11,KEY_F12,
+} KeyType;
+
+#define KEY_LEFT 113
+#define KEY_RIGHT 114
+
+#define KEY_LBUTTON 191
+#define KEY_RBUTTON 192
+#define KEY_MBUTTON 193
+
+#if 0
+
 enum{
     KEY_BACK = 8,KEY_TAB,KEY_CLEAR = 0x0C,KEY_RETURN,
     KEY_SHIFT = 0x10,KEY_CONTROL,KEY_MENU,KEY_PAUSE,KEY_CAPITAL,
@@ -90,6 +117,10 @@ enum{
 #define KEY_OEM_8 0xDF
 
 #endif
+
+#endif
+
+#define ICON_SIZE 16
 	
 #define N_TICK_SECOND 128
 #define RENDER_DISTANCE (FIXED_ONE * 8)
@@ -121,9 +152,12 @@ structure(GameOptions){
     bool lighting_engine;
     bool smooth_lighting;
     bool gl_wireframe;
+    bool textures;
 };
 
-void applicationQuit(void);
+int* iconGenerate(void);
+
+void applicationExit(void);
 
 int bilinearScalar(Vec2 position,int* values);
 
@@ -138,7 +172,6 @@ Plane getPlane(Voxel* voxel,Vec3 dir,unsigned side);
 Vec3 pointToScreen(Vec3 point);
 Vec3 pointToScreenRenderer(Vec3 point,int* tri,Vec3 renderer_position,Vec2 fov);
 bool keyDown(int key);
-Vec2 voxelLocalPositionGet(Voxel* voxel,Vec3 position,Vec3 dir,int side);
 int treeRayTraceDistance(Voxel* voxel,Vec3 position,Vec3 dir,int side);
 
 void boxQuadWireframeDraw(Vec3 position,Vec3 size,int color);
@@ -149,6 +182,8 @@ Vec3 getLookDirection(Vec2 direction);
 int bitScanReverse(unsigned value);
 
 void configSave(void);
+
+FileContent fileRead(char* path);
 
 void keyPress(int key);
 void lButtonUp(void);

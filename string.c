@@ -27,8 +27,14 @@ bool stringCompareSizeInsensitive(String string,String compare){
 
 String stringWordSlice(String string){
     String word = {.data = string.data};
-    while(*string.data > ' ')
-        string.data += 1;
+    for(int i = 0;i < string.size;i++){
+        if(*string.data > ' ')
+            string.data += 1;
+        else
+            goto succes;
+    }
+    return (String){0};
+ succes:
     word.size = string.data - word.data;
     return word;
 }

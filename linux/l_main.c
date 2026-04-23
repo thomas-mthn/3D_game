@@ -7,7 +7,7 @@
 #include "../draw.h"
 #include "../memory.h"
 #include "../main.h"
-#include "../draw.h"
+#include "../gui2d.h"
 #include "../console.h"
 
 #include "l_main.h"
@@ -113,9 +113,10 @@ void linuxOctreeSerialize(Voxel* root_voxel,char* file_name){
     systemWrite(file,&voxel_count,sizeof voxel_count);
     systemWrite(file,voxel_diskdata,voxel_mem_count);
     systemClose(file);
+    virtualFree(voxel_diskdata,voxel_mem_count + sizeof voxel_count);
 }
 
-FileContent linuxOctreeDeserialize(char* file_name){
+FileContent linuxFileRead(char* file_name){
     int file = systemOpen(file_name,0,0);
 
 	if(file < 0)
@@ -124,13 +125,12 @@ FileContent linuxOctreeDeserialize(char* file_name){
     KernelStat stat;
     systemFileStat(file,&stat);
 	unsigned file_size = stat.st_size;
-	char* voxel_diskdata = virtualAllocate(file_size);
-   	int voxel_count;
+	char* content = virtualAllocate(file_size);
     
-    systemRead(file,&voxel_count,sizeof voxel_count);
-    systemRead(file,voxel_diskdata,file_size - sizeof(voxel_count));
+    systemRead(file,content,file_size);
     systemClose(file);
-	return (FileContent){.content = voxel_diskdata,.size = voxel_count};
+    
+	return (FileContent){.content = content,.size = file_size};
 }
 
 void linuxBlit(int* data,int width,int height){
@@ -194,10 +194,47 @@ void linuxSaveConfig(void){
 #define WINDOW_SIZE_X (640 * 2)
 #define WINDOW_SIZE_Y (480 * 2)
 
+void set_window_icon(Display *dpy, Window win) {
+
+}
+
 void linuxWindowInit(void){
     XStoreName(g_surface.display,g_surface.window,"3D Game");
     XSelectInput(g_surface.display,g_surface.window,ExposureMask | KeyPressMask | PointerMotionMask | ButtonPressMask | ButtonReleaseMask | StructureNotifyMask);
+    
+    Atom net_wm_icon = XInternAtom(g_surface.display, "_NET_WM_ICON", False);
+    Atom cardinal = XInternAtom(g_surface.display, "CARDINAL", False);
+    /*
+    printNumberNL(net_wm_icon);
+    printNumberNL(cardinal);
+
+    int* icon_data = iconGenerate();
+
+    struct{
+        size_t width;
+        size_t height;
+        size_t data[ICON_SIZE * ICON_SIZE];
+    }* icon_data_linux = memoryArenaAllocate(&g_arena_frame,ICON_SIZE * ICON_SIZE + sizeof(size_t) * 2);;
+
+    icon_data_linux->height = ICON_SIZE;
+    icon_data_linux->width = ICON_SIZE;
+    
+    for(int i = ICON_SIZE * ICON_SIZE;i--;)
+        icon_data_linux->data[i] = icon_data[i] | 0xFF000000;
+    
+    XChangeProperty(
+        g_surface.display,
+        g_surface.window,
+        net_wm_icon,
+        cardinal,
+        32,
+        PropModeReplace,
+        (void*)icon_data_linux,
+        ICON_SIZE * ICON_SIZE + 2
+    );
+    */
     XMapWindow(g_surface.display,g_surface.window);
+    XFlush(g_surface.display);
 }
 
 int main(void){
@@ -395,9 +432,9 @@ int main(void){
         prev_tick = tick;
         
 		frameRender();
-        
-        drawString(&g_surface,-FIXED_ONE + 0x800,-FIXED_ONE + 0x4000,(String)STRING_LITERAL("fps"),0xA00,(Vec3){0});
-        drawNumber(&g_surface,-FIXED_ONE + 0x800,-FIXED_ONE + 0x2000,fps,0x800);
+
+        gui2dStringDraw(0x800,0x4A00,(String)STRING_LITERAL("fps"),0xA00,0x000000,0x1400,(Gui2dFlags){0});
+        gui2dNumberDraw(0x800,0x2A00,fps,0x800,(Gui2dFlags){0});
         
         surfaceBlit(&g_surface);
     }

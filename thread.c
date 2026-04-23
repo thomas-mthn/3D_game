@@ -16,12 +16,20 @@
 
 typedef pthread_t thread_t;
 
-#else
+#elif defined(_MSC_VER)
+
 #include "win32/w_kernel.h"
 #include <intrin.h>
 
 #define THREAD_ENTRY unsigned stdcall
 #define THREAD_RETURN unsigned
+
+typedef void* thread_t;
+
+#else
+
+#define THREAD_ENTRY void
+#define THREAD_RETURN void
 
 typedef void* thread_t;
 
@@ -110,6 +118,10 @@ void threadInit(void){
     pthread_cond_init(&cond, NULL);
     pthread_cond_init(&cond_main, NULL);
 #elif defined(_MSC_VER)
+    SystemInfo system_info;
+	GetSystemInfo(&system_info);
+	g_n_thread_available = system_info.number_of_processors;
+
     cond = CreateEventA(0,true,false,0);
     cond_main = CreateEventA(0,true,false,0);
 #endif

@@ -230,12 +230,12 @@ typedef struct{
 } RawMouse;
 
 typedef struct{
-    uint16 MakeCode;
-    uint16 Flags;
-    uint16 Reserved;
-    uint16 VKey;
-    unsigned Message;
-    unsigned ExtraInformation;
+    uint16 make_code;
+    uint16 flags;
+    uint16 reserved;
+    uint16 v_key;
+    unsigned message;
+    unsigned extra_information;
 } RawKeyboard;
 
 typedef struct{

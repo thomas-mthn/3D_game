@@ -11,10 +11,13 @@
 #include "string.h"
 #include "memory.h"
 
+structure(Span);
+
 typedef enum{
 	RENDER_BACKEND_SOFTWARE,
 	RENDER_BACKEND_GDI,
 	RENDER_BACKEND_GL,
+    RENDER_BACKEND_WEBGL,
 } RenderBackend;
 
 structure(Scanline){
@@ -62,7 +65,8 @@ structure(DrawSurface){
 	ScanlineTexture scanline_texture;
     ScanlineZ* scanline_z;
 
-    MemoryArena fb_meta_arena; 
+    MemoryArena fb_meta_arena;
+    Span** span_list;
     
 #if !defined(__wasm__) && !defined(__linux__)
 	BitmapInfo soft_bitmapinfo;
@@ -89,7 +93,7 @@ void drawTexturePolygon(DrawSurface* surface,Texture* texture,Vec2* texture_coor
 void drawTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point);
 void drawColoredTexturePolygon(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3* color,int n_point);
 void drawColoredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap);
-void drawSkyboxPolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color);
+void drawSkyboxPolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap);
 void drawCircle(DrawSurface* surface,int x,int y,int radius,Vec3 color);
 void drawEllipses(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color);
 void drawCircle3d(DrawSurface* surface,Vec3* coordinates,Vec3 color);

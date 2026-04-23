@@ -41,11 +41,6 @@ structure(ClipContainer){
     Clip clip[0x100];
 };
 
-static Span* span_list[0x1000];
-
-static MemoryArena span_arena;
-static MemoryArena clip_arena;
-
 static void setScanline(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size){
 	int p_begin,p_end;
 	int delta,delta_pos;
@@ -99,7 +94,7 @@ static void setScanlineColor(ScanlineColor* color,Scanline scanline,ScanlineZ* s
         pos_2 = tmp_pos;
     }
     
-    Vec2 delta_color = vec2SubR(color_2,color_1);
+    Vec2 delta_color = vec2Sub(color_2,color_1);
     int p_begin = pos_1.x;
     int p_end = pos_2.x;
     int delta = (pos_2.y - pos_1.y << FIXED_PRECISION) / (pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
@@ -158,13 +153,13 @@ static void setScanlineTexture(ScanlineTexture texture,Scanline scanline,Scanlin
         pos_2 = tmp_pos;
     }
 
-    Vec2 delta_texture = vec2SubR(texture_2,texture_1);
+    Vec2 delta_texture = vec2Sub(texture_2,texture_1);
     Vec2 texture_iterator = texture_1;
     int p_begin = pos_1.x;
     int p_end = pos_2.x;
     int delta = (pos_2.y - pos_1.y << FIXED_PRECISION) / (pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
     int delta_pos = (pos_1.y << FIXED_PRECISION);
-    int delta_t = (FIXED_ONE) / tMax(p_end - p_begin,1);
+    int delta_t = (FIXED_ONE << 8) / tMax(p_end - p_begin,1);
     int t = 0;
     
     delta_texture.x /= tMax(p_end - p_begin,1);
@@ -175,7 +170,7 @@ static void setScanlineTexture(ScanlineTexture texture,Scanline scanline,Scanlin
         return;
 	if(p_begin < 0){
         delta_pos += delta * (-p_begin);
-        vec2Add(&texture_iterator,(Vec2){delta_texture.x * -p_begin,delta_texture.y * -p_begin});
+        texture_iterator = vec2Add(texture_iterator,(Vec2){delta_texture.x * -p_begin,delta_texture.y * -p_begin});
         t += delta_t * (-p_begin);
 		p_begin = 0;
     }
@@ -185,7 +180,7 @@ static void setScanlineTexture(ScanlineTexture texture,Scanline scanline,Scanlin
     while(p_begin < p_end){
         int index = p_begin;
 
-        int l = perspective_lerp(pos_1.z,pos_2.z,t);
+        int l = perspective_lerp(pos_1.z,pos_2.z,t >> 8);
 
         Vec2 uv = vec2Mix(texture_1,texture_2,l);
 
@@ -222,8 +217,8 @@ static void setScanlineColorTexture(ScanlineColor* color,ScanlineTexture texture
         pos_2 = tmp_pos;
     }
     
-    Vec2 delta_color = vec2SubR(color_2,color_1);
-    Vec2 delta_texture = vec2SubR(texture_2,texture_1);
+    Vec2 delta_color = vec2Sub(color_2,color_1);
+    Vec2 delta_texture = vec2Sub(texture_2,texture_1);
     int p_begin = pos_1.x;
     int p_end = pos_2.x;
     int delta = (pos_2.y - pos_1.y << FIXED_PRECISION) / (pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
@@ -317,16 +312,16 @@ static Vec3 lightmapBilinear(LightmapTree* lightmap,Vec2 uv){
     return vec3Mix(lx1,lx2,l_uv.y); 
 }
 
-noinline static void spanDraw(Span* span,int height){
+static void spanDraw(DrawSurface* surface,Span* span,int height){
     int i = span->begin;
 
     if(span->solid_color){
         for(;i < span->end - 3;i += 4){
             for(int j = 0;j < 4;j++)
-                g_surface.data[height * g_surface.width + i + j] = colorToPixelColor(span->color);
+                surface->data[height * surface->width + i + j] = colorToPixelColor(span->color);
         }
 	    for(;i < span->end;i++){
-            g_surface.data[height * g_surface.width + i] = colorToPixelColor(span->color);
+            surface->data[height * surface->width + i] = colorToPixelColor(span->color);
         }
         return;
     }
@@ -334,12 +329,12 @@ noinline static void spanDraw(Span* span,int height){
 #if 0
         for(;i < span->end - 3;i += 4){
             for(int j = 0;j < 4;j++){
-                g_surface.data[height * g_surface.width + i + j] = colorToPixelColor(span->color_begin);
+                surface->data[height * surface->width + i + j] = colorToPixelColor(span->color_begin);
                 vec3Add(&span->color_begin,color_delta);
             }
         }
 	    for(;i < span->end;i++){
-            g_surface.data[height * g_surface.width + i] = colorToPixelColor(span->color_begin);
+            surface->data[height * surface->width + i] = colorToPixelColor(span->color_begin);
             vec3Add(&span->color_begin,color_delta);
         }
 #endif
@@ -353,7 +348,7 @@ noinline static void spanDraw(Span* span,int height){
     for(int i = 0;i < span->mipmap;i++)
         mipmap_offset += (span->texture->size >> i) * (span->texture->size >> i);
 
-    Vec2 texture_delta = vec2ShlR(vec2SubR(span->texture_end,span->texture_begin),mipmap_shift);
+    Vec2 texture_delta = vec2Shl(vec2Sub(span->texture_end,span->texture_begin),mipmap_shift);
     texture_delta.x /= tMax(span->end - span->begin,1);
     texture_delta.y /= tMax(span->end - span->begin,1);
 
@@ -366,60 +361,57 @@ noinline static void spanDraw(Span* span,int height){
     span->texture_end.y <<= mipmap_shift;
 
     int batch_size = 16;
-    
-    if(span->solid_color_texture){
-        int l = perspective_lerp(span->z_begin,span->z_end,z);
-        int l_n = perspective_lerp(span->z_begin,span->z_end,z + delta * batch_size);
-        Vec2 uv = vec2Mix(span->texture_begin,span->texture_end,l);
-        Vec2 uv_next = vec2Mix(span->texture_begin,span->texture_end,l_n);
-        for(;i < span->end - batch_size + 1;i += batch_size){
-            Vec2 uv_delta = vec2ShrR(vec2SubR(uv_next,uv),4);
-            for(int j = 0;j < batch_size;j++){
-                int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
-                int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
-                unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
-                Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
-                g_surface.data[height * g_surface.width + i + j] = colorToPixelColor(vec3MulR(texture_color,span->color));
-                vec2Add(&uv,uv_delta);
-            }
-            z += delta * batch_size;
-            l = l_n;
-            l_n = perspective_lerp(span->z_begin,span->z_end,z + delta * batch_size);
-            uv = uv_next;
-            uv_next = vec2Mix(span->texture_begin,span->texture_end,l_n);
-        }
-        Vec2 uv_delta = vec2ShrR(vec2SubR(uv_next,uv),4);
-        for(;i < span->end;i++){
-            int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
-            int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
-            unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
-            Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
-            g_surface.data[height * g_surface.width + i] = colorToPixelColor(vec3MulR(texture_color,span->color));
-            vec2Add(&uv,uv_delta);
-        }
-        return;
-    }
+
     int l = perspective_lerp(span->z_begin,span->z_end,z >> 8);
     int l_n = perspective_lerp(span->z_begin,span->z_end,(z >> 8) + (delta >> 8) * batch_size);
     Vec2 uv = vec2Mix(span->texture_begin,span->texture_end,l);
     Vec2 uv_next = vec2Mix(span->texture_begin,span->texture_end,l_n);
+    
+    if(span->solid_color_texture){
+        for(;i < span->end - batch_size + 1;i += batch_size){
+            Vec2 uv_delta = vec2Shr(vec2Sub(uv_next,uv),4);
+            for(int j = 0;j < batch_size;j++){
+                int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
+                int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
+                unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
+                Vec3 texture_color = vec3Shr(pixelColorToColor(texel),4);
+                g_surface.data[height * g_surface.width + i + j] = colorToPixelColor(vec3Mul(texture_color,span->color));
+                uv = vec2Add(uv,uv_delta);
+            }
+            z += delta * batch_size;
+            l = l_n;
+            l_n = perspective_lerp(span->z_begin,span->z_end,(z >> 8) + (delta >> 8) * batch_size);
+            uv = uv_next;
+            uv_next = vec2Mix(span->texture_begin,span->texture_end,l_n);
+        }
+        Vec2 uv_delta = vec2Shr(vec2Sub(uv_next,uv),4);
+        for(;i < span->end;i++){
+            int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
+            int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
+            unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
+            Vec3 texture_color = vec3Shr(pixelColorToColor(texel),4);
+            surface->data[height * surface->width + i] = colorToPixelColor(vec3Mul(texture_color,span->color));
+            uv = vec2Add(uv,uv_delta);
+        }
+        return;
+    }
 
     Vec2 uv_lightmap = vec2Mix(span->color_begin,span->color_end,l);
     Vec2 uv_lightmap_next = vec2Mix(span->color_begin,span->color_end,l_n);
     
     if(!g_options.smooth_lighting){
         for(;i < span->end - batch_size + 1;i += batch_size){
-            Vec2 uv_delta = vec2ShrR(vec2SubR(uv_next,uv),4);
-            Vec2 uv_lightmap_delta = vec2ShrR(vec2SubR(uv_lightmap_next,uv_lightmap),4);
+            Vec2 uv_delta = vec2Shr(vec2Sub(uv_next,uv),4);
+            Vec2 uv_lightmap_delta = vec2Shr(vec2Sub(uv_lightmap_next,uv_lightmap),4);
             for(int j = 0;j < batch_size;j++){
                 int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
                 int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
                 unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
-                Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
+                Vec3 texture_color = vec3Shr(pixelColorToColor(texel),4);
                 Vec3 color = lightmapGet(span->lightmap,uv_lightmap);
-                g_surface.data[height * g_surface.width + i + j] = colorToPixelColor(vec3MulR(color,texture_color));
-                vec2Add(&uv,uv_delta);
-                vec2Add(&uv_lightmap,uv_lightmap_delta);
+                surface->data[height * surface->width + i + j] = colorToPixelColor(vec3Mul(color,texture_color));
+                uv = vec2Add(uv,uv_delta);
+                uv_lightmap = vec2Add(uv_lightmap,uv_lightmap_delta);
             }
             z += delta * batch_size;
             l = l_n;
@@ -431,16 +423,16 @@ noinline static void spanDraw(Span* span,int height){
             uv_lightmap = uv_lightmap_next;
             uv_lightmap_next = vec2Mix(span->color_begin,span->color_end,l_n);
         }
-        Vec2 uv_delta = vec2ShrR(vec2SubR(uv_next,uv),4);
+        Vec2 uv_delta = vec2Shr(vec2Sub(uv_next,uv),4);
         for(;i < span->end;i++){
             Vec2 u = vec2Mix(span->color_begin,span->color_end,l_n);
             int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
             int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
             unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
-            Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
+            Vec3 texture_color = vec3Shr(pixelColorToColor(texel),4);
             Vec3 color = lightmapGet(span->lightmap,uv_lightmap);
-            g_surface.data[height * g_surface.width + i] = colorToPixelColor(vec3MulR(color,texture_color));
-            vec2Add(&uv,uv_delta);
+            surface->data[height * g_surface.width + i] = colorToPixelColor(vec3Mul(color,texture_color));
+            uv = vec2Add(uv,uv_delta);
         }
         return;
     }
@@ -452,17 +444,17 @@ noinline static void spanDraw(Span* span,int height){
     color_next = lightmapBilinear(span->lightmap,uv_lightmap_next);
     
     for(;i < span->end - batch_size + 1;i += batch_size){
-        Vec2 uv_delta = vec2ShrR(vec2SubR(uv_next,uv),4);
-        Vec3 color_delta = vec3ShrR(vec3SubR(color_next,color),4);
+        Vec2 uv_delta = vec2Shr(vec2Sub(uv_next,uv),4);
+        Vec3 color_delta = vec3Shr(vec3Sub(color_next,color),4);
         for(int j = 0;j < batch_size;j++){
             Vec2 u = vec2Mix(span->color_begin,span->color_end,l_n);
             int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
             int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
             unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
-            Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
-            g_surface.data[height * g_surface.width + i + j] = colorToPixelColor(vec3MulR(color,texture_color));
-            vec2Add(&uv,uv_delta);
-            vec3Add(&color,color_delta);
+            Vec3 texture_color = vec3Shr(pixelColorToColor(texel),4);
+            surface->data[height * surface->width + i + j] = colorToPixelColor(vec3Mul(color,texture_color));
+            uv = vec2Add(uv,uv_delta);
+            color = vec3Add(color,color_delta);
         }
         z += delta * batch_size;
         l = l_n;
@@ -477,17 +469,17 @@ noinline static void spanDraw(Span* span,int height){
         
         color_next = lightmapBilinear(span->lightmap,uv_lightmap_next);
     }
-    Vec2 uv_delta = vec2ShrR(vec2SubR(uv_next,uv),4);
-    Vec3 color_delta = vec3ShrR(vec3SubR(color_next,color),4);
+    Vec2 uv_delta = vec2Shr(vec2Sub(uv_next,uv),4);
+    Vec3 color_delta = vec3Shr(vec3Sub(color_next,color),4);
     for(;i < span->end;i++){
         Vec2 u = vec2Mix(span->color_begin,span->color_end,l_n);
         int texture_x = uv.x >> FIXED_PRECISION & mipmap_size - 1;
         int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
         unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
-        Vec3 texture_color = vec3ShrR(pixelColorToColor(texel),4);
-        g_surface.data[height * g_surface.width + i] = colorToPixelColor(vec3MulR(color,texture_color));
-        vec2Add(&uv,uv_delta);
-        vec3Add(&color,color_delta);
+        Vec3 texture_color = vec3Shr(pixelColorToColor(texel),4);
+        surface->data[height * surface->width + i] = colorToPixelColor(vec3Mul(color,texture_color));
+        uv = vec2Add(uv,uv_delta);
+        color = vec3Add(color,color_delta);
     }
     /*
     Vec2 uv_delta = vec2ShrR(vec2SubR(uv_next,uv),4);
@@ -526,19 +518,19 @@ noinline static void spanDraw(Span* span,int height){
         */
 }
 
-void spanDrawList(void){
+void spanDrawList(DrawSurface* surface){
     static Clip clip_list[0x400];
     int clip_n = 0;
-    for(int i = 0;i < g_surface.height;i++){
+    for(int i = 0;i < surface->height;i++){
         int cover = 0;
-        for(Span* span = span_list[i];span;span = span->next){
+        for(Span* span = surface->span_list[i];span;span = span->next){
             Clip* neighbour[2] = {0};
             for(int i = 0;i < clip_n;i++){
                 Clip* clip = clip_list + i;
                 if(span->begin >= clip->begin && span->end <= clip->end)
                     goto end;
                 if(span->begin < clip->begin && span->end > clip->end){
-                    Span* span_new = memoryArenaAllocate(&span_arena,sizeof(Span));
+                    Span* span_new = memoryArenaAllocate(&g_arena_frame,sizeof(Span));
                     *span_new = *span;
                     int mix = fixedDivR(clip->end - span->begin << FIXED_PRECISION,span->end - span->begin << FIXED_PRECISION);
 
@@ -575,23 +567,28 @@ void spanDrawList(void){
                 clip_new->end = span->end;
                 cover += span->end - span->begin;
             }
-            spanDraw(span,i);
-            if(cover >= g_surface.width)
+            spanDraw(surface,span,i);
+            if(cover >= surface->width)
                 break;
-        end:
+        end:;
         }
         clip_n = 0;
-        span_list[i] = 0;
+        surface->span_list[i] = 0;
     }
-    memoryArenaFree(&span_arena);
 }
 
-static void spanListAdd(int x,Span* span){
-    if(span_list[x])
-        span_list[x]->previous = span;
-    span->next = span_list[x];
+static Span* spanListAdd(DrawSurface* surface,int x){
+    Span* span = memoryArenaAllocate(&g_arena_frame,sizeof(Span));
+
+    *span = (Span){0};
+    
+    if(surface->span_list[x])
+        surface->span_list[x]->previous = span;
+    span->next = surface->span_list[x];
     span->previous = 0;
-    span_list[x] = span;
+    surface->span_list[x] = span;
+
+    return span;
 }
 
 structure(SpanFlag){
@@ -599,8 +596,10 @@ structure(SpanFlag){
     bool solid_color_texture : 1;
 };
 
+#if 0
+
 static void spanColorTextureAdd(int x,int begin,int end,Vec2 color_begin,Vec2 color_end,Texture* texture,Vec2 texture_begin,Vec2 texture_end,int z_begin,int z_end,int interpolate_begin,int interpolate_end,int mipmap,SpanFlag flags,LightmapTree* lightmap){
-    Span* span = memoryArenaAllocate(&span_arena,sizeof(Span));
+    Span* span = memoryArenaAllocate(&g_arena_frame,sizeof(Span));
     span->begin = begin;
     span->end = end;
     span->solid_color = flags.solid_color;
@@ -619,7 +618,7 @@ static void spanColorTextureAdd(int x,int begin,int end,Vec2 color_begin,Vec2 co
 }
 
 static void spanTextureAdd(int x,int begin,int end,Texture* texture,Vec2 texture_begin,Vec2 texture_end,Vec3 color,int z_begin,int z_end,int interpolate_begin,int interpolate_end,int mipmap){
-    Span* span = memoryArenaAllocate(&span_arena,sizeof(Span));
+    Span* span = memoryArenaAllocate(&g_arena_frame,sizeof(Span));
     span->begin = begin;
     span->end = end;
     span->texture_begin = texture_begin;
@@ -645,14 +644,7 @@ static void spanAdd(int x,int begin,int end,Vec3 color){
     spanListAdd(x,span);
 }
 
-static Vec3 polygonPositionNew(Vec3 inside,Vec3 outside,int* between,int z_offset){
-    Vec3 direction = vec3Direction(inside,outside);
-    Plane plane = {.normal = getLookDirection(g_angle),.distance = -z_offset};
-    int distance = tAbs(rayPlaneIntersection(vec3SubR(inside,g_position),direction,plane));
-    if(between)
-        *between = fixedDivR(distance,vec3Distance(inside,outside));
-    return vec3AddR(inside,vec3MulRS(direction,distance));
-}
+#endif
 
 void spanEllipsesAdd(DrawSurface* surface,int cx,int cy,int size_x,int size_y,Vec3 color){
     cy = -cy;
@@ -666,7 +658,13 @@ void spanEllipsesAdd(DrawSurface* surface,int cx,int cy,int size_x,int size_y,Ve
         int v = (x - (cx)) * FIXED_ONE / size_x;
         int offset_real = tSqrt(FIXED_ONE - fixedMulR(v,v));
         int offset = fixedMulR((size_y * FIXED_ONE),offset) / FIXED_ONE;
-        spanAdd(x,tMax(cy - offset,0),tMin(cy + offset,surface->width - 1),color);
+
+        Span* span = spanListAdd(surface,x);
+
+        span->begin = tMax(cy - offset,0);
+        span->end = tMin(cy + offset,0);
+        span->solid_color = true;
+        span->color = color;
     }
 }
 
@@ -704,11 +702,34 @@ void spanQuadAdd(DrawSurface* surface,Vec2* coords_2d,Vec3 color){
     for(int x = x_min;x < x_max;x++){
         surface->scanline.begin[x] = tClamp(surface->scanline.begin[x],0,surface->width);
         surface->scanline.end[x] = tClamp(surface->scanline.end[x],0,surface->width);
-        spanAdd(x,surface->scanline.begin[x],surface->scanline.end[x],color);
+
+        Span* span = spanListAdd(surface,x);
+        span->begin = surface->scanline.begin[x];
+        span->end = surface->scanline.end[x];
+        span->solid_color = true;
+        span->color = color;
     }
 }
 
-static int polygonClipProject(Vec3* polygon,Vec3* polygon_2d,Vec2* texture_coordinates,Vec2* texture_coordinates_2d,Vec2* lighting_coordinates_2d){
+static Vec3 polygonPositionNew(Vec3 inside,Vec3 outside,int* between,int z_offset){
+    Vec3 direction = vec3Direction(outside,inside);
+    Plane plane = {.normal = getLookDirection(g_angle),.distance = -z_offset};
+    int distance = rayPlaneIntersection(vec3Sub(outside,g_position),direction,plane);
+    if(between)
+        *between = FIXED_ONE - fixedDivR(distance,vec3Distance(inside,outside));
+    return vec3Add(outside,vec3MulS(direction,distance));
+}
+
+static int viewPlaneZ(Vec3 point,int* tri,Vec3 renderer_position){
+	Vec3 pos = vec3Sub(point,renderer_position);
+    
+	pos.x = fixedMulR(pos.y,tri[1]) + fixedMulR(pos.x,tri[0]);
+	pos.x = fixedMulR(pos.z,tri[3]) + fixedMulR(pos.x,tri[2]);
+
+	return pos.x;
+}
+
+static int polygonClipProject(DrawSurface* surface,Vec3* polygon,Vec3* polygon_2d,Vec2* texture_coordinates,Vec2* texture_coordinates_2d,Vec2* lighting_coordinates_2d){
     Vec2 lighting_coordinates[] = {{0,0},{0,FIXED_ONE},{FIXED_ONE,FIXED_ONE},{FIXED_ONE,0},{0,0}};
     Vec3 d_point[] = {
         polygon[0],
@@ -716,14 +737,21 @@ static int polygonClipProject(Vec3* polygon,Vec3* polygon_2d,Vec2* texture_coord
         polygon[3],
         polygon[2],
     };
-    Vec3 transformed[5] = {
-        pointToScreenRenderer(d_point[0],g_tri,g_position,g_options.fov),
-        pointToScreenRenderer(d_point[1],g_tri,g_position,g_options.fov),
-        pointToScreenRenderer(d_point[2],g_tri,g_position,g_options.fov),
-        pointToScreenRenderer(d_point[3],g_tri,g_position,g_options.fov),
+    int view_z[5] = {
+        viewPlaneZ(d_point[0],g_tri,g_position),
+        viewPlaneZ(d_point[1],g_tri,g_position),
+        viewPlaneZ(d_point[2],g_tri,g_position),
+        viewPlaneZ(d_point[3],g_tri,g_position),
     };
+    if(texture_coordinates){
+        for(int i = 4;i--;){
+            int temp = texture_coordinates[i].x;
+            texture_coordinates[i].x = texture_coordinates[i].y;
+            texture_coordinates[i].y = temp;
+        }
+    }
     
-    if(transformed[0].z <= 0 && transformed[1].z <= 0 && transformed[2].z <= 0 && transformed[3].z <= 0)
+    if(view_z[0] <= 0 && view_z[1] <= 0 && view_z[2] <= 0 && view_z[3] <= 0)
         return 0;
 
     Vec3 quad_new[5];
@@ -734,14 +762,14 @@ static int polygonClipProject(Vec3* polygon,Vec3* polygon_2d,Vec2* texture_coord
     for(int i = 0;i < 4;i++){
         int mix_value;
         int i_next = (i + 1) % 4;
-        if(transformed[i].z > z_offset){
+        if(view_z[i] > z_offset){
             quad_new[quad_ptr] = d_point[i];
             if(texture_coordinates_2d)
                 texture_coordinates_2d[quad_ptr] = texture_coordinates[i];
             if(lighting_coordinates_2d)
                 lighting_coordinates_2d[quad_ptr] = lighting_coordinates[i];
             quad_ptr += 1;
-            if(transformed[(i + 1) % 4].z <= z_offset){
+            if(view_z[(i + 1) % 4] <= z_offset){
                 quad_new[quad_ptr] = polygonPositionNew(d_point[i],d_point[i_next],texture_coordinates ? &mix_value : 0,z_offset);
                 if(texture_coordinates)
                     texture_coordinates_2d[quad_ptr] = vec2Mix(texture_coordinates[i],texture_coordinates[i_next],mix_value);
@@ -751,7 +779,7 @@ static int polygonClipProject(Vec3* polygon,Vec3* polygon_2d,Vec2* texture_coord
             }
         }
         else{
-            if(transformed[(i + 1) % 4].z > z_offset){
+            if(view_z[(i + 1) % 4] > z_offset){
                 quad_new[quad_ptr] = polygonPositionNew(d_point[i_next],d_point[i],texture_coordinates ? &mix_value : 0,z_offset);
                 if(texture_coordinates)
                     texture_coordinates_2d[quad_ptr] = vec2Mix(texture_coordinates[i_next],texture_coordinates[i],mix_value);
@@ -761,7 +789,8 @@ static int polygonClipProject(Vec3* polygon,Vec3* polygon_2d,Vec2* texture_coord
             }
         }
     }
-    int n_vertex = quad_ptr;        
+    int n_vertex = quad_ptr;
+    Vec3 transformed[5];
     for(int i = n_vertex;i--;)
         transformed[i] = pointToScreenRenderer(quad_new[i],g_tri,g_position,g_options.fov);
     
@@ -772,15 +801,15 @@ static int polygonClipProject(Vec3* polygon,Vec3* polygon_2d,Vec2* texture_coord
     }
 
     for(int i = 0;i < n_vertex;i++){
-        polygon_2d[i].x = transformDraw(g_surface.height,polygon_2d[i].x);
-        polygon_2d[i].y = transformDraw(g_surface.width ,polygon_2d[i].y);
+        polygon_2d[i].x = transformDraw(surface->height,polygon_2d[i].x);
+        polygon_2d[i].y = transformDraw(surface->width,polygon_2d[i].y);
     }
     return n_vertex;
 }
 
 void spanQuad3dAdd(DrawSurface* surface,Vec3* coordinats,Vec3 color){
     Vec3 coords_2d[5];
-    int n_vertex = polygonClipProject(coordinats,coords_2d,0,0,0);
+    int n_vertex = polygonClipProject(surface,coordinats,coords_2d,0,0,0);
     if(!n_vertex)
         return;
     
@@ -812,14 +841,20 @@ void spanQuad3dAdd(DrawSurface* surface,Vec3* coordinats,Vec3 color){
     for(int x = x_min;x < x_max;x++){
         surface->scanline.begin[x] = tClamp(surface->scanline.begin[x],0,surface->width);
         surface->scanline.end[x] = tClamp(surface->scanline.end[x],0,surface->width);
-        spanAdd(x,surface->scanline.begin[x],surface->scanline.end[x],color);
+
+        Span* span = spanListAdd(surface,x);
+        
+        span->begin = surface->scanline.begin[x];
+        span->end = surface->scanline.end[x];
+        span->solid_color = true;
+        span->color = color;
     }
 }
 
 void spanQuad3dLightingAdd(DrawSurface* surface,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
     Vec3 coords_2d[5];
     Vec2 texture_coordinats_2d[5];
-    int n_vertex = polygonClipProject(coordinats,coords_2d,0,0,0);
+    int n_vertex = polygonClipProject(surface,coordinats,coords_2d,0,0,0);
     if(!n_vertex)
         return;
     if(coordinats[0].z <= 0 || coordinats[1].z <= 0 || coordinats[2].z <= 0 || coordinats[3].z <= 0)
@@ -865,9 +900,23 @@ void spanQuad3dLightingAdd(DrawSurface* surface,Vec3* coordinats,Vec3* color,Lig
 
         int interpolate_begin = ((FIXED_ONE << 8) / tMax(length,1)) * begin_clip >> 8;
         int interpolate_end = FIXED_ONE - (((FIXED_ONE << 8) / tMax(length,1)) * end_clip >> 8);
+
+        Span* span = spanListAdd(surface,x);
         
-        spanColorTextureAdd(x,begin,end,surface->scanline_color[x].begin,surface->scanline_color[x].end,0,surface->scanline_texture.begin[x],surface->scanline_texture.end[x],surface->scanline_z[x].begin,surface->scanline_z[x].end,interpolate_begin,interpolate_end,0,(SpanFlag){0},lightmap);
-        //spanColorTextureAdd(x,surface->scanline.begin[x],surface->scanline.end[x],surface->scanline_color[x].begin,surface->scanline_color[x].end,0,surface->scanline_texture.begin[x],surface->scanline_texture.end[x],0,(SpanFlag){0});
+        span->begin = begin;
+        span->end = end;
+        span->solid_color = true;
+        span->color_begin = surface->scanline_color[x].begin;
+        span->color_end = surface->scanline_color[x].end;
+        span->texture_begin = surface->scanline_texture.begin[x];
+        span->texture_end = surface->scanline_texture.end[x];
+        span->mipmap = 0;
+        span->texture = 0;
+        span->z_begin = surface->scanline_z[x].begin;
+        span->z_end = surface->scanline_z[x].end;
+        span->interpolate_begin = interpolate_begin;
+        span->interpolate_end = interpolate_end;
+        span->lightmap = lightmap;
     }
 }
 
@@ -935,7 +984,7 @@ void spanSpriteAdd(DrawSurface* surface,Texture* texture,Vec2* coords_2d){
 void spanQuad3dTextureAdd(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point){
     Vec3 coords_2d[5];
     Vec2 texture_coordinats_2d[5];
-    int n_vertex = polygonClipProject(coordinats,coords_2d,texture_coordinats,texture_coordinats_2d,0);
+    int n_vertex = polygonClipProject(surface,coordinats,coords_2d,texture_coordinats,texture_coordinats_2d,0);
     if(!n_vertex)
         return;
     /*
@@ -976,17 +1025,17 @@ void spanQuad3dTextureAdd(DrawSurface* surface,Texture* texture,Vec2* texture_co
     Vec2 texture_begin = surface->scanline_texture.begin[x_min];
     Vec2 texture_end   = surface->scanline_texture.end[x_min];
 
-    Vec2 texture_delta = vec2SubR(texture_end,texture_begin);
+    Vec2 texture_delta = vec2Sub(texture_end,texture_begin);
     texture_delta.x /= tMax(surface->scanline.end[x_min] - surface->scanline.begin[x_min],1);
     texture_delta.y /= tMax(surface->scanline.end[x_min] - surface->scanline.begin[x_min],1);
 
     int mipmap = tClamp(bitScanReverse((tAbs(texture_delta.x) + tAbs(texture_delta.y)) * texture->size) - 14,0,31);
-
+    
     for(int x = x_min;x < x_max;x++){
         int begin = tClamp(surface->scanline.begin[x],0,surface->width);
         int end   = tClamp(surface->scanline.end[x],0,surface->width);
 
-        Vec2 texture_delta = vec2SubR(surface->scanline_texture.end[x],surface->scanline_texture.begin[x]);
+        Vec2 texture_delta = vec2Sub(surface->scanline_texture.end[x],surface->scanline_texture.begin[x]);
         texture_delta.x /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
         texture_delta.y /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
 
@@ -1000,16 +1049,33 @@ void spanQuad3dTextureAdd(DrawSurface* surface,Texture* texture,Vec2* texture_co
 
         int interpolate_begin = ((FIXED_ONE << 8) / tMax(length,1)) * begin_clip >> 8;
         int interpolate_end = FIXED_ONE - (((FIXED_ONE << 8) / tMax(length,1)) * end_clip >> 8);
+
+        Span* span = spanListAdd(surface,x);
         
-        spanTextureAdd(x,begin,end,texture,surface->scanline_texture.begin[x],surface->scanline_texture.end[x],color,surface->scanline_z[x].begin,surface->scanline_z[x].end,interpolate_begin,interpolate_end,mipmap);
+        span->begin = begin;
+        span->end = end;
+        span->texture_begin = surface->scanline_texture.begin[x];
+        span->texture_end = surface->scanline_texture.end[x];
+        span->mipmap = mipmap;
+        span->texture = texture;
+        span->color = color;
+        span->solid_color_texture = true;
+        span->z_begin = surface->scanline_z[x].begin;
+        span->z_end = surface->scanline_z[x].end;
+        span->interpolate_begin = 0;
+        span->interpolate_end = FIXED_ONE;
     }
 }
-
+#include "console.h"
 void spanQuad3dLightingTextureAdd(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
+    if(!lightmap){
+        spanQuad3dTextureAdd(surface,texture,texture_coordinats,coordinats,vec3Single(FIXED_ONE << 4),4);
+        return;
+    }
     Vec3 coords_2d[5];
     Vec2 texture_coordinats_2d[5];
     Vec2 color_coordinats_2d[5];
-    int n_vertex = polygonClipProject(coordinats,coords_2d,texture_coordinats,texture_coordinats_2d,color_coordinats_2d);
+    int n_vertex = polygonClipProject(surface,coordinats,coords_2d,texture_coordinats,texture_coordinats_2d,color_coordinats_2d);
     if(!n_vertex)
         return;
 
@@ -1045,7 +1111,7 @@ void spanQuad3dLightingTextureAdd(DrawSurface* surface,Texture* texture,Vec2* te
     Vec2 texture_begin = surface->scanline_texture.begin[x_min];
     Vec2 texture_end   = surface->scanline_texture.end[x_min];
 
-    Vec2 texture_delta = vec2SubR(texture_end,texture_begin);
+    Vec2 texture_delta = vec2Sub(texture_end,texture_begin);
     texture_delta.x /= tMax(surface->scanline.end[x_min] - surface->scanline.begin[x_min],1);
     texture_delta.y /= tMax(surface->scanline.end[x_min] - surface->scanline.begin[x_min],1);
 
@@ -1055,7 +1121,7 @@ void spanQuad3dLightingTextureAdd(DrawSurface* surface,Texture* texture,Vec2* te
         int begin = tClamp(surface->scanline.begin[x],0,surface->width);
         int end   = tClamp(surface->scanline.end[x],0,surface->width);
 
-        Vec2 texture_delta = vec2SubR(surface->scanline_texture.end[x],surface->scanline_texture.begin[x]);
+        Vec2 texture_delta = vec2Sub(surface->scanline_texture.end[x],surface->scanline_texture.begin[x]);
         texture_delta.x /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
         texture_delta.y /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
 
@@ -1070,6 +1136,20 @@ void spanQuad3dLightingTextureAdd(DrawSurface* surface,Texture* texture,Vec2* te
         int interpolate_begin = ((FIXED_ONE << 8) / tMax(length,1)) * begin_clip >> 8;
         int interpolate_end = FIXED_ONE - (((FIXED_ONE << 8) / tMax(length,1)) * end_clip >> 8);
 
-        spanColorTextureAdd(x,begin,end,surface->scanline_color[x].begin,surface->scanline_color[x].end,texture,surface->scanline_texture.begin[x],surface->scanline_texture.end[x],surface->scanline_z[x].begin,surface->scanline_z[x].end,interpolate_begin,interpolate_end,mipmap,(SpanFlag){0},lightmap);
+        Span* span = spanListAdd(surface,x);
+        
+        span->begin = begin;
+        span->end = end;
+        span->color_begin = surface->scanline_color[x].begin;
+        span->color_end = surface->scanline_color[x].end;
+        span->texture_begin = surface->scanline_texture.begin[x]; 
+        span->texture_end = surface->scanline_texture.end[x];
+        span->mipmap = mipmap;
+        span->texture = texture;
+        span->z_begin = surface->scanline_z[x].begin;
+        span->z_end = surface->scanline_z[x].end;
+        span->interpolate_begin = interpolate_begin;
+        span->interpolate_end = interpolate_end;
+        span->lightmap = lightmap;
     }
 }

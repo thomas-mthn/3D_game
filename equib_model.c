@@ -27,21 +27,21 @@ static Vec3 modelPointToScreen(Vec3 point){
 }
 
 static void drawBlock(Voxel* voxel,Vec3 octree_position,Vec3* luminance,int block_size,Vec3 color){
-	Vec3 local_position = vec3ShrR(vec3ShlR((Vec3){voxel->position_x,voxel->position_y,voxel->position_z},16),voxel->depth);
-	vec3Add(&octree_position,(Vec3){local_position.x,local_position.y,local_position.z});
+	Vec3 local_position = vec3Shr(vec3Shl((Vec3){voxel->position_x,voxel->position_y,voxel->position_z},16),voxel->depth);
+	octree_position = vec3Add(octree_position,(Vec3){local_position.x,local_position.y,local_position.z});
 
-	Vec2 x_direction = vec2AddR(g_holdable.direction,(Vec2){FIXED_ONE / 4,0});
-	Vec2 y_direction = vec2AddR(g_holdable.direction,(Vec2){0,FIXED_ONE / 4});
-	Vec2 z_direction = vec2AddR(g_holdable.direction,(Vec2){0,0});
+	Vec2 x_direction = vec2Add(g_holdable.direction,(Vec2){FIXED_ONE / 4,0});
+	Vec2 y_direction = vec2Add(g_holdable.direction,(Vec2){0,FIXED_ONE / 4});
+	Vec2 z_direction = vec2Add(g_holdable.direction,(Vec2){0,0});
 
-	Vec3 pos = vec3AddR(g_holdable.position,octree_position);
+	Vec3 pos = vec3Add(g_holdable.position,octree_position);
 
 	Vec3 vertices[8];
 	for(int i = 0;i < countof(vertices);i++){
 		int x = i & 1 ? block_size >> 9 : 0;
 		int y = i & 2 ? block_size >> 9 : 0;
 		int z = i & 4 ? block_size >> 9 : 0;
-		Vec3 verticle_pos = vec3AddR(pos,(Vec3){x,y,z});
+		Vec3 verticle_pos = vec3Add(pos,(Vec3){x,y,z});
 
 		vertices[i] = modelPointToScreen(verticle_pos);
 	}
@@ -59,9 +59,9 @@ static void drawBlock(Voxel* voxel,Vec3 octree_position,Vec3* luminance,int bloc
 
 	VoxelStatic* voxel_s = g_voxel_static + voxel->type;
 
-	drawPolygon(&g_surface,vertices_2d[0],4,vec3MulR(voxel_s->color,luminance[0]));
-	drawPolygon(&g_surface,vertices_2d[3],4,vec3MulR(voxel_s->color,luminance[1]));
-	drawPolygon(&g_surface,vertices_2d[4],4,vec3MulR(voxel_s->color,luminance[2]));
+	drawPolygon(&g_surface,vertices_2d[0],4,vec3Mul(voxel_s->color,luminance[0]));
+	drawPolygon(&g_surface,vertices_2d[3],4,vec3Mul(voxel_s->color,luminance[1]));
+	drawPolygon(&g_surface,vertices_2d[4],4,vec3Mul(voxel_s->color,luminance[2]));
 }
 
 static void guiOctreeDrawRecursive(Voxel* voxel,Vec3 octree_position,Vec3* luminance,int view){
@@ -88,7 +88,7 @@ static void guiOctreeDrawRecursive(Voxel* voxel,Vec3 octree_position,Vec3* lumin
 			{6,4,7,2,5,0,3,1},
 			{7,5,6,3,4,1,2,0},
 		};
-		Vec3 pos = vec3ShrR(voxelWorldPos(voxel),8);
+		Vec3 pos = vec3Shr(voxelWorldPos(voxel),8);
 		for(int i = 0;i < countof(voxel->child_s);i++){
 			int index = order[view][i];
 			guiOctreeDrawRecursive(voxel->child_s[index],octree_position,luminance,view);
@@ -97,7 +97,7 @@ static void guiOctreeDrawRecursive(Voxel* voxel,Vec3 octree_position,Vec3* lumin
 	}
 	if(voxel->type == VOXEL_AIR || voxel->type == VOXEL_MIRROR || g_voxel_static[voxel->type].emiter)
 		return;
-	drawBlock(voxel,octree_position,luminance,block_size,vec3ShrR(pixelColorToColor(0x507090),4));
+	drawBlock(voxel,octree_position,luminance,block_size,vec3Shr(pixelColorToColor(0x507090),4));
 }
 
 static void guiOctreeDraw(Voxel* voxel,Vec3 octree_position,Vec3* luminance,int view){
@@ -107,9 +107,9 @@ static void guiOctreeDraw(Voxel* voxel,Vec3 octree_position,Vec3* luminance,int 
 }
 
 static void drawBlockSelect(Vec3 octree_position,Vec3* luminance,int block_size,int material_id){
-	Vec2 x_direction = vec2AddR(g_holdable.direction,(Vec2){FIXED_ONE / 4,0});
-	Vec2 y_direction = vec2AddR(g_holdable.direction,(Vec2){0,FIXED_ONE / 4});
-	Vec2 z_direction = vec2AddR(g_holdable.direction,(Vec2){0,0});
+	Vec2 x_direction = vec2Add(g_holdable.direction,(Vec2){FIXED_ONE / 4,0});
+	Vec2 y_direction = vec2Add(g_holdable.direction,(Vec2){0,FIXED_ONE / 4});
+	Vec2 z_direction = vec2Add(g_holdable.direction,(Vec2){0,0});
 
 	Vec3 y_angle = vec3Normalize(getLookDirection(x_direction));
 	Vec3 x_angle = vec3Normalize(getLookDirection(y_direction));
@@ -122,7 +122,7 @@ static void drawBlockSelect(Vec3 octree_position,Vec3* luminance,int block_size,
 		int x = i & 1 ? block_size / 4 : 0;
 		int y = i & 2 ? block_size / 4 : 0;
 		int z = i & 4 ? block_size / 4 : 0;
-		Vec3 verticle_pos = vec3AddR(pos,(Vec3){x,y,z});
+		Vec3 verticle_pos = vec3Add(pos,(Vec3){x,y,z});
 
 		vertices[i] = modelPointToScreen(verticle_pos);
 	}
@@ -181,7 +181,7 @@ static void drawBlockSelect(Vec3 octree_position,Vec3* luminance,int block_size,
 		for(int i = 0;i < countof(frontface);i++){
 			if(!frontface[i])
 				continue;
-			drawPolygon(&g_surface,vertices_2d[i],4,vec3MulR(voxel_s->color,luminance[i / 2]));
+			drawPolygon(&g_surface,vertices_2d[i],4,vec3Mul(voxel_s->color,luminance[i / 2]));
 		}
 	}
 }
@@ -194,14 +194,14 @@ static int punchAnimationOffset(void){
 void genBlockSelect(void){
 	if(g_voxel_template)
 		return;
-	g_holdable.direction = vec2AddR(vec2MulRS(g_holdable.direction,FIXED_ONE / 2),vec2MulRS(g_angle,FIXED_ONE / 2));
+	g_holdable.direction = vec2Add(vec2MulS(g_holdable.direction,FIXED_ONE / 2),vec2MulS(g_angle,FIXED_ONE / 2));
 
 	for(int i = 0;i < 16;i++)
-		g_holdable.position = vec3Mix(g_holdable.position,vec3AddR(g_position,getLookDirection(g_angle)),FIXED_ONE >> 4);
+		g_holdable.position = vec3Mix(g_holdable.position,vec3Add(g_position,getLookDirection(g_angle)),FIXED_ONE >> 4);
 
 	do 
-		g_holdable.position = vec3Mix(g_holdable.position,vec3AddR(g_position,getLookDirection(g_angle)),FIXED_ONE >> 4);
-	while(vec3Distance(g_holdable.position,vec3AddR(g_position,getLookDirection(g_angle))) > FIXED_ONE);
+		g_holdable.position = vec3Mix(g_holdable.position,vec3Add(g_position,getLookDirection(g_angle)),FIXED_ONE >> 4);
+	while(vec3Distance(g_holdable.position,vec3Add(g_position,getLookDirection(g_angle))) > FIXED_ONE);
 	
 	g_holdable.position = (Vec3){FIXED_ONE,-FIXED_ONE,FIXED_ONE};
 
@@ -224,10 +224,10 @@ void genBlockSelect(void){
 			rnd_dir.z += tRnd() % (FIXED_ONE * 2) - FIXED_ONE;
 			rnd_dir = vec3Normalize(rnd_dir);
 			Vec3 luminance = rayLuminance(g_position,rnd_dir);
-			vec3Add(&luminance_acc,luminance);
+			luminance_acc = vec3Add(luminance_acc,luminance);
         }
-		vec3Add(luminance + j,vec3ShrR(luminance_acc,6));
-		vec3MulS(luminance + j,FIXED_ONE - (FIXED_ONE >> 4));
+		luminance[j] =  vec3Add(luminance[j],vec3Shr(luminance_acc,6));
+        luminance[j] = vec3MulS(luminance[j],FIXED_ONE - (FIXED_ONE >> 4));
 	}
 	
 	int ani = punchAnimationOffset();

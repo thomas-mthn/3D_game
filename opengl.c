@@ -229,7 +229,7 @@ static int (stdcall *wglChoosePixelFormatARB)(
 	int* formats,
 	unsigned* n_formats
 );
-static void* (stdcall *WglCreateContextAttribsARB)(void* hdc,void* share_context,const int* attribute_list);
+static void* (stdcall *wglCreateContextAttribsARB)(void* hdc,void* share_context,const int* attribute_list);
 
 static void (stdcall *glClear)(unsigned mask);
 static void (stdcall *glClearColor)(float red,float green,float blue,float alpha);
@@ -287,8 +287,8 @@ static void (stdcall *glLinkProgram)(unsigned program);
 static void (stdcall *glUseProgram)(unsigned program);
 static void (stdcall *glDeleteProgram)(unsigned program);
 
-static const char* (stdcall *glGetString)(GetStringName name);
-static const char* (stdcall *glGetStringi)(GetStringName name,unsigned index);
+static char* (stdcall *glGetString)(GetStringName name);
+static char* (stdcall *glGetStringi)(GetStringName name,unsigned index);
 
 static void (stdcall *glGenVertexArrays)(int n,unsigned* arrays);
 static void (stdcall *glDeleteVertexArrays)(int n,unsigned* arrays);
@@ -1022,7 +1022,7 @@ void drawColoredTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* t
 	coloredTexturePolygon3d(surface,texture,texture_coordinats,coordinats,color,&shader_texture_lighting_program);
 }
 
-void drawColoredTextureSkyboxPolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color){
+void drawColoredTextureSkyboxPolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
 	coloredTexturePolygon3d(surface,texture,texture_coordinats,coordinats,color,&shader_skybox_program);
 }
 
@@ -1066,25 +1066,25 @@ void drawSegmentGL(DrawSurface* surface,int x1,int y1,int x2,int y2,int thicknes
 		Vec2 direction = vec2Direction((Vec2){x1 << 8,y1 << 8},(Vec2){x2 << 8,y2 << 8});
         
         Vec2 quad[] = {
-			vec2AddR((Vec2){x1,y1},vec2MulRS(vec2Rotate(direction,FIXED_ONE / 8 * 3),thickness)),
-			vec2AddR((Vec2){x1,y1},vec2MulRS(vec2Rotate(direction,FIXED_ONE / 8 * 5),thickness)),
-			vec2AddR((Vec2){x2,y2},vec2MulRS(vec2Rotate(direction,FIXED_ONE / 8 * 1),thickness)),
-			vec2AddR((Vec2){x2,y2},vec2MulRS(vec2Rotate(direction,FIXED_ONE / 8 * 7),thickness)),
+			vec2Add((Vec2){x1,y1},vec2MulS(vec2Rotate(direction,FIXED_ONE / 8 * 3),thickness)),
+			vec2Add((Vec2){x1,y1},vec2MulS(vec2Rotate(direction,FIXED_ONE / 8 * 5),thickness)),
+			vec2Add((Vec2){x2,y2},vec2MulS(vec2Rotate(direction,FIXED_ONE / 8 * 1),thickness)),
+			vec2Add((Vec2){x2,y2},vec2MulS(vec2Rotate(direction,FIXED_ONE / 8 * 7),thickness)),
 		};
 		vertex[0] = (VertexLighting){
-			.pos = {-(float)quad[0].y / FIXED_ONE,-(float)quad[0].x / FIXED_ONE,1.0f},
+			.pos = {(float)quad[0].y / FIXED_ONE,-(float)quad[0].x / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 		};
 		vertex[1] = (VertexLighting){
-			.pos = {-(float)quad[1].y / FIXED_ONE,-(float)quad[1].x / FIXED_ONE,1.0f},
+			.pos = {(float)quad[1].y / FIXED_ONE,-(float)quad[1].x / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex[2] = (VertexLighting){
-			.pos = {-(float)quad[3].y / FIXED_ONE,-(float)quad[3].x / FIXED_ONE,1.0f},
+			.pos = {(float)quad[3].y / FIXED_ONE,-(float)quad[3].x / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex[3] = (VertexLighting){
-			.pos = {-(float)quad[2].y / FIXED_ONE,-(float)quad[2].x / FIXED_ONE,1.0f},
+			.pos = {(float)quad[2].y / FIXED_ONE,-(float)quad[2].x / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex_buffer_ptr += sizeof(VertexLighting) * 4;
@@ -1146,19 +1146,19 @@ void drawRectangleGL(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3
 		float color_div = FIXED_ONE << 4;
 		VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
 		vertex[0] = (VertexLighting){
-			.pos = {-(float)(y) / FIXED_ONE,-(float)(x) / FIXED_ONE,1.0f},
+			.pos = {(float)(y) / FIXED_ONE,-(float)(x) / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex[1] = (VertexLighting){
-			.pos = {-(float)(y + size_y) / FIXED_ONE,-(float)(x) / FIXED_ONE,1.0f},
+			.pos = {(float)(y + size_y) / FIXED_ONE,-(float)(x) / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex[2] = (VertexLighting){
-			.pos = {-(float)(y + size_y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
+			.pos = {(float)(y + size_y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex[3] = (VertexLighting){
-			.pos = {-(float)(y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
+			.pos = {(float)(y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex_buffer_ptr += sizeof(VertexLighting) * 4;
@@ -1435,7 +1435,7 @@ bool createSurfaceGL(DrawSurface* surface){
 		gl_lib = libraryLoad("opengl32");
 #endif
 		if(!gl_lib){
-			print((String)STRING_LITERAL("opengl32 not found\n"));
+			print((String)STRING_LITERAL("opengl library not found\n"));
 			return false;
 		}
 		struct{
@@ -1488,7 +1488,7 @@ bool createSurfaceGL(DrawSurface* surface){
 			{.name = "glReadPixels",.fn_ptr = (funcptr_t*)&glReadPixels},
 		};
 		for(int i = countof(functions);i--;){
-		    	*functions[i].fn_ptr = libraryFunctionLoad(gl_lib,functions[i].name);
+            *functions[i].fn_ptr = libraryFunctionLoad(gl_lib,functions[i].name);
 			if(!*functions[i].fn_ptr){
 				debugPrint("function not found in opengl library: ");
 				printNL(stringMake(functions[i].name));
@@ -1778,7 +1778,7 @@ void blitSurfaceGL(DrawSurface* surface){
 #ifdef __linux__
     glxSwapBuffers(g_surface.display,g_surface.window);
 #elif defined(_MSC_VER)
-	SwapBuffers(surface.window_context);
+	SwapBuffers(surface->window_context);
 #endif
 	/*
 	float sky_brightness = (float)fixedMulR(FIXED_ONE / 2,g_exposure) / FIXED_ONE;
@@ -1791,7 +1791,7 @@ void surfaceClearGL(DrawSurface* surface){
 }
 
 void changeSurfaceSizeGL(DrawSurface* surface,int width,int height){
-	glViewport(0,0,surface->window_width,surface->window_height);
+    glViewport(0,0,surface->window_width,surface->window_height);
 }
 
 void antiAliasingEnableGL(bool enable){

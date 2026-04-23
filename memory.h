@@ -6,6 +6,7 @@
 structure(MemoryBlock);
 
 structure(MemoryArena){
+    size_t min_capacity;
     size_t capacity;
     size_t pointer;
     char* data;
@@ -21,6 +22,7 @@ void* virtualAllocate(size_t size);
 void virtualFree(void* address,size_t size);
 
 void* memoryArenaAllocate(MemoryArena* arena,size_t size);
+void* memoryArenaAllocateZero(MemoryArena* arena,size_t size);
 void memoryArenaFree(MemoryArena* arena);
 
 void* tMalloc(size_t size);
@@ -29,7 +31,7 @@ void* tMallocZero(size_t size);
 
 void* allocatorFreeListAlloc(AllocatorFreeList* free_list,size_t size);
 void allocatorFreeListFree(AllocatorFreeList* allocator,void* address);
-void* allocatorFreeListZero(AllocatorFreeList* free_list,size_t size);
+void* allocatorFreeListAllocZero(AllocatorFreeList* free_list,size_t size);
 
 void allocatorFreeListFreeAll(AllocatorFreeList* free_list);
 

@@ -24,6 +24,8 @@ void stringToLower(String string);
 #define STRING_LITERAL(STRING) {.size = sizeof(STRING) - 1,.data = (char*)(STRING)}
 
 static String stringForwardSlice(String string,int amount){
+    if(string.size <= amount)
+        return (String){0};
     return (String){.data = string.data + amount,.size = string.size - amount};
 }
 

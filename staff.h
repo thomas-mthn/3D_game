@@ -42,6 +42,7 @@ structure(Staff){
 	int capacity;
 	int mana_generation;
 	int mana_max;
+    int recoil;
 	InventorySlot spell_array[0x10];
 };
 
