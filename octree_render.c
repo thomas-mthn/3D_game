@@ -167,7 +167,7 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 	int distance_max_index;
 
 	for(int i = 0;i < 4;i++){
-		int distance = vec3Distance(vec3Shr(g_position,4),vec3Shr(pos[i],4));
+		int distance = vec3Distance(vec3Shr(g_surface.position,4),vec3Shr(pos[i],4));
 		if(distance > distance_max){
 			distance_max = distance;
 			distance_max_index = i;
@@ -176,8 +176,8 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 
 	Vec3 cube_c = pos[0];
 
-	cube_c.a[axis.x] = tClamp(g_position.a[axis.x],pos[0].a[axis.x],pos[3].a[axis.x]);
-	cube_c.a[axis.y] = tClamp(g_position.a[axis.y],pos[0].a[axis.y],pos[3].a[axis.y]);
+	cube_c.a[axis.x] = tClamp(g_surface.position.a[axis.x],pos[0].a[axis.x],pos[3].a[axis.x]);
+	cube_c.a[axis.y] = tClamp(g_surface.position.a[axis.y],pos[0].a[axis.y],pos[3].a[axis.y]);
 
 	Vec3 normal = g_normal_table[side];
 	int mipmap = mipmapGet(squarePointClosestPosition(pos[0],size.x,normal),normal,distance_max,surface_angle);
@@ -209,7 +209,7 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
            )
             return;
 		
-        if(sdSquare(vec3Shr(g_position,4),vec3Shr(block_pos_t,4),size.x >> 4,side) > RENDER_DISTANCE)
+        if(sdSquare(vec3Shr(g_surface.position,4),vec3Shr(block_pos_t,4),size.x >> 4,side) > RENDER_DISTANCE)
             return;
 
         if(!squareInScreenSpace(pos))
@@ -240,7 +240,7 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
         )
 			return;
 		
-		if(sdSquare(vec3Shr(g_position,4),vec3Shr(block_pos_t,4),size.x >> 4,side) > RENDER_DISTANCE)
+		if(sdSquare(vec3Shr(g_surface.position,4),vec3Shr(block_pos_t,4),size.x >> 4,side) > RENDER_DISTANCE)
 			return;
 
 		if(!squareInScreenSpace(pos))
@@ -260,10 +260,10 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 
 	Vec3 point_2[4];
     
-	point_2[0] = pointToScreenRenderer(pos[0],g_tri,g_position,g_options.fov);
-	point_2[1] = pointToScreenRenderer(pos[1],g_tri,g_position,g_options.fov);
-	point_2[2] = pointToScreenRenderer(pos[2],g_tri,g_position,g_options.fov);
-	point_2[3] = pointToScreenRenderer(pos[3],g_tri,g_position,g_options.fov);
+	point_2[0] = pointToScreenRenderer(pos[0],g_surface.rotation_matrix,g_surface.position,g_options.fov);
+	point_2[1] = pointToScreenRenderer(pos[1],g_surface.rotation_matrix,g_surface.position,g_options.fov);
+	point_2[2] = pointToScreenRenderer(pos[2],g_surface.rotation_matrix,g_surface.position,g_options.fov);
+	point_2[3] = pointToScreenRenderer(pos[3],g_surface.rotation_matrix,g_surface.position,g_options.fov);
 
 	mipmap = tClamp(mipmapGet(squarePointClosestPosition(pos[0],size.x,normal),normal,distance_max,surface_angle),26 - LUXEL_MAX_MIPMAP,31);
 
@@ -353,7 +353,7 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 		int f_x = tClamp((point[index].x + FIXED_ONE) * 16 / FIXED_ONE,0,31);
 		int f_y = tClamp((point[index].y + FIXED_ONE) * 16 / FIXED_ONE,0,31);
 		
-		int distance = bitScanReverse(vec3Distance(vec3Shr(g_position,4),vec3Shr(pos[index],4)) >> 4);
+		int distance = bitScanReverse(vec3Distance(vec3Shr(g_surface.position,4),vec3Shr(pos[index],4)) >> 4);
 	}
 
 	for(int i = 0;i < 4;i++)
@@ -371,15 +371,15 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
 
     switch(voxel->type){
         case VOXEL_GLASS:{
-            Vec3 relative = vec3Sub(light_pos,g_position);
-            Vec3 offset = vec3Direction(vec3Shr(g_position,4),vec3Shr(light_pos,4));
+            Vec3 relative = vec3Sub(light_pos,g_surface.position);
+            Vec3 offset = vec3Direction(vec3Shr(g_surface.position,4),vec3Shr(light_pos,4));
             Vec3 position = light_pos;
             position.a[side >> 1] -= side % 2 ? 0x10 : -0x10;
             luminance = rayLuminance(position,offset);
             luminance = vec3Shl(luminance,4);
         } break;
         case VOXEL_MIRROR:{
-            Vec3 relative = vec3Sub(light_pos,g_position);
+            Vec3 relative = vec3Sub(light_pos,g_surface.position);
             Vec3 direction = vec3Normalize(vec3Reflect(vec3Shr(relative,8),normal));
             Vec3 position = light_pos;
             ((int*)&position)[side >> 1] += side % 2 ? 0x10 : -0x10;
@@ -401,7 +401,7 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
                 int time = g_tick / 48;
 
                 for(int j = 0;j < 4;j++){
-                    Vec2 uv = {((int*)&pos[i])[axis.x] * (1 << j),((int*)&pos[i])[axis.y] * (1 << j)};
+                    Vec2 uv = {pos[i].a[axis.x] * (1 << j),pos[i].a[axis.y] * (1 << j)};
 				
                     int v00 = tHash(tHash(tHash(fixedToInt(uv.x)) ^ fixedToInt(uv.y)) ^ time) % FIXED_ONE;
                     int v01 = tHash(tHash(tHash(fixedToInt(uv.x)) ^ fixedToInt(uv.y) + 1) ^ time) % FIXED_ONE;
@@ -422,30 +422,27 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
                     height[j] = fixedMulR(tMix(h1,h2,g_tick % 0x30 * 1536),fixedMulR(voxel->animation,voxel->animation));
                 }
 
-                ((int*)(pos + i))[side >> 1] += height[0] + height[1] / 2 + height[2] / 4 + height[3] / 8;
+                pos[i].a[side >> 1] += height[0] + height[1] / 2 + height[2] / 4 + height[3] / 8;
             }
 
             Vec3 quad_normal = triangleNormal(vec3Shl(pos[3],2),vec3Shl(pos[1],2),vec3Shl(pos[0],2));
-            Vec3 relative = vec3Sub(light_pos,g_position);
+            Vec3 relative = vec3Sub(light_pos,g_surface.position);
             Vec3 direction = vec3Refract(vec3Normalize(vec3Shr(relative,8)),quad_normal,FIXED_ONE - FIXED_ONE / 4);
             Vec3 position = light_pos;
-            ((int*)&position)[side >> 1] -= side % 2 ? 0x10 : -0x10;
+            position.a[side >> 1] -= side % 2 ? 0x10 : -0x10;
 
             Vec3 refraction = rayLuminance(position,direction);
             refraction = vec3Shl(refraction,4);
 
-            point_2[0] = pointToScreenRenderer(pos[0],g_tri,g_position,g_options.fov);
-            point_2[1] = pointToScreenRenderer(pos[1],g_tri,g_position,g_options.fov);
-            point_2[2] = pointToScreenRenderer(pos[2],g_tri,g_position,g_options.fov);
-            point_2[3] = pointToScreenRenderer(pos[3],g_tri,g_position,g_options.fov);
+            point_2[0] = pointToScreenRenderer(pos[0],g_surface.rotation_matrix,g_surface.position,g_options.fov);
+            point_2[1] = pointToScreenRenderer(pos[1],g_surface.rotation_matrix,g_surface.position,g_options.fov);
+            point_2[2] = pointToScreenRenderer(pos[2],g_surface.rotation_matrix,g_surface.position,g_options.fov);
+            point_2[3] = pointToScreenRenderer(pos[3],g_surface.rotation_matrix,g_surface.position,g_options.fov);
 
-            //Vec3 offset_refraction = vec3Normalize(vec3AddR(normal,vec3Normalize((Vec3){tCos(position.x + g_tick * 0x400),tCos(position.y),FIXED_ONE})));
-            //refraction = vec3Mix(refraction,offset_refraction,voxel->animation);
-
-            relative = vec3Sub(light_pos,g_position);
+            relative = vec3Sub(light_pos,g_surface.position);
             direction = vec3Normalize(vec3Reflect(relative,quad_normal));
             position = light_pos;
-            ((int*)&position)[side >> 1] += side % 2 ? 0x10 : -0x10;
+            position.a[side >> 1] += side % 2 ? 0x10 : -0x10;
             if(tAbs(direction.x) < 4)
                 direction.x = 4;
             if(tAbs(direction.y) < 4)
@@ -455,11 +452,7 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,in
             Vec3 reflection = rayLuminance(position,direction);
             reflection = vec3Shl(reflection,4);
 
-            //Vec3 offset_reflection = vec3Normalize(vec3AddR(normal,vec3Normalize((Vec3){tCos(position.x + g_tick * 0x400),tCos(position.y),FIXED_ONE})));
-
-            //reflection = vec3Mix(reflection,offset_reflection,voxel->animation);
-
-            luminance = vec3Mix(reflection,refraction,tClamp(tAbs(vec3Dot(vec3Direction(g_position,light_pos),quad_normal)),0,FIXED_ONE));
+            luminance = vec3Mix(reflection,refraction,tClamp(tAbs(vec3Dot(vec3Direction(g_surface.position,light_pos),quad_normal)),0,FIXED_ONE));
         } break;
         case VOXEL_DOOR:{
             Vec2 texture_crd[4];
@@ -568,17 +561,17 @@ static void drawSide(Voxel* voxel,Vec3 block_pos,int side,Vec2 size){
 }
 
 static void drawBox(Voxel* voxel,Vec3 block_pos,Vec3 size){
-	if(g_position.x - block_pos.x < 0)
+	if(g_surface.position.x - block_pos.x < 0)
 		drawSide(voxel,block_pos,0,(Vec2){size.y,size.z});
-	if(g_position.x - block_pos.x - size.x > 0)
+	if(g_surface.position.x - block_pos.x - size.x > 0)
 		drawSide(voxel,vec3Add(block_pos,(Vec3){size.x,0,0}),1,(Vec2){size.y,size.z});
-	if(g_position.y - block_pos.y < 0)
+	if(g_surface.position.y - block_pos.y < 0)
 		drawSide(voxel,block_pos,2,(Vec2){size.x,size.z});
-	if(g_position.y - block_pos.y - size.y > 0)
+	if(g_surface.position.y - block_pos.y - size.y > 0)
 		drawSide(voxel,vec3Add(block_pos,(Vec3){0,size.y,0}),3,(Vec2){size.x,size.z});
-	if(g_position.z - block_pos.z < 0)
+	if(g_surface.position.z - block_pos.z < 0)
 		drawSide(voxel,block_pos,4,(Vec2){size.y,size.z});
-	if(g_position.z - block_pos.z - size.z > 0)
+	if(g_surface.position.z - block_pos.z - size.z > 0)
 		drawSide(voxel,vec3Add(block_pos,(Vec3){0,0,size.z}),5,(Vec2){size.y,size.z});
 }
 
@@ -598,7 +591,7 @@ void octreeDraw(Voxel* voxel){
 		};
 		if(!cubeInScreenSpace(point))
 			return;
-		if(sdVoxel(vec3Shr(g_position,4),vec3Shr(block_pos,4),block_size >> 4) > RENDER_DISTANCE)
+		if(sdVoxel(vec3Shr(g_surface.position,4),vec3Shr(block_pos,4),block_size >> 4) > RENDER_DISTANCE)
 			return;
 		int order[][8] = {
 			{0,1,2,4,3,5,6,7},
@@ -611,7 +604,7 @@ void octreeDraw(Voxel* voxel){
 			{7,5,6,3,4,1,2,0},
 		};
 		Vec3 pos = voxelWorldPos(voxel);
-		Vec3 rel_pos = vec3Sub(g_position,pos);
+		Vec3 rel_pos = vec3Sub(g_surface.position,pos);
 		Vec3 i_pos = (Vec3){rel_pos.x * 2 / block_size,rel_pos.y * 2 / block_size,rel_pos.z * 2 / block_size};
 		int order_id = (i_pos.z <= 0) << 2 | (i_pos.y <= 0) << 1 | (i_pos.x <= 0) << 0;
 		for(int i = 0;i < 8;i++){
@@ -620,6 +613,19 @@ void octreeDraw(Voxel* voxel){
 		}
 		return;
 	}
+    
+    if(g_options.rd_octree_wireframe){
+        int color_table[] = {
+            0xFF0000,
+            0x00FF00,
+            0x0000FF,
+            0xFF00FF,
+            0x00FFFF,
+            0xFFFF00,
+        };
+        int color = color_table[voxel->depth % countof(color_table)];
+        boxQuadWireframeDraw(voxelWorldPos(voxel),vec3Single(depthToSize(voxel->depth)),color);
+    }
 	switch(voxel->type){
 		case VOXEL_AIR:{
 			for(Entity* entity = voxel->entity_list;entity;entity = entity->next_voxel)
@@ -638,7 +644,7 @@ void octreeDraw(Voxel* voxel){
             int door_size_inv = block_size / 2 - door_size;
             int door_cove = fixedMulR(block_size,0x1000);
             Vec3 size = {block_size - door_cove * 2,door_size,block_size};
-            if(g_position.y < block_pos.y + block_size / 2){
+            if(g_surface.position.y < block_pos.y + block_size / 2){
                 drawBox(voxel,(Vec3){block_pos.x + door_cove,block_pos.y + block_size / 2 + door_size_inv,block_pos.z},size);
                 drawBox(voxel,vec3Add(block_pos,(Vec3){door_cove,0,0}),size);
             }
@@ -649,7 +655,7 @@ void octreeDraw(Voxel* voxel){
         } return;
 		case VOXEL_WATER:{
 			block_pos.z -= FIXED_ONE / 4;
-			if(g_position.z - block_pos.z - block_size > 0)
+			if(g_surface.position.z - block_pos.z - block_size > 0)
 				drawSide(voxel,vec3Add(block_pos,(Vec3){0,0,block_size}),5,(Vec2){block_size,block_size});
 		} return;
 	}

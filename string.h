@@ -14,7 +14,8 @@ structure(String){
 bool stringCompareSizeInsensitive(String string,String compare);
 bool stringCompareSizeCaseInsensitive(String string,String compare);
 String stringMake(char* cstring);
-String intToString(char* buffer,int number);
+String numberToString(char* buffer,int number);
+int stringToNumber(String string);
 String stringInString(String string_1,String string_2);
 String stringConcat(String string,String append);
 String stringWordSlice(String string);

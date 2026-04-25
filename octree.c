@@ -601,7 +601,7 @@ Entity* entityRayCollisionRecursive(Voxel* voxel,Vec3 position,Vec3 direction){
 			Entity* entity = entityRayCollisionRecursive(voxel->child_s[i],position,direction);
 			if(
 				entity && 
-				(entity->flags & ENTITY_FLAG_HITABLE) && 
+				entity->hitable && 
 				(!entity_closest || vec3Distance(entity->position,position) < vec3Distance(entity_closest->position,position))
 			)
 				entity_closest = entity;

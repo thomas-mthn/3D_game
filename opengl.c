@@ -634,10 +634,10 @@ void drawPolygonGL(DrawSurface* surface,Vec2* coordinats,int n_point,Vec3 color)
 
 void drawColoredPolygon3dGL(DrawSurface* surface,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
     Vec3 point_2[4];
-	point_2[0] = pointToScreenRenderer(coordinats[0],g_tri,g_position,g_options.fov);
-	point_2[1] = pointToScreenRenderer(coordinats[1],g_tri,g_position,g_options.fov);
-	point_2[2] = pointToScreenRenderer(coordinats[2],g_tri,g_position,g_options.fov);
-	point_2[3] = pointToScreenRenderer(coordinats[3],g_tri,g_position,g_options.fov);
+	point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_options.fov);
+	point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_options.fov);
+	point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_options.fov);
+	point_2[3] = pointToScreenRenderer(coordinats[3],surface->rotation_matrix,surface->position,g_options.fov);
 
 	Vec3 d_point[] = {
 		{point_2[0].x,point_2[0].y,point_2[0].z},
@@ -818,10 +818,10 @@ void drawTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_
 		glBindTexture(GL_TEXTURE_2D,texture->gl_id);
 
 	Vec3 point_2[4];
-	point_2[0] = pointToScreenRenderer(coordinats[0],g_tri,g_position,g_options.fov);
-	point_2[1] = pointToScreenRenderer(coordinats[1],g_tri,g_position,g_options.fov);
-	point_2[2] = pointToScreenRenderer(coordinats[2],g_tri,g_position,g_options.fov);
-	point_2[3] = pointToScreenRenderer(coordinats[3],g_tri,g_position,g_options.fov);
+	point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_options.fov);
+	point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_options.fov);
+	point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_options.fov);
+	point_2[3] = pointToScreenRenderer(coordinats[3],surface->rotation_matrix,surface->position,g_options.fov);
 
 	Vec3 d_point[] = {
 		{point_2[0].x,point_2[0].y,point_2[0].z},
@@ -949,10 +949,10 @@ static void coloredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* 
 	if(!texture->gl_id)
 		textureUpload(texture);
     Vec3 point_2[4];
-	point_2[0] = pointToScreenRenderer(coordinats[0],g_tri,g_position,g_options.fov);
-	point_2[1] = pointToScreenRenderer(coordinats[1],g_tri,g_position,g_options.fov);
-	point_2[2] = pointToScreenRenderer(coordinats[2],g_tri,g_position,g_options.fov);
-	point_2[3] = pointToScreenRenderer(coordinats[3],g_tri,g_position,g_options.fov);
+	point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_options.fov);
+	point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_options.fov);
+	point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_options.fov);
+	point_2[3] = pointToScreenRenderer(coordinats[3],surface->rotation_matrix,surface->position,g_options.fov);
 
 	Vec3 d_point[] = {
 		{point_2[0].x,point_2[0].y,point_2[0].z},
@@ -1072,19 +1072,19 @@ void drawSegmentGL(DrawSurface* surface,int x1,int y1,int x2,int y2,int thicknes
 			vec2Add((Vec2){x2,y2},vec2MulS(vec2Rotate(direction,FIXED_ONE / 8 * 7),thickness)),
 		};
 		vertex[0] = (VertexLighting){
-			.pos = {(float)quad[0].y / FIXED_ONE,-(float)quad[0].x / FIXED_ONE,1.0f},
+			.pos = {-(float)quad[0].y / FIXED_ONE,-(float)quad[0].x / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
 		};
 		vertex[1] = (VertexLighting){
-			.pos = {(float)quad[1].y / FIXED_ONE,-(float)quad[1].x / FIXED_ONE,1.0f},
+			.pos = {-(float)quad[1].y / FIXED_ONE,-(float)quad[1].x / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex[2] = (VertexLighting){
-			.pos = {(float)quad[3].y / FIXED_ONE,-(float)quad[3].x / FIXED_ONE,1.0f},
+			.pos = {-(float)quad[3].y / FIXED_ONE,-(float)quad[3].x / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex[3] = (VertexLighting){
-			.pos = {(float)quad[2].y / FIXED_ONE,-(float)quad[2].x / FIXED_ONE,1.0f},
+			.pos = {-(float)quad[2].y / FIXED_ONE,-(float)quad[2].x / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex_buffer_ptr += sizeof(VertexLighting) * 4;
@@ -1146,19 +1146,19 @@ void drawRectangleGL(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3
 		float color_div = FIXED_ONE << 4;
 		VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
 		vertex[0] = (VertexLighting){
-			.pos = {(float)(y) / FIXED_ONE,-(float)(x) / FIXED_ONE,1.0f},
+			.pos = {-(float)(y) / FIXED_ONE,-(float)(x) / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex[1] = (VertexLighting){
-			.pos = {(float)(y + size_y) / FIXED_ONE,-(float)(x) / FIXED_ONE,1.0f},
+			.pos = {-(float)(y + size_y) / FIXED_ONE,-(float)(x) / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex[2] = (VertexLighting){
-			.pos = {(float)(y + size_y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
+			.pos = {-(float)(y + size_y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex[3] = (VertexLighting){
-			.pos = {(float)(y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
+			.pos = {-(float)(y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
 			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
 		};
 		vertex_buffer_ptr += sizeof(VertexLighting) * 4;

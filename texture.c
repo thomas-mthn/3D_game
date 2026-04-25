@@ -5,6 +5,7 @@
 #include "memory.h"
 #include "voxel_menu.h"
 #include "texture_markov.h"
+#include "opengl.h"
 
 #ifdef __linux__
 
@@ -120,10 +121,8 @@ Texture textureCreate(int size){
 }
 
 void textureDestroy(Texture texture){
-#if !defined(__wasm__) && !defined(__linux__)
 	deleteTextureGL(texture.gl_id);
-#endif
-	tFree(texture.pixel_data);
+    virtualFree(texture.pixel_data,texture.size * texture.size * 2 * sizeof(int));
 }
 
 static Texture textureDiskLoad(char* path){

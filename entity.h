@@ -21,6 +21,7 @@ typedef enum{
 	ENTITY_BOMB,
 	ENTITY_STAFF,
 	ENTITY_BOSS,
+    ENTITY_WEAPON,
 } EntityType;
 
 structure(Entity){
@@ -42,13 +43,17 @@ structure(Entity){
 	};
 	Vec3 color;
 	Vec3 color_emit;
-	enum{
-		ENTITY_FLAG_EMIT          = 1 << 0,
-		ENTITY_FLAG_NO_GRAVITY    = 1 << 1,
-		ENTITY_FLAG_PHYSICS_STAIR = 1 << 2,
-		ENTITY_FLAG_HITABLE       = 1 << 3,
-		ENTITY_FLAG_WINDY         = 1 << 4,
-	} flags;
+    
+    bool emit : 1;
+    bool no_gravity : 1;
+    bool physics_stair : 1;
+    bool hitable : 1;
+    bool is_windy : 1;
+    bool adj_speed : 1;
+	bool adj_damage : 1;
+    bool on_ground : 1;
+    bool is_moving : 1;
+    
 	int size;
 	int health;
 	Texture texture_dynamic;
@@ -68,7 +73,7 @@ structure(Entity){
 		int cooldown;
 		int distance_route_node;
 	}* pathfinding;
-	bool is_moving;
+
 	int move_angle;
 	Vec3 render_position;
 	Vec2 render_angle;
@@ -76,29 +81,27 @@ structure(Entity){
 	SpellType pickup_type;
 	int physics_friction_ground;
 	int physics_friction_air;
-	bool on_ground;
 	Vec3 windy;
 	int attack_cooldown;
-	bool adj_speed;
-	bool adj_damage;
 	String particle_string;
 };
 
-structure(ModelSphere){
+structure(ModelEllipsoid){
 	Vec3 position;
-	int radius;
+	Vec3 radius;
 	Vec3 color;
 };
 
 structure(EntityStatic){
-	bool has_hitbox;
+	bool has_hitbox : 1;
+    bool emit : 1;
+	bool bounce : 1;
+    
 	Vec3 hitbox;
-	bool emit;
-	bool bounce;
 	Vec3 color;
 	int  health;
 	int  n_model_sphere;
-	ModelSphere* model_sphere;
+	ModelEllipsoid* model_sphere;
 };
 
 extern EntityStatic g_entity_static[];
@@ -113,6 +116,7 @@ void entityDraw(Entity* entity);
 void entityDrawHitbox(void);
 
 void entityInit(void);
+int entitySpriteSize(Vec3 position,int size);
 void entityTick(void);
 void entityVoxelInsert(void);
 void entityVoxelRemove(void);
@@ -120,5 +124,7 @@ Entity* entityRayCollision(Entity* entity_list,Vec3 position,Vec3 direction);
 void entityDynamicLighting(void);
 
 void entityHit(Entity* monster);
+
+void ellipsoidModelGenerate(Vec3 position,Texture* texture,ModelEllipsoid* ellipsoids,int n_ellipsoid,Vec2 model_angle,bool angle_player);
 
 #endif

@@ -21,6 +21,8 @@ DrawSurface g_surface = {
 	.window_width = 2560 / 2,
     .window_height = 1440 / 2,
     .backend = RENDER_BACKEND_SOFTWARE,
+    .angle = PLAYER_SPAWN_ANGLE,
+    .position = PLAYER_SPAWN_POSITION,
 };
 
 static void (*destroySurface[])(DrawSurface*) = {
@@ -40,6 +42,11 @@ static bool (*createSurface[])(DrawSurface*) = {
 };
 
 void surfaceInit(DrawSurface* surface){
+    surface->rotation_matrix[0] = tCos(surface->angle.x);
+    surface->rotation_matrix[1] = tSin(surface->angle.x);
+    surface->rotation_matrix[2] = tCos(surface->angle.y);
+    surface->rotation_matrix[3] = tSin(surface->angle.y);
+    
 	if(!createSurface[surface->backend])
 	    return;
 	if(!createSurface[surface->backend](surface)){
@@ -309,7 +316,7 @@ void drawStringEx(DrawSurface* surface,int x,int y,String string,int scale,Vec3 
 
 void drawNumber(DrawSurface* surface,int x,int y,int number,int scale){
 	char buffer[0x10];
-    String string = intToString(buffer,number);
+    String string = numberToString(buffer,number);
     drawStringEx(surface,x,y,string,scale,pixelColorToColor(0xFFFFFF),0x2000);
 }
 

@@ -25,4 +25,7 @@ void printNL(String string);
 
 void debugPrint(char* string);
 
+extern int g_debug_int1;
+extern int g_debug_int2;
+
 #endif

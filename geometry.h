@@ -26,6 +26,7 @@ int sdVoxel(Vec3 point,Vec3 voxel_position,int voxel_size);
 int rayVoxelIntersection(Voxel* voxel,Vec3 ro,Vec3 rd,Vec3* normal);
 int rayBoxIntersection(Vec3 box_position,Vec3 box_size,Vec3 ro,Vec3 rd);
 int rayPlaneIntersection(Vec3 pos,Vec3 dir,Plane plane);
+int rayEllipsoidIntersection(Vec3 ray_position,Vec3 ray_direction,Vec3 ellipsoid_position,Vec3 ra);
 int raySphereIntersection(Vec3 ray_position,Vec3 ray_direction,Vec3 sphere_position,int radius);
 
 #endif

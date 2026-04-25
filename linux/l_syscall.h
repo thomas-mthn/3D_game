@@ -150,6 +150,7 @@ long systemMemoryUnmap(void* address,size_t length);
 long systemSignalAction(SignalType signal,SignalAction* action,SignalAction* old_action);
 long systemGetdents(unsigned file_descriptor,char* buffer,int buffer_length);
 long systemTimeGet(TimeSpec* timeval);
+long systemNanoSleep(TimeSpec* requested,TimeSpec* remaining);
 void systemProcessExit(int exit_code);
 long systemClone(long flags,void* stack_ptr,int* parent_id,int* child_tid,long tls);
 long systemFutex(int* address,int operation,unsigned value,TimeVal* utime,int* address_2,unsigned flags);

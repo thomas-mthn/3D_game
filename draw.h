@@ -49,6 +49,11 @@ structure(DrawSurface){
 	int window_width;
 	int window_height;
 
+    //camera
+    Vec2 angle;
+    int rotation_matrix[4];
+    Vec3 position;
+    
     //winapi
 	void* window_context;
 	void* gdi_context;
@@ -59,12 +64,12 @@ structure(DrawSurface){
     size_t window;
     void* display;
     int screen;
-	
+
+    //scanline buffers, for the software renderer
 	Scanline scanline;
 	ScanlineColor* scanline_color;
 	ScanlineTexture scanline_texture;
     ScanlineZ* scanline_z;
-
     MemoryArena fb_meta_arena;
     Span** span_list;
     

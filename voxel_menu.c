@@ -9,7 +9,7 @@
 
 Texture g_spinning_staff = {.size = 0x100};
 
-void staffEditorCreateMenu(struct Staff* staff){
+void staffEditorCreateMenu(Staff* staff){
 	VoxelGuiElement menu_static[] = {
 		{
             .type = VOXEL_GUI_STRING,
@@ -204,7 +204,7 @@ void antiAliasingLoadMenu(VoxelGuiElement* self){
 		element->position = (Vec2){FIXED_ONE - 0x2000,FIXED_ONE - 0x2000 * (iter / 2 + 1) - 0x2000};
 		element = aa_menu + iter + 2;
 		element->type = VOXEL_GUI_STRING;
-		element->string.string = intToString(tMallocZero(0x10),i);
+		element->string.string = numberToString(tMallocZero(0x10),i);
 		element->position = (Vec2){FIXED_ONE - 0x3000,FIXED_ONE - 0x2000 * (iter / 2 + 1) - 0x2000};
 		iter += 2;
 	}

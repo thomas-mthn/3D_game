@@ -375,7 +375,7 @@ static void spanDraw(DrawSurface* surface,Span* span,int height){
                 int texture_y = uv.y >> FIXED_PRECISION & mipmap_size - 1;
                 unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
                 Vec3 texture_color = vec3Shr(pixelColorToColor(texel),4);
-                g_surface.data[height * g_surface.width + i + j] = colorToPixelColor(vec3Mul(texture_color,span->color));
+                surface->data[height * surface->width + i + j] = colorToPixelColor(vec3Mul(texture_color,span->color));
                 uv = vec2Add(uv,uv_delta);
             }
             z += delta * batch_size;
@@ -431,7 +431,7 @@ static void spanDraw(DrawSurface* surface,Span* span,int height){
             unsigned texel = span->texture->pixel_data[mipmap_offset + (texture_x << mipmap_shift) + texture_y];
             Vec3 texture_color = vec3Shr(pixelColorToColor(texel),4);
             Vec3 color = lightmapGet(span->lightmap,uv_lightmap);
-            surface->data[height * g_surface.width + i] = colorToPixelColor(vec3Mul(color,texture_color));
+            surface->data[height * surface->width + i] = colorToPixelColor(vec3Mul(color,texture_color));
             uv = vec2Add(uv,uv_delta);
         }
         return;
@@ -713,8 +713,8 @@ void spanQuadAdd(DrawSurface* surface,Vec2* coords_2d,Vec3 color){
 
 static Vec3 polygonPositionNew(Vec3 inside,Vec3 outside,int* between,int z_offset){
     Vec3 direction = vec3Direction(outside,inside);
-    Plane plane = {.normal = getLookDirection(g_angle),.distance = -z_offset};
-    int distance = rayPlaneIntersection(vec3Sub(outside,g_position),direction,plane);
+    Plane plane = {.normal = getLookDirection(g_surface.angle),.distance = -z_offset};
+    int distance = rayPlaneIntersection(vec3Sub(outside,g_surface.position),direction,plane);
     if(between)
         *between = FIXED_ONE - fixedDivR(distance,vec3Distance(inside,outside));
     return vec3Add(outside,vec3MulS(direction,distance));
@@ -738,10 +738,10 @@ static int polygonClipProject(DrawSurface* surface,Vec3* polygon,Vec3* polygon_2
         polygon[2],
     };
     int view_z[5] = {
-        viewPlaneZ(d_point[0],g_tri,g_position),
-        viewPlaneZ(d_point[1],g_tri,g_position),
-        viewPlaneZ(d_point[2],g_tri,g_position),
-        viewPlaneZ(d_point[3],g_tri,g_position),
+        viewPlaneZ(d_point[0],surface->rotation_matrix,surface->position),
+        viewPlaneZ(d_point[1],surface->rotation_matrix,surface->position),
+        viewPlaneZ(d_point[2],surface->rotation_matrix,surface->position),
+        viewPlaneZ(d_point[3],surface->rotation_matrix,surface->position),
     };
     if(texture_coordinates){
         for(int i = 4;i--;){
@@ -792,7 +792,7 @@ static int polygonClipProject(DrawSurface* surface,Vec3* polygon,Vec3* polygon_2
     int n_vertex = quad_ptr;
     Vec3 transformed[5];
     for(int i = n_vertex;i--;)
-        transformed[i] = pointToScreenRenderer(quad_new[i],g_tri,g_position,g_options.fov);
+        transformed[i] = pointToScreenRenderer(quad_new[i],surface->rotation_matrix,surface->position,g_options.fov);
     
     for(int i = n_vertex;i--;){
         polygon_2d[i] = (Vec3){fixedDivR(transformed[i].x,transformed[i].z),fixedDivR(-transformed[i].y,transformed[i].z),transformed[i].z};

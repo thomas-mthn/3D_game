@@ -97,7 +97,7 @@ void drawGuiString(Voxel* voxel,int side,Vec2 uv,String string,int scale,int thi
 
 static void drawNumber3D(Voxel* voxel,int side,Vec2 uv,int number,int scale){
 	char buffer[0x10];
-    String string = intToString(buffer,number);
+    String string = numberToString(buffer,number);
 	drawGuiString(voxel,side,uv,string,scale,0x300);
 }
 
@@ -189,10 +189,10 @@ void drawGuiCircle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,int radius,int 
 	((int*)&points[3])[axis.x] += fixedMulR(voxel_size,radius);
 	((int*)&points[3])[axis.y] += fixedMulR(voxel_size,-radius);
 
-	points[0] = pointToScreenRenderer(points[0],g_tri,g_position,g_options.fov);
-	points[1] = pointToScreenRenderer(points[1],g_tri,g_position,g_options.fov);
-	points[2] = pointToScreenRenderer(points[2],g_tri,g_position,g_options.fov);
-	points[3] = pointToScreenRenderer(points[3],g_tri,g_position,g_options.fov);
+	points[0] = pointToScreenRenderer(points[0],g_surface.rotation_matrix,g_surface.position,g_options.fov);
+	points[1] = pointToScreenRenderer(points[1],g_surface.rotation_matrix,g_surface.position,g_options.fov);
+	points[2] = pointToScreenRenderer(points[2],g_surface.rotation_matrix,g_surface.position,g_options.fov);
+	points[3] = pointToScreenRenderer(points[3],g_surface.rotation_matrix,g_surface.position,g_options.fov);
 
 	drawCircle3d(&g_surface,points,vec3MulS(pixelColorToColor(color),g_exposure));
 }

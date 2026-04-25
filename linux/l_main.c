@@ -1,7 +1,6 @@
 #include <X11/X.h>
 #include <X11/Xutil.h>
 #include <dlfcn.h>
-#include <signal.h>
 
 #include "../langext.h"
 #include "../draw.h"
@@ -169,7 +168,7 @@ static unsigned getTick(void){
 
     uint64 ns = (uint64)ts.seconds * 1000000000ULL + ts.nano_seconds;
 
-    return ns / (1000000000ULL / N_TICK_SECOND);
+    return ns / (15259ULL / (N_TICK_BASE / N_TICK_MODIFIER));
 }
 
 void linuxPrint(String string){
@@ -204,9 +203,6 @@ void linuxWindowInit(void){
     
     Atom net_wm_icon = XInternAtom(g_surface.display, "_NET_WM_ICON", False);
     Atom cardinal = XInternAtom(g_surface.display, "CARDINAL", False);
-    /*
-    printNumberNL(net_wm_icon);
-    printNumberNL(cardinal);
 
     int* icon_data = iconGenerate();
 
@@ -214,13 +210,13 @@ void linuxWindowInit(void){
         size_t width;
         size_t height;
         size_t data[ICON_SIZE * ICON_SIZE];
-    }* icon_data_linux = memoryArenaAllocate(&g_arena_frame,ICON_SIZE * ICON_SIZE + sizeof(size_t) * 2);;
+    }* icon_data_linux = memoryArenaAllocate(&g_arena_frame,sizeof *icon_data_linux);
 
     icon_data_linux->height = ICON_SIZE;
     icon_data_linux->width = ICON_SIZE;
     
     for(int i = ICON_SIZE * ICON_SIZE;i--;)
-        icon_data_linux->data[i] = icon_data[i] | 0xFF000000;
+        icon_data_linux->data[i] = icon_data[i] ? icon_data[i] | 0xFF000000 : 0;
     
     XChangeProperty(
         g_surface.display,
@@ -232,7 +228,7 @@ void linuxWindowInit(void){
         (void*)icon_data_linux,
         ICON_SIZE * ICON_SIZE + 2
     );
-    */
+    
     XMapWindow(g_surface.display,g_surface.window);
     XFlush(g_surface.display);
 }
@@ -305,10 +301,12 @@ int main(void){
 	mainInit();
 	
 	int prev_tick = getTick();
-    TimeSpec time_pre = {0};
-    TimeSpec time_post = {0};
+
     int frame_counter = 0;
     int fps = 0;
+
+    TimeSpec time_pre = {0};
+    
     for(;;){
         InputEvent ev;
         
@@ -328,10 +326,13 @@ int main(void){
             }
         }
 
+        TimeSpec time_post;
         systemTimeGet(&time_post);
 
         if(!(frame_counter++ % 0x20))
             fps = 1000000000 / (time_post.nano_seconds - time_pre.nano_seconds + (time_post.seconds - time_pre.seconds) * 1000000000);
+
+        g_delta = (time_post.nano_seconds - time_pre.nano_seconds) + (time_post.seconds - time_pre.seconds) * 1000000000 >> 8;
         
         time_pre = time_post;
         
@@ -425,9 +426,14 @@ int main(void){
 
 		if((int)n_tick < 0)
 			n_tick = 0;
-
-        for(int i = n_tick;i--;)
+        
+        for(int i = n_tick / (FIXED_ONE * N_TICK_MODIFIER);i--;){
+            g_delta = FIXED_ONE * N_TICK_MODIFIER;
             tickRun();
+        }
+        
+        g_delta = n_tick % FIXED_ONE * N_TICK_MODIFIER;
+        tickRun();
 
         prev_tick = tick;
         

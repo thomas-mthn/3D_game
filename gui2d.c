@@ -29,7 +29,7 @@ void gui2dRectangleDraw(int x,int y,int size_x,int size_y,int color,Gui2dFlags f
     }
 
     if(!flags.middle_y){
-        if(!flags.invert_y)
+        if(flags.invert_y)
             y = FIXED_ONE - y - size_y;
         else
             y -= FIXED_ONE;
@@ -71,7 +71,7 @@ static void gui2dSegmentDraw(int x1,int y1,int x2,int y2,int thickness,int color
         y2 = -y2;
     }
     else{
-        if(!flags.invert_y){
+        if(flags.invert_y){
             y1 = FIXED_ONE - y1;
             y2 = FIXED_ONE - y2;
         }
@@ -93,7 +93,7 @@ void gui2dFrameDraw(int x,int y,int size_x,int size_y,int color,int thickness,Gu
 
 void gui2dNumberDraw(int x,int y,int number,int scale,Gui2dFlags flags){
     char buffer[0x10];
-    String string = intToString(buffer,number);
+    String string = numberToString(buffer,number);
     gui2dStringDraw(x,y,string,scale,0xFFFFFF,0x1800,flags);
 }
 
@@ -101,7 +101,7 @@ void gui2dStringDraw(int x,int y,String string,int scale,int color,int thickness
     int down_offset = 0;
     int offset = 0;
     int mirror_x = flags.invert_x ? -1 : 1;
-    int mirror_y = flags.invert_y ? -1 : 1;
+    int mirror_y = flags.invert_y ? 1 : -1;
     for(int j = 0;j < string.size;j++){
         char string_char = string.data[j];
         if(string_char == '\n'){
@@ -114,14 +114,14 @@ void gui2dStringDraw(int x,int y,String string,int scale,int color,int thickness
                 int offset_transform = fixedMulR(offset,scale);
                 int offset_transform_x = fixedMulR(down_offset,scale);
                 int coord_transform[] = {
-                    (coords[0] * scale * mirror_x >> 8) + x + offset_transform_x * mirror_x,(-coords[1] * scale * mirror_y >> 8) + y + offset_transform * mirror_y,
-                    (coords[2] * scale * mirror_x >> 8) + x + offset_transform_x * mirror_x,(-coords[3] * scale * mirror_y >> 8) + y + offset_transform * mirror_y
+                    (coords[0] * scale * mirror_x >> 8) + x + offset_transform_x * mirror_x,(coords[1] * scale * mirror_y >> 8) + y + offset_transform * mirror_y,
+                    (coords[2] * scale * mirror_x >> 8) + x + offset_transform_x * mirror_x,(coords[3] * scale * mirror_y >> 8) + y + offset_transform * mirror_y
                 };
                 
                 gui2dSegmentDraw(coord_transform[0],coord_transform[1],coord_transform[2],coord_transform[3],fixedMulR(thickness,scale),color,flags);
             }
         }
-        offset -= g_vector_font[string_char].width;
+        offset += g_vector_font[string_char].width;
     }
 }
 

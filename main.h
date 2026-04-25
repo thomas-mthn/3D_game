@@ -120,10 +120,15 @@ enum{
 
 #endif
 
-#define ICON_SIZE 16
-	
-#define N_TICK_SECOND 128
+#define ICON_SIZE 64
+
+#define N_TICK_MODIFIER 128
+#define N_TICK_BASE 128
+
 #define RENDER_DISTANCE (FIXED_ONE * 8)
+
+#define PLAYER_SPAWN_POSITION {0x0F10000,0x1060000,0x1020000}
+#define PLAYER_SPAWN_ANGLE {FIXED_ONE / 2,FIXED_ONE / 2}
 
 #include "vec3.h"
 #include "octree.h"
@@ -153,6 +158,7 @@ structure(GameOptions){
     bool smooth_lighting;
     bool gl_wireframe;
     bool textures;
+    bool rd_octree_wireframe;
 };
 
 int* iconGenerate(void);
@@ -214,17 +220,15 @@ static Vec3 pixelColorToColor(int color){
 	return (Vec3){(color >> 0 & 0xFF) << 12,(color >> 8 & 0xFF) << 12,(color >> 16 & 0xFF) << 12};
 }
 
-#define COLOR_WHITE (Vec3){1 << 14,1 << 14,1 << 14}
+#define COLOR_WHITE (Vec3){1 << 20,1 << 20,1 << 20}
 
 extern char g_voxel_lighting_tree[];
 
 extern bool g_test_bool;
-extern Vec3 g_position;
 extern VoxelType g_voxel_select;
 extern int g_exposure;
 extern unsigned g_tick;
-extern int g_tri[];
-extern Vec2 g_angle;
+extern int g_delta;
 extern Vec3 g_velocity;
 extern int g_health;
 extern bool g_luminance_overlay;

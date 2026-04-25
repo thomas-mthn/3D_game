@@ -7,6 +7,7 @@
 #include "voxel_menu.h"
 #include "font.h"
 #include "opengl.h"
+#include "libc.h"
 
 #ifdef __linux__
 #include "linux/l_main.h"
@@ -18,16 +19,17 @@ static MemoryArena console_content_arena;
 
 static ConsoleContent* console_content;
 
+int g_debug_int1;
+int g_debug_int2;
+
 #define FONT_SIZE 0x800
 
 void print(String string){
-#if 0
     ConsoleContent* content = memoryArenaAllocate(&console_content_arena,string.size + sizeof(ConsoleContent));
     content->string_length = string.size;
     tMemcpy(content->string_data,string.data,string.size);
     content->next = console_content;
     console_content = content;
-#endif
 #ifdef __linux__
     linuxPrint(string);
 #elif !defined(__wasm__)
@@ -158,7 +160,7 @@ void consoleVoxelDraw(Voxel* voxel,int side){
 #define COMMAND_LIST                                                  \
     X(QUIT) X(MULTITHREAD) X(LIGHTING_ENGINE) X(RENDERBACKEND)\
         X(SMOOTH_LIGHTING) X(GL_WIREFRAME) X(SPELL) X(LOAD) X(SAVE) X(CREATE) \
-        X(FAST_STARTUP) X(TEXTURES)
+        X(FAST_STARTUP) X(TEXTURES) X(DBG_INT1) X(DBG_INT2) X(OCTREE_WIREFRAME)
 
 void consoleInput(char key){
     if(!key)
@@ -187,6 +189,17 @@ void consoleInput(char key){
         if(!stringCompareSizeInsensitive(command,commands[i]))
             continue;
         switch(i){
+            case COMMAND_DBG_INT1:{
+                String number = stringForwardSlice(command,commands[i].size + 1);
+                g_debug_int1 = stringToNumber(number);
+            } break;
+            case COMMAND_DBG_INT2:{
+                String number = stringForwardSlice(command,commands[i].size + 1);
+                g_debug_int2 = stringToNumber(number);
+            } break;
+            case COMMAND_OCTREE_WIREFRAME:{
+                changeBooleanSetting(&g_options.rd_octree_wireframe);
+            } break;
             case COMMAND_TEXTURES:{
                 changeBooleanSetting(&g_options.textures);
             } break;

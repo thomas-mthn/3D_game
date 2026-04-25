@@ -169,8 +169,8 @@ void staffFire(void){
         return;
 	g_mana -= cost;
 
-	Entity* spell = entityCreate(g_position,spell_entity[spell_slot->spell_type]);
-	Vec3 direction = getLookDirection(g_angle);
+	Entity* spell = entityCreate(g_surface.position,spell_entity[spell_slot->spell_type]);
+	Vec3 direction = getLookDirection(g_surface.angle);
 	direction = vec3Normalize(direction);
 
 	spell->adj_speed  = adj_table[SPELL_ADJ_SPEED].amount;
@@ -180,5 +180,5 @@ void staffFire(void){
 
 	g_attack_animation = FIXED_ONE;
 
-	audioPlay(g_position,AUDIO_SHOOT);
+	audioPlay(g_surface.position,AUDIO_SHOOT);
 }

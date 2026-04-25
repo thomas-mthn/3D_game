@@ -29,7 +29,7 @@ structure(LightmapTree){
 
 static int surfaceAngle(Vec3 position,Vec3 normal){
 	return FIXED_ONE;
-	int dot = vec3Dot(vec3Normalize(getLookDirection(g_angle)),normal);
+	int dot = vec3Dot(vec3Normalize(getLookDirection(g_surface.angle)),normal);
 	int angle = tAbs(dot) / 2 + FIXED_ONE / 2;
 	angle = fixedDivR(FIXED_ONE,angle);
 

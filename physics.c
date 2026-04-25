@@ -9,25 +9,25 @@ void movementFly(void){
         return;
 	int speed = keyDown(KEY_LCONTROL) ? 2 : 4;
 	if(keyDown(KEY_W)){
-		g_position.x -= tCos(g_angle.x) >> speed;
-		g_position.y -= tSin(g_angle.x) >> speed;
+		g_surface.position.x -= fixedMulR(tCos(g_surface.angle.x) >> speed,g_delta);
+		g_surface.position.y -= fixedMulR(tSin(g_surface.angle.x) >> speed,g_delta);
 	}
 	if(keyDown(KEY_S)){
-		g_position.x += tCos(g_angle.x) >> speed;
-		g_position.y += tSin(g_angle.x) >> speed;
+		g_surface.position.x += fixedMulR(tCos(g_surface.angle.x) >> speed,g_delta);
+        g_surface.position.y += fixedMulR(tSin(g_surface.angle.x) >> speed,g_delta);
 	}
 	if(keyDown(KEY_A)){
-		g_position.x += tCos(g_angle.x + FIXED_ONE / 4) >> speed;
-		g_position.y += tSin(g_angle.x + FIXED_ONE / 4) >> speed;
+		g_surface.position.x += fixedMulR(tCos(g_surface.angle.x + FIXED_ONE / 4) >> speed,g_delta);
+		g_surface.position.y += fixedMulR(tSin(g_surface.angle.x + FIXED_ONE / 4) >> speed,g_delta);
 	}
 	if(keyDown(KEY_D)){
-		g_position.x -= tCos(g_angle.x + FIXED_ONE / 4) >> speed;
-		g_position.y -= tSin(g_angle.x + FIXED_ONE / 4) >> speed;
+		g_surface.position.x -= fixedMulR(tCos(g_surface.angle.x + FIXED_ONE / 4) >> speed,g_delta);
+		g_surface.position.y -= fixedMulR(tSin(g_surface.angle.x + FIXED_ONE / 4) >> speed,g_delta);
 	}
 	if(keyDown(KEY_LSHIFT))
-		g_position.z -= 0x10000 >> speed;
+		g_surface.position.z -= fixedMulR(0x10000 >> speed,g_delta);
 	if(keyDown(KEY_SPACE))
-		g_position.z += 0x10000 >> speed;
+		g_surface.position.z += fixedMulR(0x10000 >> speed,g_delta);
 }
 
 static bool boxTreeCollisionRecursive(Vec3 pos,Vec3 size,Voxel* voxel,int* max_height,CollisionFlags* flags){
@@ -42,9 +42,9 @@ static bool boxTreeCollisionRecursive(Vec3 pos,Vec3 size,Voxel* voxel,int* max_h
     
 	if(flags){
 		if(voxel->type == VOXEL_LADDER)
- 			*flags |= COLLISION_FLAG_LADDER;
+ 			flags->ladder = true;
 		if(voxel->type == VOXEL_WATER && boxBoxIntersect(pos,size,block_pos,block_size_water))
-			*flags |= COLLISION_FLAG_WATER;
+		    flags->water = true;
 	}
     
     switch(voxel->type){
@@ -127,13 +127,30 @@ static bool boxTreeCollisionRecursive(Vec3 pos,Vec3 size,Voxel* voxel,int* max_h
 	return true;
 }
 
+void physicsPointResolve(Vec3* position,Vec3* velocity){
+    bool collide[3];
+    
+    collide[VEC3_X] = voxelPositionGet(vec3Add(*position,(Vec3){velocity->x,0,0}))->type != VOXEL_AIR;
+    collide[VEC3_Y] = voxelPositionGet(vec3Add(*position,(Vec3){0,velocity->y,0}))->type != VOXEL_AIR;
+    collide[VEC3_Z] = voxelPositionGet(vec3Add(*position,(Vec3){0,0,velocity->z}))->type != VOXEL_AIR;
+
+    for(int i = countof(collide);i--;){
+        if(collide[i]){
+            velocity->a[i] = 0;
+        }
+        else{
+            position->a[i] += velocity->a[i];
+        }
+    }
+}
+
 bool boxTreeCollision(Vec3 pos,Vec3 size,int* max_height,CollisionFlags* flags){
 	pos = vec3Sub(pos,vec3Shr(size,1));
 	return boxTreeCollisionRecursive(pos,size,&g_voxel,max_height,flags);
 }
 
 Vec3 playerHitboxGet(void){
-	return vec3Add(g_position,(Vec3){.z = -(FIXED_ONE / 2 + FIXED_ONE / 4)});
+	return vec3Add(g_surface.position,(Vec3){.z = -(FIXED_ONE / 2 + FIXED_ONE / 4)});
 }
 
 #define JUMP_HEIGHT (FIXED_ONE / 4)
@@ -141,6 +158,11 @@ Vec3 playerHitboxGet(void){
 #define DIAGONAL 0x0000B53C
 #define BHOP_BONUS (FIXED_ONE / 128)
 
+static int powFixed(int base,int dt){
+    int k = fixedMulR(FIXED_ONE - base,dt);
+    return FIXED_ONE - k;
+}
+#include "console.h"
 void movementNormal(void){
     if(g_voxel_interact)
         return;
@@ -148,77 +170,81 @@ void movementNormal(void){
 	int max_height_y = 0;
 	bool hit[3];
 	bool down_z = g_velocity.z < 0;
-	CollisionFlags collision_flags = 0;
+	CollisionFlags collision_flags = {0};
 	Vec3 hitbox = playerHitboxGet();
-	hit[VEC3_X] = boxTreeCollision(vec3Add(hitbox,(Vec3){g_velocity.x,0,0}),PLAYER_SIZE,&max_height_x,&collision_flags);
-	hit[VEC3_Y] = boxTreeCollision(vec3Add(hitbox,(Vec3){0,g_velocity.y,0}),PLAYER_SIZE,&max_height_y,&collision_flags);
-	hit[VEC3_Z] = boxTreeCollision(vec3Add(hitbox,(Vec3){0,0,g_velocity.z}),PLAYER_SIZE,0,0);
-	g_position = vec3Add(g_position,g_velocity);
+
+    Vec3 velocity = vec3MulS(g_velocity,g_delta);
+    
+	hit[VEC3_X] = boxTreeCollision(vec3Add(hitbox,(Vec3){velocity.x,0,0}),PLAYER_SIZE,&max_height_x,&collision_flags);
+	hit[VEC3_Y] = boxTreeCollision(vec3Add(hitbox,(Vec3){0,velocity.y,0}),PLAYER_SIZE,&max_height_y,&collision_flags);
+	hit[VEC3_Z] = boxTreeCollision(vec3Add(hitbox,(Vec3){0,0,velocity.z}),PLAYER_SIZE,0,0);
+	g_surface.position = vec3Add(g_surface.position,velocity);
 
 	if(hit[VEC3_X]){
-		int height_difference = max_height_x - g_position.z + PLAYER_SIZE.z / 2 + FIXED_ONE / 2 + FIXED_ONE / 4;
+		int height_difference = max_height_x - g_surface.position.z + PLAYER_SIZE.z / 2 + FIXED_ONE / 2 + FIXED_ONE / 4;
 	
 		if(height_difference < FIXED_ONE - FIXED_ONE / 3){
-			g_position.z += height_difference;
+			g_surface.position.z += height_difference;
 		}
 		else{
-			g_position.x -= g_velocity.x;
+			g_surface.position.x -= velocity.x;
 			g_velocity.x = 0;
 		}
 	}
 	if(hit[VEC3_Y]){
-		int height_difference = max_height_y - g_position.z + PLAYER_SIZE.z / 2 + FIXED_ONE / 2 + FIXED_ONE / 4;
+		int height_difference = max_height_y - g_surface.position.z + PLAYER_SIZE.z / 2 + FIXED_ONE / 2 + FIXED_ONE / 4;
 	
 		if(height_difference < FIXED_ONE - FIXED_ONE / 3){
-			g_position.z += height_difference;
+			g_surface.position.z += height_difference;
 		}
 		else{
-			g_position.y -= g_velocity.y;
+			g_surface.position.y -= velocity.y;
 			g_velocity.y = 0;
 		}
 	}
 	if(hit[VEC3_Z]){
 		if(g_velocity.z < -FIXED_ONE / 4)
-			audioPlay(vec3Add(g_position,(Vec3){0,0,-FIXED_ONE}),AUDIO_LAND);
+			audioPlay(vec3Add(g_surface.position,(Vec3){0,0,-FIXED_ONE}),AUDIO_LAND);
 
 		//fall damage
 		if(g_velocity.z < -FIXED_ONE / 3)
 			g_health -= (-g_velocity.z - FIXED_ONE / 3) * 3;
 
-		g_position.z -= g_velocity.z;
+		g_surface.position.z -= velocity.z;
 		g_velocity.z = 0;
 		if(down_z){
 			static bool pressed;
 			if(keyDown(KEY_SPACE)){
-				audioPlay(vec3Add(g_position,(Vec3){0,0,-FIXED_ONE}),AUDIO_JUMP);
+				audioPlay(vec3Add(g_surface.position,(Vec3){0,0,-FIXED_ONE}),AUDIO_JUMP);
 				g_velocity.z = 0;
 				g_velocity.z += JUMP_HEIGHT;
+                down_z = false;
 				pressed = false;
 			}
 			else
 				pressed = true;
 		}
 	}
-	if(collision_flags & COLLISION_FLAG_LADDER){
+	if(collision_flags.ladder){
 		g_velocity.z = 0;
 		if(keyDown(KEY_LSHIFT))
 			g_velocity.z -= FIXED_ONE / 16;
 		else
 			g_velocity.z += FIXED_ONE / 16;
 	}
-	if(collision_flags & COLLISION_FLAG_WATER){
+	if(collision_flags.water){
 		g_velocity = vec3MulS(g_velocity,PHYSICS_FRICTION_WATER);
 		if(keyDown(KEY_LSHIFT))
 			g_velocity.z -= FIXED_ONE / 64;
 		if(keyDown(KEY_SPACE))
 			g_velocity.z += FIXED_ONE / 64;
 	}
-	bool in_air = (!hit[VEC3_Z] || hit[VEC3_Z] && !down_z) && !(collision_flags & COLLISION_FLAG_WATER);
+	bool in_air = (!hit[VEC3_Z] || hit[VEC3_Z] && !down_z) && !collision_flags.water;
 	static int moved;
 	if(!in_air){
 		moved += vec3Dot(g_velocity,g_velocity);
 		if(moved > FIXED_ONE / 8){
-			audioPlay(vec3Add(g_position,(Vec3){0,0,-FIXED_ONE}),AUDIO_FOOTSTEP);
+			audioPlay(vec3Add(g_surface.position,(Vec3){0,0,-FIXED_ONE}),AUDIO_FOOTSTEP);
 			moved = 0;
 		}
 	}
@@ -229,41 +255,45 @@ void movementNormal(void){
 		int mod = keyDown(KEY_D) || keyDown(KEY_A) ? fixedMulR(WALK_SPEED,DIAGONAL) : WALK_SPEED;
 		if(in_air)
 			fixedMul(&mod,FIXED_ONE / 16);
-		g_velocity.x -= fixedMulR(tCos(g_angle.x),mod * 2);
-		g_velocity.y -= fixedMulR(tSin(g_angle.x),mod * 2);
+		g_velocity.x -= fixedMulR(fixedMulR(tCos(g_surface.angle.x),mod * 2),g_delta);
+		g_velocity.y -= fixedMulR(fixedMulR(tSin(g_surface.angle.x),mod * 2),g_delta);
 	}
 	if(keyDown(KEY_S)){
 		int mod = keyDown(KEY_D) || keyDown(KEY_A) ? fixedMulR(WALK_SPEED,DIAGONAL) : WALK_SPEED;
 		if(in_air)
 			fixedMul(&mod,FIXED_ONE / 16);
-		g_velocity.x += fixedMulR(tCos(g_angle.x),mod * 2);
-		g_velocity.y += fixedMulR(tSin(g_angle.x),mod * 2);
+		g_velocity.x += fixedMulR(fixedMulR(tCos(g_surface.angle.x),mod * 2),g_delta);
+		g_velocity.y += fixedMulR(fixedMulR(tSin(g_surface.angle.x),mod * 2),g_delta);
 	}
 	if(keyDown(KEY_D)){
 		int mod = keyDown(KEY_S) || keyDown(KEY_W) ? fixedMulR(WALK_SPEED,DIAGONAL) : WALK_SPEED;
 		if(in_air)
 			fixedMul(&mod,FIXED_ONE / 16);
-		g_velocity.x -= fixedMulR(tCos(g_angle.x + FIXED_ONE / 4),mod * 2);
-		g_velocity.y -= fixedMulR(tSin(g_angle.x + FIXED_ONE / 4),mod * 2);
+		g_velocity.x -= fixedMulR(fixedMulR(tCos(g_surface.angle.x + FIXED_ONE / 4),mod * 2),g_delta);
+		g_velocity.y -= fixedMulR(fixedMulR(tSin(g_surface.angle.x + FIXED_ONE / 4),mod * 2),g_delta);
 	}
 	if(keyDown(KEY_A)){
 		int mod = keyDown(KEY_S) || keyDown(KEY_W) ? fixedMulR(WALK_SPEED,DIAGONAL) : WALK_SPEED;
 		if(in_air)
 			fixedMul(&mod,FIXED_ONE / 16);
-		g_velocity.x += fixedMulR(tCos(g_angle.x + FIXED_ONE / 4),mod * 2);
-		g_velocity.y += fixedMulR(tSin(g_angle.x + FIXED_ONE / 4),mod * 2);
+		g_velocity.x += fixedMulR(fixedMulR(tCos(g_surface.angle.x + FIXED_ONE / 4),mod * 2),g_delta);
+		g_velocity.y += fixedMulR(fixedMulR(tSin(g_surface.angle.x + FIXED_ONE / 4),mod * 2),g_delta);
 	}
-	g_velocity = vec3MulS(g_velocity,!hit[VEC3_Z] || hit[VEC3_Z] && !down_z ? PHYSICS_FRICTION_AIR : PHYSICS_FRICTION_GROUND);
+    
+    int friction = !hit[VEC3_Z] || hit[VEC3_Z] && !down_z ? PHYSICS_FRICTION_AIR : PHYSICS_FRICTION_GROUND;
+    friction = fixedMulR(friction,g_delta);
+    g_velocity = vec3Sub(g_velocity,vec3MulS(g_velocity,friction));
+    
 	if(g_velocity.x < 0)
 		g_velocity.x += 1;
 	if(g_velocity.y < 0)
 		g_velocity.y += 1;
-	g_velocity.z -= PHYSICS_GRAVITY;
+	g_velocity.z -= fixedMulR(PHYSICS_GRAVITY,g_delta);
 
 	static int delta_angle;
 	static int prev_angle;
 
-	delta_angle += (g_angle.x - prev_angle) * 0x10;
+	delta_angle += (g_surface.angle.x - prev_angle) * 0x10;
 	
 	bool key_a = keyDown(KEY_A);
 	bool key_d = keyDown(KEY_D);
@@ -272,27 +302,27 @@ void movementNormal(void){
 		if(delta_angle < 0 && key_a && !key_d && in_air){
 			int boost = tClamp(FIXED_ONE / 4 - tAbs(-delta_angle - FIXED_ONE),0,FIXED_ONE);
 
-			Vec2 angle = g_angle;
+			Vec2 angle = g_surface.angle;
 			angle.x -= FIXED_ONE / 16;
 
 			if(!keyDown(KEY_W)){
-				g_velocity.x += fixedMulR(fixedMulR(getLookDirection(angle).x,BHOP_BONUS),boost << 2);
-				g_velocity.y += fixedMulR(fixedMulR(getLookDirection(angle).y,BHOP_BONUS),boost << 2);
+				g_velocity.x += fixedMulR(fixedMulR(fixedMulR(getLookDirection(angle).x,BHOP_BONUS),boost << 2),g_delta);
+				g_velocity.y += fixedMulR(fixedMulR(fixedMulR(getLookDirection(angle).y,BHOP_BONUS),boost << 2),g_delta);
 			}
 		}
 		if(delta_angle > 0 && key_d && !key_a && in_air){
 			int boost = tClamp(FIXED_ONE / 4 - tAbs(delta_angle - FIXED_ONE),0,FIXED_ONE);
 
-			Vec2 angle = g_angle;
+			Vec2 angle = g_surface.angle;
 			angle.x += FIXED_ONE / 16;
 
 			if(!keyDown(KEY_W)){
-				g_velocity.x += fixedMulR(fixedMulR(getLookDirection(angle).x,BHOP_BONUS),boost << 2);
-				g_velocity.y += fixedMulR(fixedMulR(getLookDirection(angle).y,BHOP_BONUS),boost << 2);
+				g_velocity.x += fixedMulR(fixedMulR(fixedMulR(getLookDirection(angle).x,BHOP_BONUS),boost << 2),g_delta);
+				g_velocity.y += fixedMulR(fixedMulR(fixedMulR(getLookDirection(angle).y,BHOP_BONUS),boost << 2),g_delta);
 			}
 		}
 	}
 
-	prev_angle = g_angle.x;
+	prev_angle = g_surface.angle.x;
 	fixedMul(&delta_angle,FIXED_ONE - (FIXED_ONE >> 4));
 }

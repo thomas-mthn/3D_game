@@ -66,14 +66,8 @@ int g_edit_depth = 10;
 
 VoxelType g_voxel_select = VOXEL_AIR;
 
-#define PLAYER_SPAWN_POSITION {0x0F10000,0x1060000,0x1020000}
-#define PLAYER_SPAWN_ANGLE {FIXED_ONE / 2,FIXED_ONE / 2}
-
-Vec3 g_position = PLAYER_SPAWN_POSITION;
 Vec3 g_velocity;
-Vec2 g_angle = PLAYER_SPAWN_ANGLE;
 int g_exposure = FIXED_ONE;
-int g_tri[4];
 
 int g_health = FIXED_ONE / 8;
 bool g_luminance_overlay;
@@ -112,9 +106,9 @@ Vec3 getLookDirection(Vec2 angle){
 }
 
 static void pointInScreenSpaceSide(Vec3 point,int* sides){
-	Vec3 transformed = vec3Shr(vec3Sub(point,g_position),0);
+	Vec3 transformed = vec3Shr(vec3Sub(point,g_surface.position),0);
 	
-	if(vec3Dot(transformed,getLookDirection(g_angle)) < 0)
+	if(vec3Dot(transformed,getLookDirection(g_surface.angle)) < 0)
 		sides[0] += 1;
 	
 	for(int i = 0;i < countof(g_view_plane);i++){
@@ -124,9 +118,9 @@ static void pointInScreenSpaceSide(Vec3 point,int* sides){
 }
 
 bool pointInScreenSpace(Vec3 point){
-	Vec3 transformed = vec3Shr(vec3Sub(point,g_position),0);
+	Vec3 transformed = vec3Shr(vec3Sub(point,g_surface.position),0);
 	
-	if(vec3Dot(transformed,getLookDirection(g_angle)) < 0)
+	if(vec3Dot(transformed,getLookDirection(g_surface.angle)) < 0)
 		return false;
 	
 	for(int i = 0;i < countof(g_view_plane);i++){
@@ -169,13 +163,13 @@ Vec3 screenRayDirection(int* tri,int x,int y,int fov_x,int fov_y){
 
 Vec3 pointToScreen(Vec3 point){
 	Vec3 screen_point;
-	Vec3 pos = vec3Sub(point,g_position);
+	Vec3 pos = vec3Sub(point,g_surface.position);
 	int temp;
-	temp  = fixedMulR(pos.y,g_tri[0]) - fixedMulR(pos.x,g_tri[1]);
-	pos.x = fixedMulR(pos.y,g_tri[1]) + fixedMulR(pos.x,g_tri[0]);
+	temp  = fixedMulR(pos.y,g_surface.rotation_matrix[0]) - fixedMulR(pos.x,g_surface.rotation_matrix[1]);
+	pos.x = fixedMulR(pos.y,g_surface.rotation_matrix[1]) + fixedMulR(pos.x,g_surface.rotation_matrix[0]);
 	pos.y = temp;
-	temp  = fixedMulR(pos.z,g_tri[2]) - fixedMulR(pos.x,g_tri[3]);
-	pos.x = fixedMulR(pos.z,g_tri[3]) + fixedMulR(pos.x,g_tri[2]);
+	temp  = fixedMulR(pos.z,g_surface.rotation_matrix[2]) - fixedMulR(pos.x,g_surface.rotation_matrix[3]);
+	pos.x = fixedMulR(pos.z,g_surface.rotation_matrix[3]) + fixedMulR(pos.x,g_surface.rotation_matrix[2]);
 	pos.z = temp;
 
 	if(pos.x <= 0)
@@ -250,6 +244,8 @@ int* iconGenerate(void){
 		.height = ICON_SIZE,
 		.width = ICON_SIZE,
 		.backend = RENDER_BACKEND_SOFTWARE,
+        .angle = {0,0},
+        .position = {0,FIXED_ONE,FIXED_ONE},
 	};
 
 	surfaceInit(&surface);
@@ -309,9 +305,6 @@ int* iconGenerate(void){
 		drawPolygon3d(&surface,polygon[i].coordinates,pixelColorToColor(polygon[i].color));
 
     spanDrawList(&surface);
-
-    for(int i = ICON_SIZE * ICON_SIZE;i--;)
-        surface.data[i] = tRnd();
     
     return surface.data;
 }
@@ -319,8 +312,8 @@ int* iconGenerate(void){
 void tickRun(void){
 	if(g_health <= 0){
 		entityDestroyAll();
-		g_position = (Vec3)PLAYER_SPAWN_POSITION;
-		g_angle = (Vec2)PLAYER_SPAWN_ANGLE;
+		g_surface.position = (Vec3)PLAYER_SPAWN_POSITION;
+		g_surface.angle = (Vec2)PLAYER_SPAWN_ANGLE;
 		g_health = FIXED_ONE;
 		g_velocity = (Vec3){0};
 	}
@@ -342,7 +335,7 @@ void tickRun(void){
         g_mana += g_equipped.mana_generation;
         g_mana = tMin(g_mana,g_equipped.mana_max);
     }
-    g_angle = vec2Add(g_angle,vec2Shr(g_recoil,8));
+    g_surface.angle = vec2Add(g_surface.angle,vec2Shr(g_recoil,8));
     g_recoil = vec2MulS(g_recoil,FIXED_ONE - 0x1000);
 
     if(g_recoil.x < 0)
@@ -389,14 +382,14 @@ void tickRun(void){
                 if(voxel->opened)
                     door_size = block_size / 2 - door_size;
                 int door_size_inv = block_size / 2 - door_size;
-                bool box_1 = boxBoxIntersect(g_position,PLAYER_SIZE,block_pos,(Vec3){block_size,door_size,block_size});
+                bool box_1 = boxBoxIntersect(g_surface.position,PLAYER_SIZE,block_pos,(Vec3){block_size,door_size,block_size});
 
                 if(box_1){
                     voxel->animation += 16 << voxel->depth;
                     g_velocity.y += 0x100;
                 }
 
-                bool box_2 = boxBoxIntersect(g_position,PLAYER_SIZE,(Vec3){block_pos.x,block_pos.y + block_size / 2 + door_size_inv,block_pos.z},(Vec3){block_size,door_size,block_size});
+                bool box_2 = boxBoxIntersect(g_surface.position,PLAYER_SIZE,(Vec3){block_pos.x,block_pos.y + block_size / 2 + door_size_inv,block_pos.z},(Vec3){block_size,door_size,block_size});
                 if(box_2){
                     voxel->animation += 16 << voxel->depth;
                     g_velocity.y -= 0x100;
@@ -433,16 +426,16 @@ void tickRun(void){
 		}
 		previous = voxel;
 	}
-	 
-	entityVoxelInsert();
-	entityTick();
-	voxelEntityRemove();
-	entityDestroy();
 
 	if(g_movement_fly)
 		movementFly();
 	else
 		movementNormal();
+    
+	entityVoxelInsert();
+	entityTick();
+	voxelEntityRemove();
+	entityDestroy();
 
 	spinningStaffSpin();
 	
@@ -470,6 +463,7 @@ int bitScanReverse(unsigned value){
 }
 
 unsigned g_tick;
+int g_delta;
 
 Plane getPlane(Voxel* voxel,Vec3 dir,unsigned side){
     Plane plane;
@@ -568,6 +562,8 @@ void configSave(void){
 #endif
 }
 
+static Entity* hand;
+
 void keyPress(int key){
     if(g_voxel_interact){
         if(g_voxel_interact->type == VOXEL_CONSOLE){
@@ -596,8 +592,8 @@ void keyPress(int key){
 		case KEY_G:{
 			if(!g_equipped_staff)
 				break;
-			Entity* staff = entityCreate(g_position,ENTITY_STAFF);
-			staff->velocity = vec3Shr(getLookDirection(g_angle),4);
+			Entity* staff = entityCreate(g_surface.position,ENTITY_STAFF);
+			staff->velocity = vec3Shr(getLookDirection(g_surface.angle),4);
 			staff->model = g_equipped.model;
 			staff->staff = g_equipped;
 			voxelMenuStaffEditorDefault();
@@ -607,7 +603,7 @@ void keyPress(int key){
 		case KEY_E:{
 			if(!g_options.editor)
 				break;
-			entityCreate(g_position,ENTITY_SLIME);
+			entityCreate(g_surface.position,ENTITY_SLIME);
 		} break;
 		case KEY_M:{
 			if(!g_options.editor)
@@ -617,19 +613,25 @@ void keyPress(int key){
 		case KEY_V:{
 			if(!g_options.editor)
 				break;
+
 			g_voxel_placement ^= true;
+            
+            if(g_voxel_placement)
+                hand->health = 0;
+            else
+                hand = entityCreate(g_surface.position,ENTITY_WEAPON);
 		} break;
 		case KEY_O:{
 			static Vec3 pre_settings_position;
 			if(in_settings){
 				voxelSet(&g_voxel,(Vec3){0,0,(1 << 4) - 1},4,VOXEL_AIR);
 				
-				g_position = pre_settings_position;
+				g_surface.position = pre_settings_position;
 
                 configSave();
 			}
 			else{
-				pre_settings_position = g_position;
+				pre_settings_position = g_surface.position;
                 
 				voxelSet(&g_voxel,(Vec3){0,0,(1 << 5) - 2},5,VOXEL_UNDESTRUCTIBLE);
 				voxelSet(&g_voxel,(Vec3){0,0,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
@@ -649,7 +651,7 @@ void keyPress(int key){
 				voxelSet(&g_voxel,(Vec3){2,0,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
 				voxelSet(&g_voxel,(Vec3){1,0,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
 
-				g_position = (Vec3){0xA0000,0xA0000,(1 << 25) - 0x80000};
+				g_surface.position = (Vec3){0xA0000,0xA0000,(1 << 25) - 0x80000};
 			}
 			in_settings ^= true;
 		} break;
@@ -685,8 +687,8 @@ static Vec2 voxelPosition2D(Voxel* voxel,Vec3 position,Vec3 dir,int side){
 
 bool blockOutlinePositionGet(Vec3* position){
 	int side;
-	Vec3 dir = getLookDirection(g_angle);
-	Voxel* voxel = treeRayTraceAndInit(g_position,dir,&side);
+	Vec3 dir = getLookDirection(g_surface.angle);
+	Voxel* voxel = treeRayTraceAndInit(g_surface.position,dir,&side);
 	if(!voxel)
 		return false;
 	Vec3 block_pos_i = (Vec3){voxel->position_x,voxel->position_y,voxel->position_z};
@@ -702,7 +704,7 @@ bool blockOutlinePositionGet(Vec3* position){
 	}
 	if(voxel->depth < g_edit_depth){
 		int depht_difference = g_edit_depth - voxel->depth;
-		Vec2 uv = voxelPosition2D(voxel,g_position,dir,side);
+		Vec2 uv = voxelPosition2D(voxel,g_surface.position,dir,side);
 		Vec2 axis = g_axis_table[side << 1];
 		uv.x *= 1 << depht_difference;
 		uv.y *= 1 << depht_difference;
@@ -738,8 +740,8 @@ void lButtonUp(void){
 	g_gui_clicked = false;
 	voxelGuiOnRelease(g_voxel_pointed.voxel,g_voxel_pointed.side);
 	if(g_spell_hold){
-		Entity* entity = entityCreate(g_position,ENTITY_PICKUP);
-		entity->velocity = vec3Shr(getLookDirection(g_angle),2);
+		Entity* entity = entityCreate(g_surface.position,ENTITY_PICKUP);
+		entity->velocity = vec3Shr(getLookDirection(g_surface.angle),2);
 		entity->pickup_type = g_spell_hold;
 		g_spell_hold = 0;
 	}
@@ -768,26 +770,26 @@ void lButtonDown(void){
 			return;
 		}
 		if(!g_attack_animation && !g_equipped_staff){
-			Vec3 direction = getLookDirection(g_angle);
+			Vec3 direction = getLookDirection(g_surface.angle);
 			int side;
-			Voxel* voxel = treeRayTraceAndInit(g_position,direction,&side);
+			Voxel* voxel = treeRayTraceAndInit(g_surface.position,direction,&side);
 			int distance;
 			if(voxel)
-				distance = treeRayTraceDistance(voxel,g_position,direction,side);
+				distance = treeRayTraceDistance(voxel,g_surface.position,direction,side);
 			else
 				distance = INT_MAX;
 
 			entityVoxelInsert();
-			Entity* entity = entityRayCollisionRecursive(&g_voxel,g_position,direction);
+			Entity* entity = entityRayCollisionRecursive(&g_voxel,g_surface.position,direction);
 			voxelEntityRemove();
-			if(entity && vec3Distance(g_position,entity->position) < FIXED_ONE * 6 && vec3Distance(g_position,entity->position) < distance){
+			if(entity && vec3Distance(g_surface.position,entity->position) < FIXED_ONE * 6 && vec3Distance(g_surface.position,entity->position) < distance){
 				entityHit(entity);
 			}
 			else if(distance < FIXED_ONE * 6){
-				Vec3 spawn_position = rayHitPosition(voxel,g_position,direction,side);
-				Vec3 color = rayLuminance(g_position,direction);
+				Vec3 spawn_position = rayHitPosition(voxel,g_surface.position,direction,side);
+				Vec3 color = rayLuminance(g_surface.position,direction);
 				for(int i = 0x10;i--;){
-					Entity* particle = entityCreate(vec3Mix(spawn_position,g_position,FIXED_ONE / 16),ENTITY_PARTICLE);
+					Entity* particle = entityCreate(vec3Mix(spawn_position,g_surface.position,FIXED_ONE / 16),ENTITY_PARTICLE);
 					particle->health = tRnd() % 0x80 + 0x80;
 					particle->size = FIXED_ONE / 16;
 					particle->velocity = vec3Shr(vec3Rnd(),4);
@@ -795,7 +797,7 @@ void lButtonDown(void){
 				}	
 				audioPlay(spawn_position,AUDIO_PUNCH_HIT);
 			}
-			audioPlay(g_position,AUDIO_PUNCH);
+			audioPlay(g_surface.position,AUDIO_PUNCH);
 			g_attack_animation = FIXED_ONE;
 		}
 		if(voxel){
@@ -916,8 +918,8 @@ void rButtonDown(void){
 		return;
 	}
 	int side;
-	Vec3 direction = getLookDirection(g_angle);
-	Voxel* voxel = treeRayTraceAndInit(g_position,direction,&side);
+	Vec3 direction = getLookDirection(g_surface.angle);
+	Voxel* voxel = treeRayTraceAndInit(g_surface.position,direction,&side);
 	if(!voxel)
 		return;
 	Vec3 block_pos_i = {voxel->position_x,voxel->position_y,voxel->position_z};
@@ -932,7 +934,7 @@ void rButtonDown(void){
 	int depht_difference = g_edit_depth - voxel_cpy.depth;
 	Vec3 octree_position = vec3Shl(block_pos_i,depht_difference);
 	Vec2 axis = g_axis_table[side << 1];
-	Vec2 uv = voxelGuiPositionGet(&voxel_cpy,g_position,direction,side);
+	Vec2 uv = voxelGuiPositionGet(&voxel_cpy,g_surface.position,direction,side);
     uv = uvMirror(uv,side << 1 | direction.a[side] < 0);
 	uv.x *= 1 << depht_difference;
 	uv.y *= 1 << depht_difference;
@@ -966,16 +968,18 @@ void mButtonDown(void){
 		g_voxel_template = 0;
 	}
 	int side;
-	Vec3 direction = getLookDirection(g_angle);
-	Voxel* voxel = treeRayTraceAndInit(g_position,direction,&side);
+	Vec3 direction = getLookDirection(g_surface.angle);
+	Voxel* voxel = treeRayTraceAndInit(g_surface.position,direction,&side);
 	if(!voxel)
 		return;
 	g_voxel_select = voxel->type;
 }
 
 void mouseMove(int delta_x,int delta_y){
-	g_angle.x += delta_x << 3;
-	g_angle.y += delta_y << 3;
+	g_surface.angle.x += delta_x << 3;
+	g_surface.angle.y += delta_y << 3;
+
+    g_surface.angle.y = tClamp(g_surface.angle.y,FIXED_ONE / 4,FIXED_ONE - FIXED_ONE / 4);
 }
 
 static int mandelbrot(int px,int py){
@@ -1025,8 +1029,8 @@ void boxQuadWireframeDraw(Vec3 position,Vec3 size,int color){
 }
 
 static void generateBlockOutline(Vec3 sub_block_pos,int sub_block_size){
-	Vec3 look_direction = getLookDirection(g_angle);
-	TraverseInit init = initTraverse(g_position);
+	Vec3 look_direction = getLookDirection(g_surface.angle);
+	TraverseInit init = initTraverse(g_surface.position);
 	int side;
 	Voxel* voxel = treeRayTrace(init.voxel,init.pos,look_direction,&side);
 
@@ -1036,7 +1040,7 @@ static void generateBlockOutline(Vec3 sub_block_pos,int sub_block_size){
 	if(!voxel)
 		return;
 
-	Vec2 uv = voxelGuiPositionGet(voxel,g_position,look_direction,side);
+	Vec2 uv = voxelGuiPositionGet(voxel,g_surface.position,look_direction,side);
 
 	g_voxel_pointed.uv = uv;
 
@@ -1147,11 +1151,15 @@ void mainInit(void){
     
     threadInit();
     openclInit();
-    
+
 	if(g_options.editor){
 		g_movement_fly = true;
 		g_voxel_placement = true;
 	}
+    
+    if(!g_voxel_placement)
+        hand = entityCreate(g_surface.position,ENTITY_WEAPON);
+
 	for(int i = 0;i < 5 * 6;i++){
 		int offset_x = i / 5 * 0x2800;
 		int offset_y = i % 5 * 0x2800;
@@ -1171,10 +1179,10 @@ void mainInit(void){
 
 static void setViewPlanes(void){
     Vec3 corner_angle[] = {
-		screenRayDirection(g_tri,-FIXED_ONE,-FIXED_ONE,g_options.fov.x,g_options.fov.y),
-		screenRayDirection(g_tri,FIXED_ONE,-FIXED_ONE,g_options.fov.x,g_options.fov.y),
-		screenRayDirection(g_tri,FIXED_ONE,FIXED_ONE,g_options.fov.x,g_options.fov.y),
-		screenRayDirection(g_tri,-FIXED_ONE,FIXED_ONE,g_options.fov.x,g_options.fov.y),
+		screenRayDirection(g_surface.rotation_matrix,-FIXED_ONE,-FIXED_ONE,g_options.fov.x,g_options.fov.y),
+		screenRayDirection(g_surface.rotation_matrix,FIXED_ONE,-FIXED_ONE,g_options.fov.x,g_options.fov.y),
+		screenRayDirection(g_surface.rotation_matrix,FIXED_ONE,FIXED_ONE,g_options.fov.x,g_options.fov.y),
+		screenRayDirection(g_surface.rotation_matrix,-FIXED_ONE,FIXED_ONE,g_options.fov.x,g_options.fov.y),
 	};
 	g_view_plane[0].normal = vec3Cross(corner_angle[0],corner_angle[1]);
 	g_view_plane[1].normal = vec3Cross(corner_angle[1],corner_angle[2]);
@@ -1232,25 +1240,16 @@ static void nextSpellDraw(void){
         
         int size_x = FIXED_ONE / 8 - thickness * 6;
         int size_y = FIXED_ONE / 8 - thickness * 6;
-#if 0
+
         gui2dFrameDraw(x,y,size_x,size_y,color,thickness,bottom_left);
         gui2dRectangleDraw(x + thickness,y + thickness,size_x - thickness * 2,size_y - thickness * 2,frame_color,bottom_left);
-#endif
-        int size = 0x300;
-        int fuse = 0x800;
-
-        gui2dEllipsesDraw(x,y,size * 4,size * 4,0x202020,bottom_left);
-        gui2dEllipsesDraw(x + size / 2,y + size / 2,size,size,0x606060,bottom_left);
-
-        gui2dRectangleDraw(x + size * 2 + size / 4,y - size / 8 - size / 2,size,size * 4,0x404040,bottom_left);
-        gui2dRectangleDraw(x + size * 2 + size / 4 + fuse / 2,y,fuse,size,0xEBB283,bottom_left);
-        gui2dRectangleDraw(x + size * 2 + size / 4 + fuse / 2 - size / 2,y,size,size,0xFF5010,bottom_left);
         
 		switch(spell_slot->spell_type){
 			case SPELL_BOLT:{
                 gui2dEllipsesDraw(x + 0x300,y + 0x300,0x0A00,0x0A00,0xFF0000,bottom_left);
 			} break;
 			case SPELL_BOMB:{
+                return;
 				int size = 0x300;
                 int fuse = 0x800;
 
@@ -1299,11 +1298,12 @@ static void nextSpellDraw(void){
 void frameRender(void){
     if(g_options.gl_wireframe)
 		surfaceClear(&g_surface);
-	g_tri[0] = tCos(g_angle.x);
-	g_tri[1] = tSin(g_angle.x);
-	g_tri[2] = tCos(g_angle.y);
-	g_tri[3] = tSin(g_angle.y);
 
+    g_surface.rotation_matrix[0] = tCos(g_surface.angle.x);
+    g_surface.rotation_matrix[1] = tSin(g_surface.angle.x);
+    g_surface.rotation_matrix[2] = tCos(g_surface.angle.y);
+    g_surface.rotation_matrix[3] = tSin(g_surface.angle.y);
+    
 	setViewPlanes();
 
 	lightingOctree();
@@ -1320,10 +1320,10 @@ void frameRender(void){
 
 		for(int k = 0;k < countof(g_axis_table);k++){
 			Vec3 coordinates[] = {
-				g_position,
-				g_position,
-				g_position,
-				g_position,
+				g_surface.position,
+				g_surface.position,
+				g_surface.position,
+				g_surface.position,
 			};
 
 		    coordinates[1].a[g_axis_table[k].x] += size * 2;
@@ -1348,7 +1348,7 @@ void frameRender(void){
 				continue;
             
 			for(int j = 0;j < countof(coordinates);j += 1){
-				color[j] = vec3Shl(skyboxSample(vec3Direction(g_position,coordinates[j])),4);
+				color[j] = vec3Shl(skyboxSample(vec3Direction(g_surface.position,coordinates[j])),4);
 				color[j] = vec3MulS(color[j],g_exposure);
 			}
             
@@ -1376,7 +1376,7 @@ void frameRender(void){
 
 	entityVoxelInsert();
 	
-	if(voxelPositionGet(g_position)->type == VOXEL_WATER){
+	if(voxelPositionGet(g_surface.position)->type == VOXEL_WATER){
 		static int c[512 * 512 * 2];
 		for(int i = 0;i < 512 * 512;i += 1){
 			int x = i / 512;
@@ -1387,9 +1387,9 @@ void frameRender(void){
 
 			int offset_x = tCos((g_tick << 8) + n_x) >> 6;
 			int offset_y = tCos((g_tick << 8) + n_x) >> 6;
-			Vec3 direction = screenRayDirection(g_tri,n_x + offset_x,n_y + offset_y,g_options.fov.x,g_options.fov.y);
+			Vec3 direction = screenRayDirection(g_surface.rotation_matrix,n_x + offset_x,n_y + offset_y,g_options.fov.x,g_options.fov.y);
 
-			Vec3 color = vec3Shl(rayLuminance(g_position,vec3Normalize(direction)),4);
+			Vec3 color = vec3Shl(rayLuminance(g_surface.position,vec3Normalize(direction)),4);
 
 			c[i] = colorToPixelColor(color);
 			drawRectangle(&g_surface,n_x,-n_y,FIXED_ONE / 64,FIXED_ONE / 64,color);
@@ -1406,7 +1406,7 @@ void frameRender(void){
     if(g_options.lighting_engine){
         int brightness_acc = 0;
 
-        TraverseInit init = initTraverse(g_position);
+        TraverseInit init = initTraverse(g_surface.position);
 
         int exposure_samle_row_size = 32;
 
@@ -1417,7 +1417,7 @@ void frameRender(void){
             int n_x = x * FIXED_ONE / (exposure_samle_row_size / 2) - FIXED_ONE;
             int n_y = y * FIXED_ONE / (exposure_samle_row_size / 2) - FIXED_ONE;
 
-            Vec3 luminance = rayLuminanceInit(init,g_position,screenRayDirection(g_tri,n_x,n_y,g_options.fov.x,g_options.fov.y));
+            Vec3 luminance = rayLuminanceInit(init,g_surface.position,screenRayDirection(g_surface.rotation_matrix,n_x,n_y,g_options.fov.x,g_options.fov.y));
 
             brightness_acc += tMax(luminance.x,tMax(luminance.y,luminance.z)) >> 4;
         }
@@ -1436,11 +1436,12 @@ void frameRender(void){
 			int n_x = x * FIXED_ONE / 32 - FIXED_ONE;
 			int n_y = y * FIXED_ONE / 32 - FIXED_ONE;
 
-			Vec3 color = vec3Shl(rayLuminance(g_position,screenRayDirection(g_tri,n_x,n_y,g_options.fov.x,g_options.fov.y)),4);
+			Vec3 color = vec3Shl(rayLuminance(g_surface.position,screenRayDirection(g_surface.rotation_matrix,n_x,n_y,g_options.fov.x,g_options.fov.y)),4);
 
 			drawRectangle(&g_surface,n_x / 4 - FIXED_ONE + FIXED_ONE / 4,n_y / 4 - FIXED_ONE + FIXED_ONE / 4,FIXED_ONE / 128,FIXED_ONE / 128,color);
 		}
     }
+    
 	if(g_options.editor){
 		for(Voxel* voxel = g_voxel_link_list;voxel;voxel = voxel->next_voxel_link){
             for(int i = 0;i < voxel->n_link;i++){
@@ -1505,9 +1506,10 @@ void frameRender(void){
 
         gui2dStringDraw(0x1100,0x1000,(String)STRING_LITERAL("boss"),0xE00,0x401010,0x1400,(Gui2dFlags){.middle_y = true});
     }
-    
-	drawLine(&g_surface,-0x200,0,0x200,0,pixelColorToColor(0x00FF00));
-	drawLine(&g_surface,0,-0x200,0,0x200,pixelColorToColor(0x00FF00));
+
+    //crosshair
+    gui2dRectangleDraw(-0x400,-0x80,0x800,0x100,0x00FF00,(Gui2dFlags){.middle_x = true,.middle_y = true});
+    gui2dRectangleDraw(-0x80,-0x400,0x100,0x800,0x00FF00,(Gui2dFlags){.middle_x = true,.middle_y = true});
     
     memoryArenaFree(&g_arena_frame);
 }

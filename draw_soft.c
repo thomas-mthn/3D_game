@@ -456,6 +456,7 @@ void drawColoredPolygon3dSoft(DrawSurface* surface,Vec3* coordinats,Vec3* color)
 }
 
 void drawTexturePolygonSoft(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3 color,int n_point){
+    return;
     if(n_point >= MAX_N_POINT)
         return;
     int pixel_color = colorToPixelColor(color);

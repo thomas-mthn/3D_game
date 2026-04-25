@@ -15,6 +15,28 @@ static int numberStringLength(int number){
     return length;
 }
 
+int stringToNumber(String string){
+    int number = 0;
+
+    if(string.size <= 0)
+        return number;
+    
+    bool negative = *string.data == '-'; 
+    if(negative)
+        string.data += 1;
+    
+    while(
+          *string.data >= '0' &&
+          *string.data <= '9' &&
+          string.size > 0
+    ){
+        number *= 10;
+        number += *string.data++ - '0';
+        string.size -= 1;
+    }
+    return negative ? -number : number;
+}
+
 bool stringCompareSizeInsensitive(String string,String compare){
     if(string.size < compare.size)
         return false;
@@ -89,7 +111,7 @@ String stringMake(char* cstring){
     return (String){.data = copy,.size = len};
 }
 
-String intToString(char* buffer,int number){
+String numberToString(char* buffer,int number){
 	int length = numberStringLength(number);
 	int length_copy;
 	bool negative = false;

@@ -87,11 +87,30 @@ int rayPlaneIntersection(Vec3 pos,Vec3 dir,Plane plane){
 	return -fixedDivR((vec3Dot(pos,plane.normal) + plane.distance),vec3Dot(dir,plane.normal));
 }
 
+int rayEllipsoidIntersection(Vec3 ray_position,Vec3 ray_direction,Vec3 sphere_position,Vec3 radius){
+    Vec3 oc = vec3Sub(sphere_position,ray_position);
+
+    Vec3 ocn = vec3Div(oc, radius);
+    Vec3 rdn = vec3Div(ray_direction,radius);
+
+    int a = vec3Dot(rdn,rdn);
+    int b = 2 * vec3Dot(ocn,rdn);
+    int c = vec3Dot(ocn,ocn) - FIXED_ONE;
+
+    int discriminant = fixedMulR(b,b) - 4 * fixedMulR(a,c);
+    if(discriminant < 0)
+        return -1;
+    else
+        return fixedDivR((-b - tSqrt(discriminant)), (2 * a));
+}
+
 int raySphereIntersection(Vec3 ray_position,Vec3 ray_direction,Vec3 sphere_position,int radius){
     Vec3 oc = vec3Sub(sphere_position,ray_position);
+
     int a = vec3Dot(ray_direction,ray_direction);
     int b = 2 * vec3Dot(oc,ray_direction);
     int c = vec3Dot(oc,oc) - fixedMulR(radius,radius);
+    
     int discriminant = fixedMulR(b,b) - 4 * fixedMulR(a,c);
     if(discriminant < 0)
         return -1;

@@ -127,6 +127,17 @@ long systemTimeGet(TimeSpec* timeval){
     return ret;
 }
 
+long systemNanoSleep(TimeSpec* requested,TimeSpec* remaining){
+    long ret;
+    asm volatile(
+        "syscall"
+        : "=a" (ret)
+        : "a"(0x23),"D"(requested),"S"(remaining)
+        : "rcx", "r11", "memory"
+    );
+    return ret;
+}
+
 void systemProcessExit(int exit_code){
     asm volatile(
         "syscall"
