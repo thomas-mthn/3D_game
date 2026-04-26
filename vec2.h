@@ -91,6 +91,10 @@ static Vec2 vec2Direction(Vec2 from,Vec2 to){
     return vec2Normalize(vec2Sub(to,from));
 }
 
+static Vec2 vec2Perpendicular(Vec2 v){
+    return (Vec2){-v.y,v.x};
+}
+
 static Vec2 vec2Rotate(Vec2 v,int theta){
 	Vec2 r;
 	r.x = fixedMulR(v.x,tCos(theta)) - fixedMulR(v.y,tSin(theta));

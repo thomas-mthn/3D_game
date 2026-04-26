@@ -159,6 +159,7 @@ structure(GameOptions){
     bool gl_wireframe;
     bool textures;
     bool rd_octree_wireframe;
+    bool rd_occlusion;
 };
 
 int* iconGenerate(void);

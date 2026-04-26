@@ -6,6 +6,7 @@
 #include "langext.h"
 #include "span.h"
 #include "opengl.h"
+#include "dda.h"
 
 #ifdef _MSC_VER
 #include "win32/w_draw_gdi.h"
@@ -42,6 +43,11 @@ static bool (*createSurface[])(DrawSurface*) = {
 };
 
 void surfaceInit(DrawSurface* surface){
+    int alloc_size = OCCLUSION_BUFFER_SIZE * OCCLUSION_BUFFER_SIZE / CHAR_BIT;
+    surface->occlusion_buffer = memoryArenaAllocate(&surface->fb_meta_arena,alloc_size);
+    surface->scanline_occlusion.begin = memoryArenaAllocate(&surface->fb_meta_arena,OCCLUSION_BUFFER_SIZE * sizeof(*surface->scanline.begin));
+    surface->scanline_occlusion.end = memoryArenaAllocate(&surface->fb_meta_arena,OCCLUSION_BUFFER_SIZE * sizeof(*surface->scanline.end));
+    
     surface->rotation_matrix[0] = tCos(surface->angle.x);
     surface->rotation_matrix[1] = tSin(surface->angle.x);
     surface->rotation_matrix[2] = tCos(surface->angle.y);
@@ -320,4 +326,221 @@ void drawNumber(DrawSurface* surface,int x,int y,int number,int scale){
     drawStringEx(surface,x,y,string,scale,pixelColorToColor(0xFFFFFF),0x2000);
 }
 
+void setScanline(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size){
+    if(pos_1.x > pos_2.x){
+        Vec2 tmp_pos = pos_1;
+        pos_1 = pos_2;
+        pos_2 = tmp_pos;
+    }
+    
+    int p_begin = pos_1.x;
+    int p_end = pos_2.x;
+    int delta = (pos_2.y - pos_1.y << FIXED_PRECISION) / (pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
+    int delta_pos = (pos_1.y << FIXED_PRECISION) + FIXED_ONE / 2;
 
+    if(p_end < 0)
+		return;
+    if(p_begin >= size)
+        return;
+	if(p_begin < 0){
+        delta_pos += delta * (-p_begin);
+		p_begin = 0;
+    }
+	if(p_end >= size){
+		p_end = size;
+	}
+
+    Ray2 ray = initRay2(vec2Shl(pos_1,FIXED_PRECISION),vec2Direction(vec2Shl(pos_1,FIXED_PRECISION),vec2Shl(pos_2,FIXED_PRECISION)));
+
+    while(p_begin < p_end){
+        scanline.begin[p_begin] = tMin(scanline.begin[p_begin],delta_pos >> FIXED_PRECISION);
+        scanline.end[p_begin] = tMax(scanline.end[p_begin],delta_pos >> FIXED_PRECISION);
+        delta_pos += delta;
+        p_begin += 1;
+    }
+}
+
+void setScanlineDDA(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size){
+    if(pos_1.x > pos_2.x){
+        Vec2 tmp_pos = pos_1;
+        pos_1 = pos_2;
+        pos_2 = tmp_pos;
+    }
+    
+    int p_begin = pos_1.x;
+    int p_end = pos_2.x;
+    int delta = (pos_2.y - pos_1.y << FIXED_PRECISION) / (pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
+    int delta_pos = (pos_1.y << FIXED_PRECISION);
+
+    if(p_end < 0)
+		return;
+    if(p_begin >= size)
+        return;
+	if(p_begin < 0){
+        delta_pos += delta * (-p_begin);
+		p_begin = 0;
+    }
+	if(p_end >= size){
+		p_end = size;
+	}
+
+    Ray2 ray = initRay2(vec2Shl(pos_1,FIXED_PRECISION),vec2Direction(vec2Shl(pos_1,FIXED_PRECISION),vec2Shl(pos_2,FIXED_PRECISION)));
+
+    for(int i = tAbs(pos_1.x - pos_2.x) + tAbs(pos_1.y - pos_2.y);i--;){
+        int x = tClamp(ray.square_pos.x,0,size);
+        int y = tClamp(ray.square_pos.y,0,size);
+        scanline.begin[x] = tMin(scanline.begin[x],y);
+        scanline.end[x] = tMax(scanline.end[x],y);
+        iterateRay2(&ray);
+    }
+}
+
+void occlusionBufferFill(DrawSurface* surface,Vec3* coordinats){
+    int offset = 0x2000;
+    Vec3 coordinats_copy[4];
+    for(int i = 4;i--;)
+        coordinats_copy[i] = pointToScreenRenderer(coordinats[i],surface->rotation_matrix,surface->position,g_options.fov);
+    if(coordinats_copy[0].z <= offset || coordinats_copy[1].z <= offset || coordinats_copy[2].z <= offset || coordinats_copy[3].z <= offset)
+        return;
+    Vec2 coords_2d[] = {
+        {fixedDivR(coordinats_copy[0].x,coordinats_copy[0].z),fixedDivR(-coordinats_copy[0].y,coordinats_copy[0].z)},
+        {fixedDivR(coordinats_copy[1].x,coordinats_copy[1].z),fixedDivR(-coordinats_copy[1].y,coordinats_copy[1].z)},
+        {fixedDivR(coordinats_copy[3].x,coordinats_copy[3].z),fixedDivR(-coordinats_copy[3].y,coordinats_copy[3].z)},
+        {fixedDivR(coordinats_copy[2].x,coordinats_copy[2].z),fixedDivR(-coordinats_copy[2].y,coordinats_copy[2].z)},
+    };
+
+    for(int i = 4;i--;){
+        coords_2d[i].x = tClamp(coords_2d[i].x,-FIXED_ONE * 0x10,FIXED_ONE * 0x10);
+        coords_2d[i].y = tClamp(coords_2d[i].y,-FIXED_ONE * 0x10,FIXED_ONE * 0x10);
+    }
+    
+    for(int i = 0;i < 4;i++){
+        coords_2d[i].x = transformDraw(OCCLUSION_BUFFER_SIZE,coords_2d[i].x);
+        coords_2d[i].y = transformDraw(OCCLUSION_BUFFER_SIZE,coords_2d[i].y);
+    }
+
+    int x_min = INT_MAX;
+    int x_max = INT_MIN;
+
+    for(int i = 0;i < 4;i++){
+        x_min = tMin(coords_2d[i].x,x_min);
+        x_max = tMax(coords_2d[i].x,x_max);
+    }
+
+    x_min = tMax(0,x_min);
+    x_max = tMin(OCCLUSION_BUFFER_SIZE,x_max);
+    
+    if(x_min >= OCCLUSION_BUFFER_SIZE || x_max < 0)
+        return;
+    
+    for(int i = x_min;i < x_max;i++){
+		surface->scanline_occlusion.begin[i] = INT16_MAX;
+		surface->scanline_occlusion.end[i] = INT16_MIN;
+	}
+
+    for(int i = 0;i < 4;i += 1){
+        Vec2 p1 = coords_2d[i];
+        Vec2 p2 = coords_2d[(i + 1) % 4];
+
+        setScanline(surface->scanline_occlusion,p1,p2,OCCLUSION_BUFFER_SIZE);
+    }
+    
+    int16 begin[OCCLUSION_BUFFER_SIZE];
+    int16 end[OCCLUSION_BUFFER_SIZE];
+    Scanline s = {.begin = begin,.end = end};
+    
+    for(int x = x_min + 1;x < x_max - 1;x++){
+        int n_trim = 0;
+        for(int y = surface->scanline_occlusion.begin[x];y < surface->scanline_occlusion.end[x];y++){
+            if(surface->scanline_occlusion.begin[x - 1] > y || surface->scanline_occlusion.begin[x + 1] > y)
+                n_trim += 1;
+            else
+                break;
+        }
+        n_trim = tMax(1,n_trim);
+        s.begin[x] = surface->scanline_occlusion.begin[x] + n_trim;
+
+        n_trim = 0;
+        for(int y = surface->scanline_occlusion.end[x];y >= surface->scanline_occlusion.begin[x];y--){
+            if(surface->scanline_occlusion.end[x - 1] < y || surface->scanline_occlusion.end[x + 1] < y)
+                n_trim += 1;
+            else
+                break;
+        }
+        n_trim = tMax(1,n_trim);
+        s.end[x] = surface->scanline_occlusion.end[x] - n_trim;
+    }
+    for(int x = x_min + 1;x < x_max - 1;x++){
+        surface->scanline_occlusion.begin[x] = s.begin[x];
+        surface->scanline_occlusion.end[x] = s.end[x];
+    }
+    
+    for(int x = x_min + 1;x < x_max - 1;x++){
+        surface->scanline_occlusion.begin[x] = tClamp(surface->scanline_occlusion.begin[x],0,OCCLUSION_BUFFER_SIZE - 1);
+        surface->scanline_occlusion.end[x] = tClamp(surface->scanline_occlusion.end[x],0,OCCLUSION_BUFFER_SIZE - 1);
+        int n_bit = sizeof(*surface->occlusion_buffer) * CHAR_BIT;
+        for(int y = surface->scanline_occlusion.begin[x];y < surface->scanline_occlusion.end[x];y++)
+            surface->occlusion_buffer[(x * OCCLUSION_BUFFER_SIZE + y) / n_bit] |= (size_t)1 << y % n_bit;
+    }
+}
+
+bool occlusionBufferHidden(DrawSurface* surface,Vec3* coordinats){
+    int offset = 0x2000;
+    Vec3 coordinats_copy[4];
+    for(int i = 4;i--;)
+        coordinats_copy[i] = pointToScreenRenderer(coordinats[i],surface->rotation_matrix,surface->position,g_options.fov);
+    if(coordinats_copy[0].z <= offset || coordinats_copy[1].z <= offset || coordinats_copy[2].z <= offset || coordinats_copy[3].z <= offset)
+        return false;
+    Vec2 coords_2d[] = {
+        {fixedDivR(coordinats_copy[0].x,coordinats_copy[0].z),fixedDivR(-coordinats_copy[0].y,coordinats_copy[0].z)},
+        {fixedDivR(coordinats_copy[1].x,coordinats_copy[1].z),fixedDivR(-coordinats_copy[1].y,coordinats_copy[1].z)},
+        {fixedDivR(coordinats_copy[3].x,coordinats_copy[3].z),fixedDivR(-coordinats_copy[3].y,coordinats_copy[3].z)},
+        {fixedDivR(coordinats_copy[2].x,coordinats_copy[2].z),fixedDivR(-coordinats_copy[2].y,coordinats_copy[2].z)},
+    };
+    
+    for(int i = 0;i < 4;i++){
+        coords_2d[i].x = transformDraw(OCCLUSION_BUFFER_SIZE,coords_2d[i].x);
+        coords_2d[i].y = transformDraw(OCCLUSION_BUFFER_SIZE,coords_2d[i].y);
+    }
+
+    int x_min = INT_MAX;
+    int x_max = INT_MIN;
+
+    for(int i = 0;i < 4;i++){
+        x_min = tMin(coords_2d[i].x,x_min);
+        x_max = tMax(coords_2d[i].x,x_max);
+    }
+
+    x_min = tMax(0,x_min);
+    x_max = tMin(OCCLUSION_BUFFER_SIZE,x_max);
+    
+    if(x_min >= OCCLUSION_BUFFER_SIZE || x_max < 0)
+        return false;
+    
+    for(int i = x_min;i < x_max;i++){
+		surface->scanline_occlusion.begin[i] = INT16_MAX;
+		surface->scanline_occlusion.end[i] = INT16_MIN;
+	}
+
+    for(int i = 0;i < 4;i += 1){
+        Vec2 p1 = coords_2d[i];
+        Vec2 p2 = coords_2d[(i + 1) % 4];
+
+        setScanlineDDA(surface->scanline_occlusion,p1,p2,OCCLUSION_BUFFER_SIZE);
+    }
+
+    bool checked = false;
+    
+    for(int x = x_min;x < x_max;x++){
+        surface->scanline_occlusion.begin[x] = tClamp(surface->scanline_occlusion.begin[x],0,OCCLUSION_BUFFER_SIZE - 1);
+        surface->scanline_occlusion.end[x] = tClamp(surface->scanline_occlusion.end[x],0,OCCLUSION_BUFFER_SIZE - 1);
+        int n_bit = sizeof(*surface->occlusion_buffer) * CHAR_BIT; 
+        for(int y = surface->scanline_occlusion.begin[x];y < surface->scanline_occlusion.end[x];y++){
+            checked = true;
+            if(!(surface->occlusion_buffer[(x * OCCLUSION_BUFFER_SIZE + y) / n_bit] >> y % n_bit & 1))
+                return false;
+            
+        }
+    }
+    return checked;
+}

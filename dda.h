@@ -4,6 +4,18 @@
 #include "vec3.h"
 #include "main.h"
 
+structure(Ray2){
+	Vec2 pos;
+	Vec2 dir;
+	Vec2 delta;
+	Vec2 side;
+
+	Vec2 step;
+	Vec2 square_pos;
+
+	int square_side;
+};
+
 structure(Ray3){
 	Vec3 pos;
 	Vec3 dir;
@@ -52,6 +64,21 @@ static void recalculateRay3(Ray3* ray){
 	ray->side.z = fixedMulR((ray->dir.z < 0 ? ray->side.z : FIXED_ONE - ray->side.z),ray->delta.z);
 
 	ray->square_pos = (Vec3){ray->pos.x >> FIXED_PRECISION,ray->pos.y >> FIXED_PRECISION,ray->pos.z >> FIXED_PRECISION};
+}
+
+Ray2 initRay2(Vec2 position,Vec2 direction);
+
+static void iterateRay2(Ray2* ray){
+	if(ray->side.x < ray->side.y){
+        ray->square_pos.x += ray->step.x;
+        ray->side.x += ray->delta.x;
+        ray->square_side = VEC3_X;
+        return;
+	}
+
+	ray->square_pos.y += ray->step.y;
+	ray->side.y += ray->delta.y;
+	ray->square_side = VEC3_Y;
 }
 
 #endif

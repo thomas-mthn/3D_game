@@ -115,7 +115,7 @@ void* g_opencl_lib;
 
 void openclInit(void){
 #ifdef _MSC_VER
-    opencl_dll = libraryLoad("OpenCL.dll");
+    g_opencl_lib  = libraryLoad("OpenCL.dll");
 #elif defined(__linux__)
     g_opencl_lib = libraryLoad("libOpenCL.so");
 #endif

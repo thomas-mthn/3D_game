@@ -1575,7 +1575,6 @@ bool createSurfaceGL(DrawSurface* surface){
 		}
 		modern_gl_loaded = true;
 	}
-
 #ifdef __linux__
     modern_gl = true;
     int context_attributes[] = {
@@ -1760,17 +1759,6 @@ void antiAliasingSetGL(int amount){
 
 void destroySurfaceGL(DrawSurface* surface){
 	contextGlExit();
-    /*
-	PixelFormatDescriptor pfd = {
-		.size = sizeof(PixelFormatDescriptor),
-		.version = 1,
-		.flags = PFD_DRAW_TO_WINDOW,
-		.color_bits = 32,
-		.depth_bits = 0,
-		.layer_type = PFD_MAIN_PLANE,
-	};
-	SetPixelFormat(surface->window_context,ChoosePixelFormat(surface->window_context,&pfd),&pfd);
-    */
 }
 
 void blitSurfaceGL(DrawSurface* surface){
@@ -1780,10 +1768,6 @@ void blitSurfaceGL(DrawSurface* surface){
 #elif defined(_MSC_VER)
 	SwapBuffers(surface->window_context);
 #endif
-	/*
-	float sky_brightness = (float)fixedMulR(FIXED_ONE / 2,g_exposure) / FIXED_ONE;
-	glClearColor(sky_brightness,sky_brightness,sky_brightness,1.0f);
-	*/
 }
 
 void surfaceClearGL(DrawSurface* surface){

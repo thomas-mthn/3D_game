@@ -13,6 +13,7 @@ void createWindow(void);
 FileContent win32OctreeDeserialize(char* path);
 void win32OctreeSerialize(Voxel* root_voxel);
 Voxel* win32LoadModel(char* path);
+FileContent win32FileRead(char* file_name);
 Texture win32LoadImage(char* path);
 void win32SaveConfig(void);
 void win32Print(String string);

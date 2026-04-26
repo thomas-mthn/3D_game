@@ -51,13 +51,14 @@ GameOptions g_options = {
     .multi_sample = 0,
     .multi_thread = true,
 	.editor = true,
-	.fast_startup = false,
+	.fast_startup = true,
     .lighting_engine = false,
 	.fov = {FIXED_ONE / 2,FIXED_ONE / 3},
 	.render_backend = RENDER_BACKEND_GL,
     .gl_wireframe = false,
     .textures = true,
     .smooth_lighting = true,
+    .rd_occlusion = true,
 };
 
 bool g_movement_fly;
@@ -1088,7 +1089,7 @@ FileContent fileRead(char* path){
 #ifdef __linux__
     return linuxFileRead(path);
 #else
-    return (FileContent){0};
+    return win32FileRead(path);
 #endif
 }
 
@@ -1120,6 +1121,9 @@ bool worldExist(String name){
 
 bool worldLoad(String name){
     FileContent file = fileRead(worldNameToPath(name).data);
+
+	if(!file.content)
+		return false;
 
     struct{
         int32 size;
@@ -1392,11 +1396,12 @@ void frameRender(void){
 			Vec3 color = vec3Shl(rayLuminance(g_surface.position,vec3Normalize(direction)),4);
 
 			c[i] = colorToPixelColor(color);
-			drawRectangle(&g_surface,n_x,-n_y,FIXED_ONE / 64,FIXED_ONE / 64,color);
+			drawRectangle(&g_surface,n_x,n_y,FIXED_ONE / 64,FIXED_ONE / 64,color);
 		}
 	}
 	else{
 		octreeDraw(&g_voxel);
+        octreeDrawList();
         if(g_surface.backend == RENDER_BACKEND_SOFTWARE)
             spanDrawList(&g_surface);
 	}
@@ -1427,7 +1432,6 @@ void frameRender(void){
             g_exposure = tMix(g_exposure,FIXED_ONE,FIXED_ONE / 0x40);
         }
     }
-    
 	if(g_luminance_overlay){
 		for(int i = 0;i < 64 * 64;i++){
 			int x = i / 64;
@@ -1441,7 +1445,21 @@ void frameRender(void){
 			drawRectangle(&g_surface,n_x / 4 - FIXED_ONE + FIXED_ONE / 4,n_y / 4 - FIXED_ONE + FIXED_ONE / 4,FIXED_ONE / 128,FIXED_ONE / 128,color);
 		}
     }
-    
+    if(g_options.rd_occlusion){    
+        for(int i = 0;i < OCCLUSION_BUFFER_SIZE * OCCLUSION_BUFFER_SIZE;i++){
+			int x = i / OCCLUSION_BUFFER_SIZE;
+			int y = i % OCCLUSION_BUFFER_SIZE;
+
+			int n_x = x * FIXED_ONE / (OCCLUSION_BUFFER_SIZE / 2);
+			int n_y = y * FIXED_ONE / (OCCLUSION_BUFFER_SIZE / 2);
+
+            int n_bit = sizeof(*g_surface.occlusion_buffer) * CHAR_BIT;
+            
+			Vec3 color = g_surface.occlusion_buffer[i / n_bit] >> i % n_bit & 1 ? COLOR_WHITE : (Vec3){0};
+
+			drawRectangle(&g_surface,n_x / 4 - FIXED_ONE,-n_y / 4 + FIXED_ONE,FIXED_ONE / (OCCLUSION_BUFFER_SIZE * 2),FIXED_ONE / (OCCLUSION_BUFFER_SIZE * 2),color);
+		}
+    }
 	if(g_options.editor){
 		for(Voxel* voxel = g_voxel_link_list;voxel;voxel = voxel->next_voxel_link){
             for(int i = 0;i < voxel->n_link;i++){
@@ -1506,7 +1524,9 @@ void frameRender(void){
 
         gui2dStringDraw(0x1100,0x1000,(String)STRING_LITERAL("boss"),0xE00,0x401010,0x1400,(Gui2dFlags){.middle_y = true});
     }
-
+    
+    tMemset(g_surface.occlusion_buffer,0,OCCLUSION_BUFFER_SIZE * OCCLUSION_BUFFER_SIZE / CHAR_BIT);
+    
     //crosshair
     gui2dRectangleDraw(-0x400,-0x80,0x800,0x100,0x00FF00,(Gui2dFlags){.middle_x = true,.middle_y = true});
     gui2dRectangleDraw(-0x80,-0x400,0x100,0x800,0x00FF00,(Gui2dFlags){.middle_x = true,.middle_y = true});

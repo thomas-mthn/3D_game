@@ -44,7 +44,7 @@ static Vec2 getCursorPosition(void){
 static unsigned getTick(void){
     unsigned count[2];
     QueryPerformanceCounter(count);
-    count[0] /= (frequency / N_TICK_SECOND);
+    count[0] /= (frequency / N_TICK_BASE / N_TICK_MODIFIER);
     return count[0];
 }
 
@@ -103,6 +103,19 @@ Voxel* win32LoadModel(char* path){
 	Voxel* result = octreeDeserializeRecursive(voxel_diskdata,0,0,0,(Vec3){0,0,0},0,0);
 	return result;
 }
+
+FileContent win32FileRead(char* file_name){
+    int file = CreateFileA(file_name,GENERIC_READ,0,0,OPEN_EXISTING,0,0);
+
+	if(file < 0)
+		return (FileContent){0};
+    
+	unsigned file_size = GetFileSize(file,0);
+	char* content = virtualAllocate(file_size);
+    
+	return (FileContent){.content = content,.size = file_size};
+}
+
 
 static Lresult stdcall windowMessageHandler(void* window,unsigned msg,Wparam wparam,Lparam lparam){
     switch(msg){
@@ -178,7 +191,7 @@ static Lresult stdcall windowMessageHandler(void* window,unsigned msg,Wparam wpa
     return DefWindowProcA(window,msg,wparam,lparam);
 }
 
-static void* iconGenerate(void){
+static void* iconGenerate2(void){
     DrawSurface surface = {
 		.height = ICON_SIZE,
 		.width = ICON_SIZE,
@@ -335,7 +348,7 @@ void win32SaveConfig(void){
 
 int main(void){
 	windowclass = (WndClassA){
-		.window_icon = iconGenerate(),
+		.window_icon = 0,
 		.wnd_proc    = windowMessageHandler,
 		.class_name  = WINDOW_CLASS_NAME
 	};
@@ -355,7 +368,6 @@ int main(void){
 		CloseHandle(config_file);
 	}
 
-	initOpenCL();
 	mainInit();
 
 	g_hand_model = win32LoadModel("model/hand.octvxl");
@@ -395,9 +407,13 @@ int main(void){
 		unsigned time_post[2];
 		QueryPerformanceCounter(time_pre);
 
-        for(int i = n_tick;i--;)
+        for(int i = n_tick / (FIXED_ONE * N_TICK_MODIFIER);i--;){
+            g_delta = FIXED_ONE * N_TICK_MODIFIER;
             tickRun();
-
+        }
+        
+        g_delta = n_tick % FIXED_ONE * N_TICK_MODIFIER;
+        tickRun();
         prev_tick = tick;
 
 		frameRender();

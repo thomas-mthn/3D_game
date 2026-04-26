@@ -41,39 +41,6 @@ structure(ClipContainer){
     Clip clip[0x100];
 };
 
-static void setScanline(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size){
-	int p_begin,p_end;
-	int delta,delta_pos;
-	if(pos_1.x > pos_2.x){
-		p_begin = pos_1.x;
-		p_end = pos_2.x;
-		delta = (pos_2.y - pos_1.y << FIXED_PRECISION) / (pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
-		delta_pos = (pos_1.y << FIXED_PRECISION);
-	}
-	else{
-		p_begin = pos_2.x;
-		p_end = pos_1.x;
-		delta = (pos_1.y - pos_2.y << FIXED_PRECISION) / (pos_1.x - pos_2.x ? pos_1.x - pos_2.x : 1);
-		delta_pos = (pos_2.y << FIXED_PRECISION);
-	}
-	if(p_begin < 0)
-		return;
-    if(p_end >= size)
-        return;
-	if(p_end < 0)
-		p_end = 0;
-	if(p_begin >= size){
-		delta_pos -= delta * (p_begin - size);
-		p_begin = size;
-	}
-	while(p_begin-- > p_end){
-		scanline.begin[p_begin] = tMin(scanline.begin[p_begin],delta_pos >> FIXED_PRECISION);
-		scanline.end[p_begin] = tMax(scanline.end[p_begin],delta_pos >> FIXED_PRECISION);
-        int v = delta_pos >> FIXED_PRECISION;
-		delta_pos -= delta;
-	}
-}
-
 int perspective_lerp(int z1,int z2,int t){
     int inv_z1 = fixedDivR(FIXED_ONE << 8,z1) >> 8;
     int inv_z2 = fixedDivR(FIXED_ONE << 8,z2) >> 8;

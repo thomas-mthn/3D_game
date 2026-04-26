@@ -160,7 +160,8 @@ void consoleVoxelDraw(Voxel* voxel,int side){
 #define COMMAND_LIST                                                  \
     X(QUIT) X(MULTITHREAD) X(LIGHTING_ENGINE) X(RENDERBACKEND)\
         X(SMOOTH_LIGHTING) X(GL_WIREFRAME) X(SPELL) X(LOAD) X(SAVE) X(CREATE) \
-        X(FAST_STARTUP) X(TEXTURES) X(DBG_INT1) X(DBG_INT2) X(OCTREE_WIREFRAME)
+        X(FAST_STARTUP) X(TEXTURES) X(DBG_INT1) X(DBG_INT2) X(OCTREE_WIREFRAME) \
+        X(RD_OCCLUSION)
 
 void consoleInput(char key){
     if(!key)
@@ -189,6 +190,9 @@ void consoleInput(char key){
         if(!stringCompareSizeInsensitive(command,commands[i]))
             continue;
         switch(i){
+            case COMMAND_RD_OCCLUSION:{
+                changeBooleanSetting(&g_options.rd_occlusion);
+            } break;
             case COMMAND_DBG_INT1:{
                 String number = stringForwardSlice(command,commands[i].size + 1);
                 g_debug_int1 = stringToNumber(number);

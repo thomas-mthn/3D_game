@@ -4,6 +4,7 @@
 #include "font.h"
 #include "octree.h"
 #include "span.h"
+#include "octree_render.h"
 
 Vec2 uvMirror(Vec2 uv,int side){
     int mirror = (int[]){
@@ -76,7 +77,14 @@ void drawGuiChar(Voxel* voxel,int side,Vec2 uv,char string_char,int scale,int th
             quad[j].a[axis.x] = quad2d[j].x;
             quad[j].a[axis.y] = quad2d[j].y;
         }
+        PolygonToDraw* polygon = polygonToDrawAdd();
+        for(int i = countof(quad);i--;)
+            polygon->position[i] = quad[i];
+        polygon->luminance = pixelColorToColor(0xFFFFFF);
+        polygon->texture = 0;
+#if 0
         drawPolygon3d(&g_surface,quad,vec3MulS(pixelColorToColor(0xFFFFFF),g_exposure));
+#endif
     }
 }
 
@@ -127,7 +135,14 @@ void drawGuiRectangle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,in
 	points[3].a[axis.x] += size.x * mirror;
 	points[3].a[axis.y] += size.y;
 
+    PolygonToDraw* polygon = polygonToDrawAdd();
+    for(int i = countof(points);i--;)
+        polygon->position[i] = points[i];
+    polygon->luminance = pixelColorToColor(color);
+    polygon->texture = 0;
+#if 0
     drawPolygon3d(&g_surface,points,pixelColorToColor(color));
+#endif
 }
 
 void drawGuiFrame(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,int thickness,int side){
@@ -140,18 +155,18 @@ void drawGuiFrame(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,int co
 static void drawGuiImage(Voxel* voxel,Texture* image,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size){
 	int voxel_size = depthToSize(voxel->depth);
 	Vec3 position = block_pos;
-	((int*)&position)[axis.x] += fixedMulR(voxel_size,uv.x);
-	((int*)&position)[axis.y] += fixedMulR(voxel_size,uv.y);
+    position.a[axis.x] += fixedMulR(voxel_size,uv.x);
+	position.a[axis.y] += fixedMulR(voxel_size,uv.y);
 	Vec3 points[] = {
 		position,
 		position,
 		position,
 		position
 	};
-	((int*)&points[1])[axis.y] += fixedMulR(voxel_size,size.y);
-	((int*)&points[2])[axis.x] += fixedMulR(voxel_size,size.x);
-	((int*)&points[3])[axis.x] += fixedMulR(voxel_size,size.x);
-	((int*)&points[3])[axis.y] += fixedMulR(voxel_size,size.y);
+	points[1].a[axis.y] += fixedMulR(voxel_size,size.y);
+	points[2].a[axis.x] += fixedMulR(voxel_size,size.x);
+	points[3].a[axis.x] += fixedMulR(voxel_size,size.x);
+	points[3].a[axis.y] += fixedMulR(voxel_size,size.y);
 
 	points[0] = pointToScreen(points[0]);
 	points[1] = pointToScreen(points[1]);
@@ -169,25 +184,26 @@ static void drawGuiImage(Voxel* voxel,Texture* image,Vec2 axis,Vec3 block_pos,Ve
 	drawTexturePolygon(&g_surface,image,g_texture_coordinates_fill,d_point,vec3MulS(vec3Single(FIXED_ONE << 4),g_exposure),4);
 }
 
-void drawGuiCircle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,int radius,int color){
+void drawGuiCircle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,int radius,int color,int side){
+    uv = uvMirror(uv,side);
 	int voxel_size = depthToSize(voxel->depth);
 	Vec3 position = block_pos;
-	((int*)&position)[axis.x] += fixedMulR(voxel_size,uv.x);
-	((int*)&position)[axis.y] += fixedMulR(voxel_size,uv.y);
+	position.a[axis.x] += fixedMulR(voxel_size,uv.x);
+	position.a[axis.y] += fixedMulR(voxel_size,uv.y);
 	Vec3 points[] = {
 		position,
 		position,
 		position,
 		position
 	};
-	((int*)&points[0])[axis.x] += fixedMulR(voxel_size,-radius);
-	((int*)&points[0])[axis.y] += fixedMulR(voxel_size,-radius);
-	((int*)&points[1])[axis.x] += fixedMulR(voxel_size,-radius);
-	((int*)&points[1])[axis.y] += fixedMulR(voxel_size,radius);
-	((int*)&points[2])[axis.x] += fixedMulR(voxel_size,radius);
-	((int*)&points[2])[axis.y] += fixedMulR(voxel_size,radius);
-	((int*)&points[3])[axis.x] += fixedMulR(voxel_size,radius);
-	((int*)&points[3])[axis.y] += fixedMulR(voxel_size,-radius);
+	points[0].a[axis.x] += fixedMulR(voxel_size,-radius);
+	points[0].a[axis.y] += fixedMulR(voxel_size,-radius);
+	points[1].a[axis.x] += fixedMulR(voxel_size,-radius);
+    points[1].a[axis.y] += fixedMulR(voxel_size,radius);
+	points[2].a[axis.x] += fixedMulR(voxel_size,radius);
+	points[2].a[axis.y] += fixedMulR(voxel_size,radius);
+	points[3].a[axis.x] += fixedMulR(voxel_size,radius);
+	points[3].a[axis.y] += fixedMulR(voxel_size,-radius);
 
 	points[0] = pointToScreenRenderer(points[0],g_surface.rotation_matrix,g_surface.position,g_options.fov);
 	points[1] = pointToScreenRenderer(points[1],g_surface.rotation_matrix,g_surface.position,g_options.fov);
@@ -238,13 +254,13 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 					continue;
 				switch(element->inventory_slot.slot->spell_type){
 					case SPELL_BOLT:{
-						drawGuiCircle(voxel,g_axis_table[side],block_pos,spell_uv,0xA00,0xFF0000);
+						drawGuiCircle(voxel,g_axis_table[side],block_pos,spell_uv,0xA00,0xFF0000,side);
 					} break;
 					case SPELL_BOMB:{
-						drawGuiCircle(voxel,g_axis_table[side],block_pos,spell_uv,0xA00,0x0000FF);
+						drawGuiCircle(voxel,g_axis_table[side],block_pos,spell_uv,0xA00,0x0000FF,side);
 					} break;
 					case SPELL_ORB:{
-						drawGuiCircle(voxel,g_axis_table[side],block_pos,spell_uv,0xA00,0x00FF00);
+						drawGuiCircle(voxel,g_axis_table[side],block_pos,spell_uv,0xA00,0x00FF00,side);
 					} break;
 					case SPELL_ADJ_SPEED:{
 						Vec2 string_uv = vec2Add(spell_uv,(Vec2){-0x600,0x400});
@@ -259,7 +275,7 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 						drawGuiString(voxel,side,string_uv,(String)STRING_LITERAL("x2"),0x800,0x300);
 					} break;
 					default:{
-						drawGuiCircle(voxel,g_axis_table[side],block_pos,spell_uv,0xA00,0xFF00FF);
+						drawGuiCircle(voxel,g_axis_table[side],block_pos,spell_uv,0xA00,0xFF00FF,side);
 					} break;
 				}
 			} break;

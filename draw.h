@@ -40,14 +40,18 @@ structure(ScanlineZ){
     int end;
 };
 
+#define OCCLUSION_BUFFER_SIZE 0x80
+
 structure(DrawSurface){
-	int* data;
+    RenderBackend backend;
+    
 	int width;
 	int height;
-	RenderBackend backend;
-
 	int window_width;
 	int window_height;
+
+    size_t* occlusion_buffer;
+    Scanline scanline_occlusion;
 
     //camera
     Vec2 angle;
@@ -65,7 +69,8 @@ structure(DrawSurface){
     void* display;
     int screen;
 
-    //scanline buffers, for the software renderer
+    //software
+    int* data;
 	Scanline scanline;
 	ScanlineColor* scanline_color;
 	ScanlineTexture scanline_texture;
@@ -79,6 +84,10 @@ structure(DrawSurface){
 };
 
 structure(LightmapTree);
+
+void occlusionBufferFill(DrawSurface* surface,Vec3* coordinats);
+bool occlusionBufferHidden(DrawSurface* surface,Vec3* coordinats);
+void setScanline(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size);
     
 void surfaceInit(DrawSurface* surface);
 void surfaceDestroy(DrawSurface* surface);

@@ -5,7 +5,7 @@
 
 structure(Staff);
 
-typedef enum{
+enumeration(SpellType){
 	SPELL_BOLT,
 	SPELL_ORB,
 	SPELL_BOMB,
@@ -13,7 +13,7 @@ typedef enum{
 	SPELL_ADJ_SPEED,
 	SPELL_ADJ_DOUBLER,
 	SPELL_ECOUNT,
-} SpellType;
+};
 
 structure(InventorySlot){
 	enum{

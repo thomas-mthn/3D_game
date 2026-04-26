@@ -33,10 +33,7 @@ static int surfaceAngle(Vec3 position,Vec3 normal){
 	int angle = tAbs(dot) / 2 + FIXED_ONE / 2;
 	angle = fixedDivR(FIXED_ONE,angle);
 
-	if(g_test_bool)
-		return tSqrt(angle);
-	else
-		return angle;
+    return angle;
 }
 
 static int mipmapGet(Vec3 position,Vec3 normal,int distance,int angle){

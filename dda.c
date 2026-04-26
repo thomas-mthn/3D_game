@@ -26,3 +26,26 @@ Ray3 initRay3(Vec3 position,Vec3 direction){
 
 	return ray;
 }
+
+Ray2 initRay2(Vec2 position,Vec2 direction){
+	Ray2 ray;
+	ray.pos = position;
+	ray.dir = direction;
+	ray.square_side = 0;
+	ray.delta = (Vec2){	
+		fixedDivR(FIXED_ONE,tAbs(direction.x)),
+		fixedDivR(FIXED_ONE,tAbs(direction.y)),
+	};
+	ray.step.x = direction.x < 0 ? -1 : 1;
+	ray.step.y = direction.y < 0 ? -1 : 1;
+
+	Vec2 fract_pos = {fixedFract(position.x),fixedFract(position.y)};
+
+	ray.side.x = fixedMulR((direction.x < 0 ? fract_pos.x : FIXED_ONE - fract_pos.x),ray.delta.x);
+	ray.side.y = fixedMulR((direction.y < 0 ? fract_pos.y : FIXED_ONE - fract_pos.y),ray.delta.y);
+
+	ray.square_pos.x = position.x >> FIXED_PRECISION;
+	ray.square_pos.y = position.y >> FIXED_PRECISION;
+
+	return ray;
+}
