@@ -7,7 +7,7 @@
 static struct{
 	Vec3 position;
 	Vec2 direction;
-} g_holdable;
+} g_holdable = {.position = {FIXED_ONE + FIXED_ONE / 4,-FIXED_ONE * 2 - FIXED_ONE / 2,FIXED_ONE}};
 
 Voxel* g_hand_model;
 
@@ -188,28 +188,7 @@ static void drawBlockSelect(Vec3 octree_position,Vec3* luminance,int block_size,
 	}
 }
 
-static int punchAnimationOffset(void){
-	int value = fixedMulR(fixedMulR(g_attack_animation,g_attack_animation),g_attack_animation);
-	return tCos(tAbs(FIXED_ONE / 2 - value)) + FIXED_ONE;
-}
-
 static Texture equib_texture;
-
-static Vec3 sampleFibonacciSphere(int i,int n){
-    int golden_angle = 157286;
-
-    int z = FIXED_ONE - ((i * 2 + 1) * FIXED_ONE) / n;
-
-    int zz = fixedMulR(z,z);
-    int r = tSqrt(FIXED_ONE - zz);
-
-    int phi = fixedFract(i * golden_angle);
-
-    int x = fixedMulR(r,tCos(phi));
-    int y = fixedMulR(r,tSin(phi));
-
-    return (Vec3){x,y,z};
-}
 
 static void voxelTemplateDraw(intptr_t base,VoxelSerialized* voxel,Vec3 position,int depth){
     if(voxel->type == VOXEL_PARENT){
@@ -230,15 +209,6 @@ void genBlockSelect(void){
 		return;
     }
 	g_holdable.direction = vec2Add(vec2MulS(g_holdable.direction,FIXED_ONE / 2),vec2MulS(g_surface.angle,FIXED_ONE / 2));
-
-	for(int i = 0;i < 16;i++)
-		g_holdable.position = vec3Mix(g_holdable.position,vec3Add(g_surface.position,getLookDirection(g_surface.angle)),FIXED_ONE >> 4);
-
-	do 
-		g_holdable.position = vec3Mix(g_holdable.position,vec3Add(g_surface.position,getLookDirection(g_surface.angle)),FIXED_ONE >> 4);
-	while(vec3Distance(g_holdable.position,vec3Add(g_surface.position,getLookDirection(g_surface.angle))) > FIXED_ONE);
-	
-	g_holdable.position = (Vec3){FIXED_ONE,-FIXED_ONE,FIXED_ONE};
 
 	static Vec3 luminance[3] = {
         {FIXED_ONE << 4,FIXED_ONE << 4,FIXED_ONE << 4},
@@ -269,10 +239,9 @@ void genBlockSelect(void){
         luminance[j] = vec3MulS(luminance[j],FIXED_ONE - (FIXED_ONE >> 4));
 	}
 #endif
-	int ani = punchAnimationOffset();
 
 	if(g_voxel_placement){
 		Vec3 position = {FIXED_ONE * 2 + FIXED_ONE / 2,FIXED_ONE + FIXED_ONE / 2,FIXED_ONE * 2 + FIXED_ONE / 2};
-		drawBlockSelect((Vec3){0},luminance,FIXED_ONE,g_voxel_select);
+		drawBlockSelect((Vec3){0},luminance,FIXED_ONE,g_player.voxel_select);
 	}
 }

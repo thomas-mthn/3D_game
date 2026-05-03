@@ -11,7 +11,7 @@ structure(Voxel);
 void showCursor(bool show);
 void createWindow(void);
 FileContent win32OctreeDeserialize(char* path);
-void win32OctreeSerialize(Voxel* root_voxel);
+void win32OctreeSerialize(Voxel* root_voxel,char* path);
 Voxel* win32LoadModel(char* path);
 FileContent win32FileRead(char* file_name);
 Texture win32LoadImage(char* path);

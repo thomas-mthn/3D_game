@@ -51,6 +51,7 @@ structure(DrawSurface){
 	int window_height;
 
     size_t* occlusion_buffer;
+    size_t* occlusion_debug;
     Scanline scanline_occlusion;
 
     //camera
@@ -97,6 +98,7 @@ void surfaceChangeBackend(DrawSurface* surface,RenderBackend backend);
 void surfaceBlit(DrawSurface* surface);
 
 void drawLine(DrawSurface* surface,int x1,int y1,int x2,int y2,Vec3 color);
+void drawLine3d(DrawSurface* surface,Vec3 position_1,Vec3 position_2,int color);
 void drawSegment(DrawSurface* surface,int x1,int y1,int x2,int y2,int thickness,Vec3 color);
 void drawSegment3d(DrawSurface* surface,Vec3* coordinats,int thickness,Vec3 color);
 void drawPolygon(DrawSurface* surface,Vec2* coordinats,int n_point,Vec3 color);
@@ -106,7 +108,7 @@ void drawColoredPolygon3d(DrawSurface* surface,Vec3* coordinats,Vec3* color,Ligh
 void drawTexturePolygon(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3 color,int n_point);
 void drawTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point);
 void drawColoredTexturePolygon(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3* color,int n_point);
-void drawColoredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap);
+void drawColoredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap,int n_vertex);
 void drawSkyboxPolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap);
 void drawCircle(DrawSurface* surface,int x,int y,int radius,Vec3 color);
 void drawEllipses(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color);

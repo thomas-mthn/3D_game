@@ -2,7 +2,7 @@
 #define DDA_H
 
 #include "vec3.h"
-#include "main.h"
+#include "vec2.h"
 
 structure(Ray2){
 	Vec2 pos;
@@ -29,6 +29,7 @@ structure(Ray3){
 };
 
 Ray3 initRay3(Vec3 position,Vec3 direction);
+Ray2 initRay2(Vec2 position,Vec2 direction);
 
 static void iterateRay3(Ray3* ray){
 	if(ray->side.x < ray->side.y){
@@ -65,8 +66,6 @@ static void recalculateRay3(Ray3* ray){
 
 	ray->square_pos = (Vec3){ray->pos.x >> FIXED_PRECISION,ray->pos.y >> FIXED_PRECISION,ray->pos.z >> FIXED_PRECISION};
 }
-
-Ray2 initRay2(Vec2 position,Vec2 direction);
 
 static void iterateRay2(Ray2* ray){
 	if(ray->side.x < ray->side.y){

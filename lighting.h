@@ -41,11 +41,12 @@ static int mipmapGet(Vec3 position,Vec3 normal,int distance,int angle){
 	return bitScanReverse(angle_distance);
 }
 
+Vec3 luxelVoxelGet2(Vec3 position,int mipmap);
 Vec3 luxelVoxelGet(Vec3 position,int mipmap,Vec2 axis);
 Vec3 skyboxSample(Vec3 direction);
 Vec3 rayLuminance(Vec3 position,Vec3 direction);
 Vec3 rayLuminanceInit(TraverseInit init,Vec3 position,Vec3 direction);
-Vec3 luminanceQuery(Voxel* voxel,Vec3 normal,Vec3 position);
+Vec3 luminanceQuery(Voxel* voxel,Vec3 normal,Vec3 position,int n_sample);
 Vec3 squarePointClosestPosition(Vec3 square_pos,int square_size,Vec3 normal);
 
 void lightingOctree(void);
@@ -54,6 +55,8 @@ Vec3 rayLuminanceTrace(Vec3 position,Vec3 direction);
 Luxel* luxelDynamicGet(unsigned hash);
 
 void lightmapTreeGenerate(LightmapTree* node,Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,int depth,int surface_angle,Vec2 size);
+
+void lightingEntityDynamic(Voxel* voxel,Entity* entity);
 
 extern Luxel g_luxel_cache[];
 

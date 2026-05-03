@@ -1,6 +1,7 @@
 #include <X11/X.h>
 #include <X11/Xutil.h>
 #include <dlfcn.h>
+#include <pthread.h>
 
 #include "../langext.h"
 #include "../draw.h"
@@ -8,6 +9,8 @@
 #include "../main.h"
 #include "../gui2d.h"
 #include "../console.h"
+#include "../audio.h"
+#include "../thread.h"
 
 #include "l_main.h"
 #include "l_syscall.h"
@@ -168,7 +171,7 @@ static unsigned getTick(void){
 
     uint64 ns = (uint64)ts.seconds * 1000000000ULL + ts.nano_seconds;
 
-    return ns / (15259ULL / (N_TICK_BASE / N_TICK_MODIFIER));
+    return ns / 1000;
 }
 
 void linuxPrint(String string){
@@ -231,6 +234,15 @@ void linuxWindowInit(void){
     
     XMapWindow(g_surface.display,g_surface.window);
     XFlush(g_surface.display);
+}
+
+static void* audioThread(void* arg){
+    audioInit();
+	for(;;){
+		audioDeviceBufferUpdate();
+        systemNanoSleep(&(TimeSpec){.nano_seconds = 1000000},0);
+	}
+    return 0;
 }
 
 int main(void){
@@ -299,6 +311,11 @@ int main(void){
     XEvent event;
     
 	mainInit();
+
+    if(g_options.audio){
+        pthread_t audio_thread;
+        pthread_create(&audio_thread,0,audioThread,0);
+    }
 	
 	int prev_tick = getTick();
 
@@ -332,7 +349,7 @@ int main(void){
         if(!(frame_counter++ % 0x20))
             fps = 1000000000 / (time_post.nano_seconds - time_pre.nano_seconds + (time_post.seconds - time_pre.seconds) * 1000000000);
 
-        g_delta = (time_post.nano_seconds - time_pre.nano_seconds) + (time_post.seconds - time_pre.seconds) * 1000000000 >> 8;
+        g_time.delta = (time_post.nano_seconds - time_pre.nano_seconds) + (time_post.seconds - time_pre.seconds) * 1000000000 >> 8;
         
         time_pre = time_post;
         
@@ -423,16 +440,13 @@ int main(void){
 		unsigned tick = getTick();
 		
         unsigned n_tick = tick - prev_tick;
-
-		if((int)n_tick < 0)
-			n_tick = 0;
         
-        for(int i = n_tick / (FIXED_ONE * N_TICK_MODIFIER);i--;){
-            g_delta = FIXED_ONE * N_TICK_MODIFIER;
+        for(int i = n_tick / MAX_TICK_LENGTH;i--;){
+            g_time.delta = MAX_TICK_LENGTH;
             tickRun();
         }
         
-        g_delta = n_tick % FIXED_ONE * N_TICK_MODIFIER;
+        g_time.delta = n_tick % MAX_TICK_LENGTH;
         tickRun();
 
         prev_tick = tick;
@@ -448,4 +462,3 @@ int main(void){
     XCloseDisplay(g_surface.display);
     return 0;
 }
-

@@ -4,11 +4,11 @@
 #include "tmath.h"
 #include "fixed.h"
 
-enum{
+typedef enum{
     VEC3_X,
     VEC3_Y,
     VEC3_Z,
-};
+} Vec3Axis;
 
 typedef union{
     struct{int x,y,z;};
@@ -71,12 +71,16 @@ static Vec3 vec3DivS(Vec3 v,int a){
     return v;
 }
 
+static int vec3LengthSquare(Vec3 v){
+    return fixedMulR(v.x,v.x) + fixedMulR(v.y,v.y) + fixedMulR(v.z,v.z);
+}
+
 static int vec3Length(Vec3 v){
-    return tSqrt(fixedMulR(v.x,v.x) + fixedMulR(v.y,v.y) + fixedMulR(v.z,v.z));
+    return tSqrt(vec3LengthSquare(v));
 }
 
 static Vec3 vec3Normalize(Vec3 v){
-    int length = tInverseSqrt(fixedMulR(v.x,v.x) + fixedMulR(v.y,v.y) + fixedMulR(v.z,v.z));
+    int length = tInverseSqrt(vec3LengthSquare(v));
     if(!length)
         return v;
     v = vec3MulS(v,length);
@@ -85,6 +89,10 @@ static Vec3 vec3Normalize(Vec3 v){
 
 static int vec3Distance(Vec3 v1,Vec3 v2){
     return vec3Length(vec3Sub(v1,v2));
+}
+
+static int vec3DistanceSquare(Vec3 v1,Vec3 v2){
+    return vec3LengthSquare(vec3Sub(v1,v2));
 }
 
 static int vec3Dot(Vec3 v1,Vec3 v2){

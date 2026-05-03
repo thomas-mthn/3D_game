@@ -4,17 +4,19 @@
 #include "physics.h"
 
 bool directPath(Vec3 position,Vec3 size,Vec3 destination){
+#if 0
 	int distance = vec3Distance(vec3Shr(position,4),vec3Shr(destination,4)) << 4;
 	Vec3 direction = vec3Direction(position,destination);
 	for(int i = 0;i < distance / FIXED_ONE;i++){
-		if(boxTreeCollision(position,size,0,0)){
+		if(boxTreeCollision(position,size,0,0).collided){
 			position.z += FIXED_ONE;
-			if(boxTreeCollision(position,size,0,0))
+			if(boxTreeCollision(position,size,0,0).collided)
 				return false;
 		}
 		position.x += direction.x;
 		position.y += direction.y;
 	}
+#endif
 	return true;
 }
 
@@ -139,13 +141,13 @@ bool pathFinding(Vec3 position,Vec3 size,Vec3 destination,Route* route_result){
 		
 			if(tileAlreadyChecked(position_forward))
 				continue;
-			
-			if(boxTreeCollision(vec3Shl(position_forward,PATH_FIND_SIZE),vec3Single(FIXED_ONE * 2),0,0)){
+#if 0
+			if(boxTreeCollision(vec3Shl(position_forward,PATH_FIND_SIZE),vec3Single(FIXED_ONE * 2),0,0).collided){
 				position_forward.z += 1;
-				if(boxTreeCollision(vec3Shl(position_forward,PATH_FIND_SIZE),vec3Single(FIXED_ONE * 2),0,0))
+				if(boxTreeCollision(vec3Shl(position_forward,PATH_FIND_SIZE),vec3Single(FIXED_ONE * 2),0,0).collided)
 					continue;
 			}
-
+#endif
 			route2.positions[route2.n_positions++] = position_forward;
 			if(
 				position_forward.x == destination.x && 

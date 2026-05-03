@@ -32,6 +32,7 @@ Ray2 initRay2(Vec2 position,Vec2 direction){
 	ray.pos = position;
 	ray.dir = direction;
 	ray.square_side = 0;
+
 	ray.delta = (Vec2){	
 		fixedDivR(FIXED_ONE,tAbs(direction.x)),
 		fixedDivR(FIXED_ONE,tAbs(direction.y)),

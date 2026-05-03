@@ -28,6 +28,24 @@ static Vec3 g_normal_table[] = {
 	{0,0,FIXED_ONE}
 };
 
+static Vec3 g_u_table[] = {
+	{0,FIXED_ONE,0},
+	{0,FIXED_ONE,0},
+	{FIXED_ONE,0,0},
+    {FIXED_ONE,0,0},
+    {FIXED_ONE,0,0},
+    {FIXED_ONE,0,0},
+};
+
+static Vec3 g_v_table[] = {
+	{0,0,FIXED_ONE},
+    {0,0,FIXED_ONE},
+    {0,0,FIXED_ONE},
+    {0,0,FIXED_ONE},
+    {0,FIXED_ONE,0},
+	{0,FIXED_ONE,0},
+};
+
 typedef enum{
     VOXEL_AIR,
     VOXEL_PARENT,
@@ -65,6 +83,18 @@ typedef enum{
     VOXEL_CONSOLE,
     VOXEL_DOOR,
     VOXEL_PRESSURE_PLATE,
+    VOXEL_SLOPE_XPP,
+    VOXEL_SLOPE_XPN,
+    VOXEL_SLOPE_XNP,
+    VOXEL_SLOPE_XNN,
+    VOXEL_SLOPE_YNP,
+    VOXEL_SLOPE_YNN,
+    VOXEL_SLOPE_YPP,
+    VOXEL_SLOPE_YPN,
+    VOXEL_SLOPE_ZNP,
+    VOXEL_SLOPE_ZNN,
+    VOXEL_SLOPE_ZPP,
+    VOXEL_SLOPE_ZPN,
     VOXEL_ECOUNT,
 } VoxelType;
 
@@ -118,11 +148,20 @@ structure(VoxelStatic){
     bool no_blockplace : 1;
     bool translucent : 1;
     bool rd_trace : 1;
+    bool slope : 1;
     
 	Texture* texture;
 	int texture_size;
 	int n_gui;
 	VoxelGuiElement* gui;
+
+    Vec3 slope_u;
+    Vec3 slope_v;
+    Vec3 slope_offset;
+    Vec3Axis slope_axis;
+    bool slope_flip_x : 1;
+    bool slope_flip_y : 1;
+    
 	struct{
 		bool custom;
 		Vec3 color;
@@ -189,7 +228,17 @@ extern VoxelStatic g_voxel_static[];
 extern VoxelGuiElement g_inventory_gui[];
 extern AllocatorFreeList g_allocator_world;
 
-Vec3 rayHitPosition(Voxel* voxel,Vec3 ray_position,Vec3 ray_direction,int side);
+structure(RayHit){
+    Voxel* voxel;
+    Vec3 position;
+};
+
+structure(TreeTraceFlags){
+    bool everything_solid : 1;
+};
+
+Vec3 rayVoxelHitPosition(Voxel* voxel,Vec3 ray_position,Vec3 ray_direction,Vec3Axis side);
+RayHit rayHitPosition(Vec3 position,Vec3 direction);
 
 void voxelLinkSignal(Voxel* voxel);
 void octreeSerialize(VoxelSerialized* voxel_serial_array,Voxel* voxel);
@@ -199,8 +248,8 @@ void octreeDeserializeLink(VoxelSerializedParent* voxel_serial_array,int index,i
 
 Vec3 posWorldPos(Vec3 position,int depth);
 TraverseInit initTraverse(Vec3 pos);
-Voxel* treeRayTrace(Voxel* voxel,Vec3 position,Vec3 direction,int* side);
-Voxel* treeRayTraceAndInit(Vec3 position,Vec3 direction,int* side);
+Voxel* treeRayTrace(Voxel* voxel,Vec3 position,Vec3 ray_position,Vec3 direction,Vec3Axis* side,TreeTraceFlags flags);
+Voxel* treeRayTraceAndInit(Vec3 position,Vec3 direction,Vec3Axis* side,TreeTraceFlags flags);
 int treeRayTraceIntersectCountAndInit(Vec3 position,Vec3 direction);
 
 void voxelFreeRecursive(Voxel* voxel);
@@ -224,6 +273,13 @@ static int depthToSize(int depth){
 static Vec3 voxelWorldPos(Voxel* voxel){
 	int size = depthToSize(voxel->depth);
 	return (Vec3){voxel->position_x * size,voxel->position_y * size,voxel->position_z * size};
+}
+
+static Vec3 voxelWorldPosCenter(Voxel* voxel){
+	int size = depthToSize(voxel->depth);
+    Vec3 world_pos = voxelWorldPos(voxel);
+    
+	return vec3AddS(world_pos,size / 2);
 }
 
 #endif

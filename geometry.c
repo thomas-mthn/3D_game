@@ -1,28 +1,32 @@
 #include "geometry.h"
 #include "octree.h"
 
-bool pointBoxIntersection(Vec3 point,Vec3 box_position,Vec3 box_size){
-	box_position = vec3Sub(box_position,vec3Shr(box_size,1));
-
-	bool x = point.x > box_position.x && point.x < box_position.x + box_size.x;
-	bool y = point.y > box_position.y && point.y < box_position.y + box_size.y;
-	bool z = point.z > box_position.z && point.z < box_position.z + box_size.z;
-
+bool intersectCubePoint(Vec3 point,Vec3 cube_position,int cube_size){
+    bool x = tAbs(cube_position.x - point.x) <= (cube_size);
+    bool y = tAbs(cube_position.y - point.y) <= (cube_size);
+    bool z = tAbs(cube_position.z - point.z) <= (cube_size);
 	return x && y && z;
 }
 
-int rayBoxIntersection(Vec3 box_position,Vec3 box_size,Vec3 ro,Vec3 rd){
-	ro = vec3Sub(ro,box_position);
-    Vec3 m = vec3Div(vec3Single(FIXED_ONE),rd);
-    Vec3 n = vec3Mul(m,ro);
-	Vec3 k = vec3Mul((Vec3){tAbs(m.x),tAbs(m.y),tAbs(m.z)},box_size);
-    Vec3 t1 = vec3Sub((Vec3){-n.x,-n.y,-n.z},k);
-    Vec3 t2 = vec3Add((Vec3){-n.x,-n.y,-n.z},k);
-    int tN = tMax(tMax(t1.x,t1.y),t1.z);
-    int tF = tMin(tMin(t2.x,t2.y),t2.z);
-	if(tN > tF || tF < 0)
-		return 0;
-    return tN;
+bool intersectBoxPoint(Vec3 point,Vec3 box_position,Vec3 box_size){
+    bool x = tAbs(box_position.x - point.x) <= (box_size.x);
+    bool y = tAbs(box_position.y - point.y) <= (box_size.y);
+    bool z = tAbs(box_position.z - point.z) <= (box_size.z);
+	return x && y && z;
+}
+
+bool intersectBoxBox(Vec3 box1_pos,Vec3 box1_size,Vec3 box2_pos,Vec3 box2_size){
+    bool x = tAbs(box1_pos.x - box2_pos.x) <= (box1_size.x + box2_size.x);
+    bool y = tAbs(box1_pos.y - box2_pos.y) <= (box1_size.y + box2_size.y);
+    bool z = tAbs(box1_pos.z - box2_pos.z) <= (box1_size.z + box2_size.z);
+    return x && y && z;
+}
+
+bool intersectBoxCube(Vec3 box_pos,Vec3 box_size,Vec3 cube_pos,int cube_size){
+    bool x = tAbs(box_pos.x - cube_pos.x) <= (box_size.x + cube_size);
+    bool y = tAbs(box_pos.y - cube_pos.y) <= (box_size.y + cube_size);
+    bool z = tAbs(box_pos.z - cube_pos.z) <= (box_size.z + cube_size);
+    return x && y && z;
 }
 
 int sdSegment(Vec2 p,Vec2 a,Vec2 b){
@@ -51,6 +55,20 @@ int sdVoxel(Vec3 point,Vec3 voxel_position,int voxel_size){
 	Vec3 p = vec3Sub(vec3AddS(voxel_position,voxel_size / 2),point);
 	Vec3 q = vec3SubS((Vec3){tAbs(p.x),tAbs(p.y),tAbs(p.z)},voxel_size);
 	return vec3Length((Vec3){tMax(q.x,0),tMax(q.y,0),tMax(q.z,0)}) + tMin(tMax(q.x,tMax(q.y,q.z)),0);
+}
+
+int rayBoxIntersection(Vec3 box_position,Vec3 box_size,Vec3 ro,Vec3 rd){
+	ro = vec3Sub(ro,box_position);
+    Vec3 m = vec3Div(vec3Single(FIXED_ONE),rd);
+    Vec3 n = vec3Mul(m,ro);
+	Vec3 k = vec3Mul((Vec3){tAbs(m.x),tAbs(m.y),tAbs(m.z)},box_size);
+    Vec3 t1 = vec3Sub((Vec3){-n.x,-n.y,-n.z},k);
+    Vec3 t2 = vec3Add((Vec3){-n.x,-n.y,-n.z},k);
+    int tN = tMax(tMax(t1.x,t1.y),t1.z);
+    int tF = tMin(tMin(t2.x,t2.y),t2.z);
+	if(tN > tF || tF < 0)
+		return 0;
+    return tN;
 }
 
 int rayVoxelIntersection(Voxel* voxel,Vec3 ro,Vec3 rd,Vec3* normal){
@@ -118,15 +136,29 @@ int raySphereIntersection(Vec3 ray_position,Vec3 ray_direction,Vec3 sphere_posit
         return fixedDivR((-b - tSqrt(discriminant)),(2 * a));
 }
 
-bool boxBoxIntersect(Vec3 box1_pos,Vec3 box1_size,Vec3 box2_pos,Vec3 box2_size){
-	Vec3 box_max = vec3Add(box1_pos,box1_size);
-	Vec3 cube_max = vec3Add(box2_pos,box2_size);
-	bool x = box1_pos.x <= cube_max.x && box_max.x >= box2_pos.x;
-	bool y = box1_pos.y <= cube_max.y && box_max.y >= box2_pos.y;
-	bool z = box1_pos.z <= cube_max.z && box_max.z >= box2_pos.z;
-    return x && y && z;
+PlaneCollision intersectBoxPlane(Vec3 box_position,Vec3 box_size,Plane plane){
+    Vec3 e = {
+        box_size.x / 2,
+        box_size.y / 2,
+        box_size.z / 2
+    };
+    Vec3 center = {
+        box_position.x + e.x,
+        box_position.y + e.y,
+        box_position.z + e.z
+    };
+
+    int s = vec3Dot(plane.normal,center) + plane.distance;
+
+    int r =
+        fixedMulR(e.x,tAbs(plane.normal.x)) +
+        fixedMulR(e.y,tAbs(plane.normal.y)) +
+        fixedMulR(e.z,tAbs(plane.normal.z));
+
+    if(tAbs(s) <= r)
+        return PLANE_BETWEEN;
+
+    return s > r ? PLANE_FRONT : PLANE_BACK;
 }
 
-bool boxCubeIntersect(Vec3 box_pos,Vec3 box_size,Vec3 cube_pos,int cube_size){
-    return boxBoxIntersect(box_pos,box_size,cube_pos,vec3Single(cube_size));
-}
+

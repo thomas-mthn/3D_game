@@ -1,7 +1,6 @@
 #include "octree.h"
 #include "console.h"
 #include "dda.h"
-#include "texture.h"
 #include "main.h"
 #include "octree_render.h"
 #include "voxel_menu.h"
@@ -326,6 +325,147 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
         .translucent = true,
         .rd_trace = true,
     },
+    [VOXEL_SLOPE_XNP] = {
+        .slope = true,
+        .texture = g_textures + TEXTURE_STONE_BRICK,
+        .texture_size = FIXED_ONE,
+        .translucent = true,
+        .slope_u = {FIXED_ONE,0,0},
+        .slope_v = {0,46336,46336},
+        .slope_flip_x = false,
+        .slope_flip_y = false,
+        .slope_axis = VEC3_X,
+    },
+    [VOXEL_SLOPE_XNN] = {
+        .slope = true,
+        .texture = g_textures + TEXTURE_STONE_BRICK,
+        .texture_size = FIXED_ONE,
+        .translucent = true,
+        .slope_u = {-FIXED_ONE,0,0},
+        .slope_v = {0,-46336,46336},
+        .slope_offset = {FIXED_ONE,FIXED_ONE,0},
+        .slope_flip_x = true,
+        .slope_flip_y = false,
+        .slope_axis = VEC3_X,
+    },
+    [VOXEL_SLOPE_XPP] = {
+        .slope = true,
+        .texture = g_textures + TEXTURE_STONE_BRICK,
+        .texture_size = FIXED_ONE,
+        .translucent = true,
+        .slope_u = {FIXED_ONE,0,0},
+        .slope_v = {0,-46336,-46336},
+        .slope_offset = {0,FIXED_ONE,FIXED_ONE},
+        .slope_flip_x = false,
+        .slope_flip_y = true,
+        .slope_axis = VEC3_X,
+    },
+    [VOXEL_SLOPE_XPN] = {
+        .slope = true,
+        .texture = g_textures + TEXTURE_STONE_BRICK,
+        .texture_size = FIXED_ONE,
+        .translucent = true,
+        .slope_u = {-FIXED_ONE,0,0},
+        .slope_v = {0,46336,-46336},
+        .slope_offset = {FIXED_ONE,0,FIXED_ONE},
+        .slope_flip_x = true,
+        .slope_flip_y = true,
+        .slope_axis = VEC3_X,
+    },
+    [VOXEL_SLOPE_YNP] = {
+        .slope = true,
+        .texture = g_textures + TEXTURE_STONE_BRICK,
+        .texture_size = FIXED_ONE,
+        .translucent = true,
+        .slope_u = {0,FIXED_ONE,0},
+        .slope_v = {-46336,0,-46336},
+        .slope_offset = {FIXED_ONE,0,FIXED_ONE},
+        .slope_flip_x = false,
+        .slope_flip_y = false,
+        .slope_axis = VEC3_Y,
+    },
+    [VOXEL_SLOPE_YNN] = {
+        .slope = true,
+        .texture = g_textures + TEXTURE_STONE_BRICK,
+        .texture_size = FIXED_ONE,
+        .translucent = true,
+        .slope_u = {0,-FIXED_ONE,0},
+        .slope_v = {46336,0,-46336},
+        .slope_offset = {0,FIXED_ONE,FIXED_ONE},
+        .slope_flip_x = true,
+        .slope_flip_y = false,
+        .slope_axis = VEC3_Y,
+    },
+    [VOXEL_SLOPE_YPP] = {
+        .slope = true,
+        .texture = g_textures + TEXTURE_STONE_BRICK,
+        .texture_size = FIXED_ONE,
+        .translucent = true,
+        .slope_u = {0,FIXED_ONE,0},
+        .slope_v = {46336,0,46336},
+        .slope_flip_x = false,
+        .slope_flip_y = true,
+        .slope_axis = VEC3_Y,
+    },
+    [VOXEL_SLOPE_YPN] = {
+        .slope = true,
+        .texture = g_textures + TEXTURE_STONE_BRICK,
+        .texture_size = FIXED_ONE,
+        .translucent = true,
+        .slope_u = {0,-FIXED_ONE,0},
+        .slope_v = {-46336,0,46336},
+        .slope_offset = {FIXED_ONE,FIXED_ONE,0},
+        .slope_flip_x = true,
+        .slope_flip_y = true,
+        .slope_axis = VEC3_Y,
+    },
+    [VOXEL_SLOPE_ZNP] = {
+        .slope = true,
+        .texture = g_textures + TEXTURE_STONE_BRICK,
+        .texture_size = FIXED_ONE,
+        .translucent = true,
+        .slope_u = {0,0,FIXED_ONE},
+        .slope_v = {46336,46336,0},
+        .slope_flip_x = false,
+        .slope_flip_y = false,
+        .slope_axis = VEC3_Z,
+    },
+    [VOXEL_SLOPE_ZNN] = {
+        .slope = true,
+        .texture = g_textures + TEXTURE_STONE_BRICK,
+        .texture_size = FIXED_ONE,
+        .translucent = true,
+        .slope_u = {0,0,-FIXED_ONE},
+        .slope_v = {-46336,46336,0},
+        .slope_offset = {FIXED_ONE,0,FIXED_ONE},
+        .slope_flip_x = true,
+        .slope_flip_y = false,
+        .slope_axis = VEC3_Z,
+    },
+    [VOXEL_SLOPE_ZPP] = {
+        .slope = true,
+        .texture = g_textures + TEXTURE_STONE_BRICK,
+        .texture_size = FIXED_ONE,
+        .translucent = true,
+        .slope_u = {0,0,-FIXED_ONE},
+        .slope_v = {46336,46336,0},
+        .slope_offset = {0,0,FIXED_ONE},
+        .slope_flip_x = false,
+        .slope_flip_y = true,
+        .slope_axis = VEC3_Z,
+    },
+    [VOXEL_SLOPE_ZPN] = {
+        .slope = true,
+        .texture = g_textures + TEXTURE_STONE_BRICK,
+        .texture_size = FIXED_ONE,
+        .translucent = true,
+        .slope_u = {0,0,FIXED_ONE},
+        .slope_v = {-46336,46336,0},
+        .slope_offset = {FIXED_ONE,0,0},
+        .slope_flip_x = true,
+        .slope_flip_y = true,
+        .slope_axis = VEC3_Z,
+    },
 };
 
 static void octreeIndicesSet(VoxelSerialized* voxel_serial_array,int* voxel_serial_index,Voxel* voxel){
@@ -546,10 +686,43 @@ bool squareVisible(Vec3 position,int depth,int side,VoxelType voxel_type){
 	return nonFullVoxel(neighbour);
 }
 
-Vec3 rayHitPosition(Voxel* voxel,Vec3 ray_position,Vec3 ray_direction,int side){
-	Plane plane = getPlane(voxel,ray_direction,side);
-	int distance = rayPlaneIntersection(ray_position,ray_direction,plane) - (((int*)&ray_direction)[side] < 0 ? 0x10 : -0x10);
+static int slopeDistance(Voxel* voxel,Vec3 position,Vec3 direction){
+    VoxelStatic* voxel_s = g_voxel_static + voxel->type;
+    Vec3 voxel_position = voxelWorldPos(voxel);
+    voxel_position = vec3Add(voxel_position,vec3MulS(voxel_s->slope_offset,depthToSize(voxel->depth)));
+    Vec3 relative = vec3Sub(position,voxel_position);
+    Plane plane = {
+        .normal = vec3Cross(voxel_s->slope_u,voxel_s->slope_v),
+        .distance = 0,
+    };
+    return rayPlaneIntersection(relative,direction,plane);
+}
+
+static bool slopeHit(Voxel* voxel,Vec3 position,Vec3 direction){
+    int distance = slopeDistance(voxel,position,direction);
+    Vec3 hit_position = vec3Add(position,vec3MulS(vec3Normalize(direction),distance)); 
+
+    return voxelPositionGet(hit_position) == voxel;
+}
+
+Vec3 rayVoxelHitPosition(Voxel* voxel,Vec3 ray_position,Vec3 ray_direction,Vec3Axis side){
+    int distance;
+    if(g_voxel_static[voxel->type].slope){
+        distance = slopeDistance(voxel,ray_position,ray_direction);
+    }
+    else{
+        Plane plane = getPlane(voxel,ray_direction,side);
+        distance = rayPlaneIntersection(ray_position,ray_direction,plane) - (ray_direction.a[side] < 0 ? 0x10 : -0x10);
+    }
 	return vec3Add(ray_position,vec3MulS(ray_direction,distance));
+}
+
+RayHit rayHitPosition(Vec3 position,Vec3 direction){
+    Vec3Axis side;
+    Voxel* voxel = treeRayTraceAndInit(position,direction,&side,(TreeTraceFlags){0});
+    if(!voxel)
+        return (RayHit){0};
+    return (RayHit){.voxel = voxel,.position = rayVoxelHitPosition(voxel,position,direction,side)};
 }
 
 Vec3 posWorldPos(Vec3 position,int depth){
@@ -613,7 +786,7 @@ Entity* entityRayCollisionRecursive(Voxel* voxel,Vec3 position,Vec3 direction){
 	return entityRayCollision(voxel->entity_list,position,direction);
 }
 
-Voxel* treeRayTrace(Voxel* voxel,Vec3 position,Vec3 direction,int* side){
+Voxel* treeRayTrace(Voxel* voxel,Vec3 position,Vec3 ray_position,Vec3 direction,Vec3Axis* side,TreeTraceFlags flags){
 	Ray3 ray = initRay3(position,direction);
 	iterateRay3(&ray);
 	for(;;){
@@ -636,24 +809,29 @@ Voxel* treeRayTrace(Voxel* voxel,Vec3 position,Vec3 direction,int* side){
 	sh:;
 		int index = ray.square_pos.z * 4 + ray.square_pos.y * 2 + ray.square_pos.x;
 		Voxel* child = voxel->child_s[index];
-		if(child->type == VOXEL_AIR){
-			iterateRay3(&ray);
-			continue;
-		}
-		if(child->type == VOXEL_PARENT){
-			int x = (int[]){VEC3_Y,VEC3_X,VEC3_X}[ray.square_side];
-			int y = (int[]){VEC3_Z,VEC3_Z,VEC3_Y}[ray.square_side];
+        switch(child->type){
+            case VOXEL_PARENT:{
+                int x = (int[]){VEC3_Y,VEC3_X,VEC3_X}[ray.square_side];
+                int y = (int[]){VEC3_Z,VEC3_Z,VEC3_Y}[ray.square_side];
             
-			int side_delta = ray.side.a[ray.square_side] - ray.delta.a[ray.square_side];
+                int side_delta = ray.side.a[ray.square_side] - ray.delta.a[ray.square_side];
 
-			ray.pos.a[x] = fixedFract(ray.pos.a[x] + fixedMulR(side_delta,ray.dir.a[x])) << 1;
-			ray.pos.a[y] = fixedFract(ray.pos.a[y] + fixedMulR(side_delta,ray.dir.a[y])) << 1;
-			ray.pos.a[ray.square_side] = ray.dir.a[ray.square_side] < 0 ? FIXED_ONE * 2 - 1 : 0;
+                ray.pos.a[x] = fixedFract(ray.pos.a[x] + fixedMulR(side_delta,ray.dir.a[x])) << 1;
+                ray.pos.a[y] = fixedFract(ray.pos.a[y] + fixedMulR(side_delta,ray.dir.a[y])) << 1;
+                ray.pos.a[ray.square_side] = ray.dir.a[ray.square_side] < 0 ? FIXED_ONE * 2 - 1 : 0;
 
-			voxel = child;
-			recalculateRay3(&ray);
-			goto sh;
-		}
+                voxel = child;
+                recalculateRay3(&ray);
+            } goto sh;
+            case VOXEL_AIR:{
+                iterateRay3(&ray);
+                continue;
+            } continue;
+        }
+        if(!flags.everything_solid && g_voxel_static[child->type].slope && !slopeHit(child,ray_position,direction)){
+            iterateRay3(&ray);
+            continue;
+        }
 		if(side) 
 			*side = ray.square_side;
 		return child;
@@ -708,9 +886,9 @@ static int treeRayTraceIntersectCount(Voxel* voxel,Vec3 position,Vec3 direction)
 	}
 }
 
-Voxel* treeRayTraceAndInit(Vec3 position,Vec3 direction,int* side){
+Voxel* treeRayTraceAndInit(Vec3 position,Vec3 direction,Vec3Axis* side,TreeTraceFlags flags){
 	TraverseInit init = initTraverse(position);
-	return treeRayTrace(init.voxel,init.pos,direction,side);
+	return treeRayTrace(init.voxel,init.pos,position,direction,side,flags);
 }
 
 int treeRayTraceIntersectCountAndInit(Vec3 position,Vec3 direction){
@@ -800,8 +978,8 @@ void voxelSet(Voxel* voxel,Vec3 pos,int depth,VoxelType type){
 
 bool lineOfSight(Vec3 position_1,Vec3 position_2){
 	Vec3 direction = vec3Direction(position_1,position_2);
-	int side;
-	Voxel* voxel = treeRayTraceAndInit(position_1,direction,&side);
+	Vec3Axis side;
+	Voxel* voxel = treeRayTraceAndInit(position_1,direction,&side,(TreeTraceFlags){0});
 	int ray_distance = treeRayTraceDistance(voxel,position_1,direction,side);
 	return ray_distance > vec3Distance(position_1,position_2);
 }

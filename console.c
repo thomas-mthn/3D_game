@@ -147,13 +147,13 @@ void consoleVoxelDraw(Voxel* voxel,int side){
     
  end_console:
     String input = {.data = console_buffer,.size = console_buffer_index};
-    if(g_voxel_interact == voxel && (g_tick >> 6 & 1) || blink_prevention > 0)
+    if(g_voxel_interact == voxel && (g_time.tick >> 6 & 1) || blink_prevention > 0)
         input = stringConcat(input,(String)STRING_LITERAL("_"));
     drawGuiString(voxel,side,(Vec2){0x1000,0x0D00},input,FONT_SIZE,0x200);
     drawGuiChar(voxel,side,(Vec2){0x800,0x0D00},'>',FONT_SIZE,0x200);
-    if(g_voxel_interact == voxel && (g_tick >> 6 & 1) || blink_prevention > 0)
+    if(g_voxel_interact == voxel && (g_time.tick >> 6 & 1) || blink_prevention > 0)
         tFree(input.data);
-    if(g_tick >> 6 & 1)
+    if(g_time.tick >> 6 & 1)
         blink_prevention = false;
 }
 
@@ -161,7 +161,7 @@ void consoleVoxelDraw(Voxel* voxel,int side){
     X(QUIT) X(MULTITHREAD) X(LIGHTING_ENGINE) X(RENDERBACKEND)\
         X(SMOOTH_LIGHTING) X(GL_WIREFRAME) X(SPELL) X(LOAD) X(SAVE) X(CREATE) \
         X(FAST_STARTUP) X(TEXTURES) X(DBG_INT1) X(DBG_INT2) X(OCTREE_WIREFRAME) \
-        X(RD_OCCLUSION)
+        X(RD_OCCLUSION) X(MULTI_SAMPLE) X(RAY_TEST)
 
 void consoleInput(char key){
     if(!key)
@@ -190,6 +190,14 @@ void consoleInput(char key){
         if(!stringCompareSizeInsensitive(command,commands[i]))
             continue;
         switch(i){
+            case COMMAND_RAY_TEST:{
+                changeBooleanSetting(&g_options.ray_test);
+            } break;
+            case COMMAND_MULTI_SAMPLE:{
+                String number = stringForwardSlice(command,commands[i].size + 1);
+                g_options.multi_sample = stringToNumber(number);
+                configSave();
+            } break;
             case COMMAND_RD_OCCLUSION:{
                 changeBooleanSetting(&g_options.rd_occlusion);
             } break;
@@ -227,6 +235,7 @@ void consoleInput(char key){
             } break;
             case COMMAND_LOAD:{
                 String world_name = stringWordSlice(stringForwardSlice(command,commands[i].size + 1));
+                world_name = stringWordSlice(stringConcat(world_name,(String)STRING_LITERAL("\n")));
                 stringToLower(world_name);
                 if(!worldExist(world_name)){
                     print((String)STRING_LITERAL("world does not exist\n"));

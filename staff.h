@@ -49,7 +49,6 @@ structure(Staff){
 extern Staff g_equipped;
 extern int g_mana;
 extern bool g_equipped_staff;
-extern int g_attack_animation;
 extern int g_spell_index;
 extern SpellStatic g_spell_static[];
 extern String g_spell_names[];

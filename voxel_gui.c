@@ -24,7 +24,7 @@ Vec2 voxelGuiPositionGet(Voxel* voxel,Vec3 position,Vec3 dir,int side){
     Plane plane = getPlane(voxel,dir,side);
     int dst = rayPlaneIntersection(position,dir,plane);
     Vec3 hit_pos = vec3Add(position,vec3MulS(dir,dst));
-	Vec2 uv = vec2DivS((Vec2){((int*)&hit_pos)[axis.x] - ((int*)&pos)[axis.x],((int*)&hit_pos)[axis.y] - ((int*)&pos)[axis.y]},block_size);
+	Vec2 uv = vec2DivS((Vec2){hit_pos.a[axis.x] - pos.a[axis.x],hit_pos.a[axis.y] - pos.a[axis.y]},block_size);
 	return uvMirror(uv,side << 1 | dir.a[side] < 0);
 }
 
@@ -77,14 +77,10 @@ void drawGuiChar(Voxel* voxel,int side,Vec2 uv,char string_char,int scale,int th
             quad[j].a[axis.x] = quad2d[j].x;
             quad[j].a[axis.y] = quad2d[j].y;
         }
-        PolygonToDraw* polygon = polygonToDrawAdd();
+        DrawPrimitive* polygon = primitiveToDraw();
         for(int i = countof(quad);i--;)
             polygon->position[i] = quad[i];
         polygon->luminance = pixelColorToColor(0xFFFFFF);
-        polygon->texture = 0;
-#if 0
-        drawPolygon3d(&g_surface,quad,vec3MulS(pixelColorToColor(0xFFFFFF),g_exposure));
-#endif
     }
 }
 
@@ -135,11 +131,10 @@ void drawGuiRectangle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,in
 	points[3].a[axis.x] += size.x * mirror;
 	points[3].a[axis.y] += size.y;
 
-    PolygonToDraw* polygon = polygonToDrawAdd();
+    DrawPrimitive* polygon = primitiveToDraw();
     for(int i = countof(points);i--;)
         polygon->position[i] = points[i];
     polygon->luminance = pixelColorToColor(color);
-    polygon->texture = 0;
 #if 0
     drawPolygon3d(&g_surface,points,pixelColorToColor(color));
 #endif
@@ -210,7 +205,11 @@ void drawGuiCircle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,int radius,int 
 	points[2] = pointToScreenRenderer(points[2],g_surface.rotation_matrix,g_surface.position,g_options.fov);
 	points[3] = pointToScreenRenderer(points[3],g_surface.rotation_matrix,g_surface.position,g_options.fov);
 
-	drawCircle3d(&g_surface,points,vec3MulS(pixelColorToColor(color),g_exposure));
+    DrawPrimitive* polygon = primitiveToDraw();
+    polygon->luminance = pixelColorToColor(color);
+    polygon->type = PRIMITIVE_CIRCLE;
+    for(int i = 4;i--;)
+        polygon->position[i] = points[i];
 }
 
 static bool rectInRect(Vec2 position_1,Vec2 size_1,Vec2 position_2,Vec2 size_2){

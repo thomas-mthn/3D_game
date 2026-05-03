@@ -184,8 +184,8 @@ void texturesGenerate(void){
 		.backend = RENDER_BACKEND_SOFTWARE,
 	};
 	surfaceInit(&surface);
-	drawSquare(&surface,-FIXED_ONE,-FIXED_ONE,FIXED_ONE * 2,pixelColorToColor(0x3090F0));
-	drawString(&surface,-FIXED_ONE + 0x2000,-FIXED_ONE + 0x2000,(String)STRING_LITERAL("wall"),0x1000,COLOR_WHITE);
+	drawSquare(&surface,-FIXED_ONE,-FIXED_ONE,FIXED_ONE * 2,pixelColorToColor(0xF09030));
+	drawString(&surface,-FIXED_ONE + 0x4000,-FIXED_ONE + 0x4000,(String)STRING_LITERAL("wall"),0x1000,COLOR_WHITE);
 
 	texture = g_textures + TEXTURE_GRASS;
 	softSurfaceDestroyMeta(&surface);

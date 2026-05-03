@@ -11,10 +11,18 @@ structure(Plane){
 	int distance;
 };
 
+typedef enum{
+    PLANE_FRONT,
+    PLANE_BACK,
+    PLANE_BETWEEN,
+} PlaneCollision;
+
 //collision
-bool pointBoxIntersection(Vec3 point,Vec3 box_position,Vec3 box_size);
-bool boxBoxIntersect(Vec3 box_pos,Vec3 box_size,Vec3 cube_pos,Vec3 cube_size);
-bool boxCubeIntersect(Vec3 box_pos,Vec3 box_size,Vec3 cube_pos,int cube_size);
+bool intersectBoxPoint(Vec3 point,Vec3 box_position,Vec3 box_size);
+bool intersectCubePoint(Vec3 point,Vec3 cube_position,int cube_size);
+bool intersectBoxBox(Vec3 box_pos,Vec3 box_size,Vec3 cube_pos,Vec3 cube_size);
+bool intersectBoxCube(Vec3 box_pos,Vec3 box_size,Vec3 cube_pos,int cube_size);
+PlaneCollision intersectBoxPlane(Vec3 box_position,Vec3 box_size,Plane plane);
 
 //SDF
 int sdSegment(Vec2 p,Vec2 a,Vec2 b);

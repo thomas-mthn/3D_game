@@ -50,8 +50,8 @@ typedef enum{
     KEY_OEM_10 = (0x56 + 8),KEY_F11,KEY_F12,
 } KeyType;
 
-#define KEY_LEFT 113
-#define KEY_RIGHT 114
+#define KEY_LEFT 75
+#define KEY_RIGHT 77
 
 #define KEY_LBUTTON 191
 #define KEY_RBUTTON 192
@@ -122,8 +122,7 @@ enum{
 
 #define ICON_SIZE 64
 
-#define N_TICK_MODIFIER 128
-#define N_TICK_BASE 128
+#define MAX_TICK_LENGTH 0x10000
 
 #define RENDER_DISTANCE (FIXED_ONE * 8)
 
@@ -160,6 +159,22 @@ structure(GameOptions){
     bool textures;
     bool rd_octree_wireframe;
     bool rd_occlusion;
+    bool audio;
+    bool ray_test;
+};
+
+structure(Player){
+    Entity entity;
+    VoxelType voxel_select;
+    int edit_depth;
+    bool movement_fly;
+    Entity* weapon;
+};
+
+structure(GameTime){
+    int delta;
+    unsigned time;
+    int tick;
 };
 
 int* iconGenerate(void);
@@ -181,7 +196,7 @@ Vec3 pointToScreenRenderer(Vec3 point,int* tri,Vec3 renderer_position,Vec2 fov);
 bool keyDown(int key);
 int treeRayTraceDistance(Voxel* voxel,Vec3 position,Vec3 dir,int side);
 
-void boxQuadWireframeDraw(Vec3 position,Vec3 size,int color);
+void boxQuadWireframeDraw(Vec3 position,Vec3 size,int color,bool octree);
 
 Vec2 getLookAngle(Vec3 direction);
 Vec3 getLookDirection(Vec2 direction);
@@ -213,6 +228,8 @@ void voxelTickListAdd(Voxel* voxel);
 
 bool inventoryFull(void);
 
+Vec3 fibonnaciSphereSample(int i,int n);
+
 static int colorToPixelColor(Vec3 color){
 	return tClamp(color.x >> 12,0,0xFF) | tClamp(color.y >> 12,0,0xFF) << 8 | tClamp(color.z >> 12,0,0xFF) << 16;
 }
@@ -226,20 +243,17 @@ static Vec3 pixelColorToColor(int color){
 extern char g_voxel_lighting_tree[];
 
 extern bool g_test_bool;
-extern VoxelType g_voxel_select;
 extern int g_exposure;
-extern unsigned g_tick;
-extern int g_delta;
-extern Vec3 g_velocity;
-extern int g_health;
 extern bool g_luminance_overlay;
 extern uint8 g_key[];
 extern Vec2 g_cursor;
 extern VoxelPointed g_voxel_pointed;
+
 extern GameOptions g_options;
+extern Player g_player;
+extern GameTime g_time;
+
 extern bool g_voxel_placement;
-extern int g_edit_depth;
-extern bool g_movement_fly;
 extern Plane g_view_plane[];
 extern Voxel* g_voxel_link_list;
 extern InventorySlot g_inventory[];

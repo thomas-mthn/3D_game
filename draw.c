@@ -23,7 +23,6 @@ DrawSurface g_surface = {
     .window_height = 1440 / 2,
     .backend = RENDER_BACKEND_SOFTWARE,
     .angle = PLAYER_SPAWN_ANGLE,
-    .position = PLAYER_SPAWN_POSITION,
 };
 
 static void (*destroySurface[])(DrawSurface*) = {
@@ -45,6 +44,7 @@ static bool (*createSurface[])(DrawSurface*) = {
 void surfaceInit(DrawSurface* surface){
     int alloc_size = OCCLUSION_BUFFER_SIZE * OCCLUSION_BUFFER_SIZE / CHAR_BIT;
     surface->occlusion_buffer = memoryArenaAllocate(&surface->fb_meta_arena,alloc_size);
+    surface->occlusion_debug = memoryArenaAllocate(&surface->fb_meta_arena,alloc_size);
     surface->scanline_occlusion.begin = memoryArenaAllocate(&surface->fb_meta_arena,OCCLUSION_BUFFER_SIZE * sizeof(*surface->scanline.begin));
     surface->scanline_occlusion.end = memoryArenaAllocate(&surface->fb_meta_arena,OCCLUSION_BUFFER_SIZE * sizeof(*surface->scanline.end));
     
@@ -124,6 +124,37 @@ void drawLine(DrawSurface* surface,int x1,int y1,int x2,int y2,Vec3 color){
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
 	vtable[surface->backend](surface,x1,y1,x2,y2,color);
+}
+
+void drawLine3d(DrawSurface* surface,Vec3 position_1,Vec3 position_2,int color){
+    Vec3 p1 = pointToScreen(position_1);
+    Vec3 p2 = pointToScreen(position_2);
+
+    int z_offset = 0x2000;
+#if 0
+    if(p1.z <= z_offset && p2.z <= z_offset)
+        return;
+#endif
+
+    if(p1.z <= 0 || p2.z <= 0)
+        return;
+    
+    Plane plane = {.normal = getLookDirection(g_surface.angle),.distance = -z_offset};
+
+    if(p1.z <= z_offset){
+        Vec3 direction = vec3Direction(position_1,position_2);
+        int distance = rayPlaneIntersection(vec3Sub(position_1,g_surface.position),direction,plane);
+        position_1 = vec3Add(position_1,vec3MulS(direction,distance));
+        p1 = pointToScreen(position_1);
+    }
+    else if(p2.z <= z_offset){
+        Vec3 direction = vec3Direction(position_2,position_1);
+        int distance = rayPlaneIntersection(vec3Sub(position_2,g_surface.position),direction,plane);
+        position_2 = vec3Add(position_2,vec3MulS(direction,distance));
+        p2 = pointToScreen(position_2);
+    }
+    
+    drawLine(&g_surface,p1.x,p1.y,p2.x,p2.y,pixelColorToColor(color));
 }
 
 void drawSegment(DrawSurface* surface,int x1,int y1,int x2,int y2,int thickness,Vec3 color){
@@ -224,19 +255,21 @@ void drawColoredTexturePolygon(DrawSurface* surface,Texture* texture,Vec2* textu
 	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color,n_point);
 }
 
-void drawColoredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
-    void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec3*,Vec3*,LightmapTree*) = {
+void drawColoredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap,int n_vertex){
+    void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec3*,Vec3*,LightmapTree*,int) = {
 		[RENDER_BACKEND_SOFTWARE] = spanQuad3dLightingTextureAdd,
         [RENDER_BACKEND_GL] = drawColoredTexturePolygon3dGL,
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
         return;
-	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color,lightmap);
+	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color,lightmap,n_vertex);
 }
 
 void drawSkyboxPolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
     void (*vtable[])(DrawSurface*,Texture*,Vec2*,Vec3*,Vec3*,LightmapTree*) = {
+#if 0
 		[RENDER_BACKEND_SOFTWARE] = spanQuad3dLightingTextureAdd,
+#endif
         [RENDER_BACKEND_GL] = drawColoredTextureSkyboxPolygon3dGL,
 #if !defined(__wasm__) && !defined(__linux__)
         
@@ -350,8 +383,6 @@ void setScanline(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size){
 		p_end = size;
 	}
 
-    Ray2 ray = initRay2(vec2Shl(pos_1,FIXED_PRECISION),vec2Direction(vec2Shl(pos_1,FIXED_PRECISION),vec2Shl(pos_2,FIXED_PRECISION)));
-
     while(p_begin < p_end){
         scanline.begin[p_begin] = tMin(scanline.begin[p_begin],delta_pos >> FIXED_PRECISION);
         scanline.end[p_begin] = tMax(scanline.end[p_begin],delta_pos >> FIXED_PRECISION);
@@ -359,7 +390,7 @@ void setScanline(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size){
         p_begin += 1;
     }
 }
-
+#include "octree_render.h"
 void setScanlineDDA(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size){
     if(pos_1.x > pos_2.x){
         Vec2 tmp_pos = pos_1;
@@ -370,7 +401,7 @@ void setScanlineDDA(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size){
     int p_begin = pos_1.x;
     int p_end = pos_2.x;
     int delta = (pos_2.y - pos_1.y << FIXED_PRECISION) / (pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
-    int delta_pos = (pos_1.y << FIXED_PRECISION);
+    int delta_pos = (pos_1.y << FIXED_PRECISION) + FIXED_ONE / 2;
 
     if(p_end < 0)
 		return;
@@ -387,8 +418,8 @@ void setScanlineDDA(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size){
     Ray2 ray = initRay2(vec2Shl(pos_1,FIXED_PRECISION),vec2Direction(vec2Shl(pos_1,FIXED_PRECISION),vec2Shl(pos_2,FIXED_PRECISION)));
 
     for(int i = tAbs(pos_1.x - pos_2.x) + tAbs(pos_1.y - pos_2.y);i--;){
-        int x = tClamp(ray.square_pos.x,0,size);
-        int y = tClamp(ray.square_pos.y,0,size);
+        int x = tClamp(ray.square_pos.x,0,size - 1);
+        int y = tClamp(ray.square_pos.y,0,size - 1);
         scanline.begin[x] = tMin(scanline.begin[x],y);
         scanline.end[x] = tMax(scanline.end[x],y);
         iterateRay2(&ray);
@@ -544,3 +575,5 @@ bool occlusionBufferHidden(DrawSurface* surface,Vec3* coordinats){
     }
     return checked;
 }
+
+

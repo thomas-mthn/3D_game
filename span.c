@@ -736,6 +736,9 @@ static int polygonClipProject(DrawSurface* surface,Vec3* polygon,Vec3* polygon_2
             if(lighting_coordinates_2d)
                 lighting_coordinates_2d[quad_ptr] = lighting_coordinates[i];
             quad_ptr += 1;
+            //bandage fix
+            if(quad_ptr == countof(quad_new))
+                break;
             if(view_z[(i + 1) % 4] <= z_offset){
                 quad_new[quad_ptr] = polygonPositionNew(d_point[i],d_point[i_next],texture_coordinates ? &mix_value : 0,z_offset);
                 if(texture_coordinates)
@@ -743,6 +746,9 @@ static int polygonClipProject(DrawSurface* surface,Vec3* polygon,Vec3* polygon_2
                 if(lighting_coordinates_2d)
                     lighting_coordinates_2d[quad_ptr] = vec2Mix(lighting_coordinates[i],lighting_coordinates[i_next],mix_value);
                 quad_ptr += 1;
+                //bandage fix
+                if(quad_ptr == countof(quad_new))
+                    break;
             }
         }
         else{
@@ -753,6 +759,9 @@ static int polygonClipProject(DrawSurface* surface,Vec3* polygon,Vec3* polygon_2
                 if(lighting_coordinates_2d)
                     lighting_coordinates_2d[quad_ptr] = vec2Mix(lighting_coordinates[i_next],lighting_coordinates[i],mix_value);
                 quad_ptr += 1;
+                //bandage fix
+                if(quad_ptr == countof(quad_new))
+                    break;
             }
         }
     }
@@ -1033,8 +1042,8 @@ void spanQuad3dTextureAdd(DrawSurface* surface,Texture* texture,Vec2* texture_co
         span->interpolate_end = FIXED_ONE;
     }
 }
-#include "console.h"
-void spanQuad3dLightingTextureAdd(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
+
+void spanQuad3dLightingTextureAdd(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap,int n_vertex){
     if(!lightmap){
         spanQuad3dTextureAdd(surface,texture,texture_coordinats,coordinats,vec3Single(FIXED_ONE << 4),4);
         return;
@@ -1042,7 +1051,7 @@ void spanQuad3dLightingTextureAdd(DrawSurface* surface,Texture* texture,Vec2* te
     Vec3 coords_2d[5];
     Vec2 texture_coordinats_2d[5];
     Vec2 color_coordinats_2d[5];
-    int n_vertex = polygonClipProject(surface,coordinats,coords_2d,texture_coordinats,texture_coordinats_2d,color_coordinats_2d);
+    n_vertex = polygonClipProject(surface,coordinats,coords_2d,texture_coordinats,texture_coordinats_2d,color_coordinats_2d);
     if(!n_vertex)
         return;
 

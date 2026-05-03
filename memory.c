@@ -14,7 +14,11 @@
 
 #endif
 
-#define OS_BACKED defined(__linux__) || defined(_MSC_VER)
+#if defined(__linux__) || defined(_MSC_VER)
+#define OS_BACKED true
+#else
+#define OS_BACKED false
+#endif
 
 MemoryArena g_arena_frame = {.min_capacity = 0x1000000};
 
@@ -58,7 +62,7 @@ void* virtualAllocate(size_t size){
 #elif defined(__linux__)
     return systemMemoryMap(0,size,PROT_READ | PROT_WRITE,MAP_PRIVATE | MAP_ANONYMOUS,-1,0);
 #elif defined(_MSC_VER)
-    void* mem = VirtualAlloc(0,size,MEM_COMMIT | MEM_RESERVE,PAGE_READWRITE);;
+    void* mem = VirtualAlloc(0,size,MEM_COMMIT | MEM_RESERVE,PAGE_READWRITE);
     if(!mem)
         errorBox();
     return mem;

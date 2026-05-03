@@ -9,7 +9,6 @@
 #if !defined(__wasm__) && !defined(__linux__)
 #include "win32/w_kernel.h"
 #include "win32/w_main.h"
-#include "win32/w_opencl.h"
 #include <immintrin.h>
 #endif
 

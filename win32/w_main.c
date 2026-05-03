@@ -1,8 +1,6 @@
 #include "w_main.h"
 #include "w_kernel.h"
 #include "w_user.h"
-#include "w_audio.h"
-#include "w_opencl.h"
 
 #include "../main.h"
 #include "../memory.h"
@@ -44,7 +42,7 @@ static Vec2 getCursorPosition(void){
 static unsigned getTick(void){
     unsigned count[2];
     QueryPerformanceCounter(count);
-    count[0] /= (frequency / N_TICK_BASE / N_TICK_MODIFIER);
+    count[0] /= (frequency / N_TICK_BASE / N_TICK_MODIFIER / 4);
     return count[0];
 }
 
@@ -67,12 +65,12 @@ static void cursorClipAndHide(void){
 	showCursor(false);
 }
 
-void win32OctreeSerialize(Voxel* root_voxel){
+void win32OctreeSerialize(Voxel* root_voxel,char* path){
 	int voxel_mem_count = voxelMemoryCountRecursive(root_voxel);
 	int voxel_count = voxelChildCountRecursive(root_voxel);
 	VoxelSerialized* voxel_diskdata = virtualAllocate(sizeof(voxel_count) + voxel_mem_count);
 	octreeSerialize(voxel_diskdata,root_voxel);
-	void* file = CreateFileA("world/world_1.octvxl",GENERIC_WRITE,0,0,CREATE_ALWAYS,0,0);
+	void* file = CreateFileA(path,GENERIC_WRITE,0,0,CREATE_ALWAYS,0,0);
 	WriteFile(file,&voxel_count,sizeof voxel_count,0,0);
 	WriteFile(file,voxel_diskdata,voxel_mem_count,0,0);
 	CloseHandle(file);
@@ -105,17 +103,19 @@ Voxel* win32LoadModel(char* path){
 }
 
 FileContent win32FileRead(char* file_name){
-    int file = CreateFileA(file_name,GENERIC_READ,0,0,OPEN_EXISTING,0,0);
+    void* file = CreateFileA(file_name,GENERIC_READ,0,0,OPEN_EXISTING,0,0);
 
-	if(file < 0)
+	if(!file)
 		return (FileContent){0};
     
 	unsigned file_size = GetFileSize(file,0);
 	char* content = virtualAllocate(file_size);
+
+	ReadFile(file,content,file_size,0,0);
+	CloseHandle(file);
     
 	return (FileContent){.content = content,.size = file_size};
 }
-
 
 static Lresult stdcall windowMessageHandler(void* window,unsigned msg,Wparam wparam,Lparam lparam){
     switch(msg){
@@ -132,7 +132,6 @@ static Lresult stdcall windowMessageHandler(void* window,unsigned msg,Wparam wpa
 					ShowWindow(g_window,IsZoomed(g_window) ? SW_NORMAL : SW_MAXIMIZE);
 				} break;
 			}
-			keyPress(wparam);
 		} break;
 		case WM_MBUTTONDOWN:{
 			mButtonDown();
@@ -324,6 +323,8 @@ static unsigned stdcall audioThread(void* arg){
 
 Texture win32LoadImage(char* path){
 	void* image_file = LoadImageA(0,path,IMAGE_BITMAP,0,0,LR_LOADFROMFILE | LR_CREATEDIBSECTION);
+	if(!image_file)	
+		return (Texture){0};
     Bitmap bmp;
     GetObjectA(image_file,sizeof(Bitmap),&bmp);
 	int size = bmp.bmWidth;
@@ -372,14 +373,15 @@ int main(void){
 
 	g_hand_model = win32LoadModel("model/hand.octvxl");
 
-	audioInit();
+	if(g_options.audio){
+		audioInit();	
+		CreateThread(0,0,audioThread,0,0,0);
+	}
 
     unsigned frequency_buffer[2];
     QueryPerformanceFrequency(frequency_buffer);
 	frequency = frequency_buffer[0];
 	int prev_tick = getTick();
-
-	CreateThread(0,0,audioThread,0,0,0);
 
 	for(;;){
 		while(PeekMessageA(&msg,g_window,0,0,0)){
@@ -391,7 +393,7 @@ int main(void){
 			Sleep(1);
 			continue;
 		}
-
+		
 		if(GetForegroundWindow() == g_window){
             g_cursor = getCursorPosition();
         }

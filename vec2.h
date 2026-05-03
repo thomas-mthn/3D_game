@@ -73,7 +73,7 @@ static int vec2Length(Vec2 v){
 static Vec2 vec2Normalize(Vec2 v){
     int length = tInverseSqrt(fixedMulR(v.x,v.x) + fixedMulR(v.y,v.y));
     if(!length)
-        return v;
+        return (Vec2){0};
     v = vec2MulS(v,length);
     return v;
 }

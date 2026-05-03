@@ -566,70 +566,32 @@ void deleteTextureGL(unsigned texture){
 }
 
 void drawColoredPolygonGL(DrawSurface* surface,Vec2* coordinats,Vec3* color,int n_point){
-	if(modern_gl){
-		if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
-			batchDraw();
-			current_shaderprogram = &shader_lighting_program;
-			buffer_drawtype = GL_TRIANGLES;
-		}
-		float color_div = FIXED_ONE << 4;
-		if(hdr)
-			color_div *= 0.33f;
-		VertexLighting* vertex = (VertexLighting*)(vertex_buffer + vertex_buffer_ptr);
-		vertex[0] = (VertexLighting){
-			.pos = {-(float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color[0].z / color_div,(float)color[0].y / color_div,(float)color[0].x / color_div}
-		};
-		vertex[1] = (VertexLighting){
-			.pos = {-(float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color[1].z / color_div,(float)color[1].y / color_div,(float)color[1].x / color_div}
-		};
-		vertex[2] = (VertexLighting){
-			.pos = {-(float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color[2].z / color_div,(float)color[2].y / color_div,(float)color[2].x / color_div}
-		};
-		vertex[3] = (VertexLighting){
-			.pos = {-(float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color[3].z / color_div,(float)color[3].y / color_div,(float)color[3].x / color_div}
-		};
-		vertex_buffer_ptr += sizeof(VertexLighting) * 4;
-	}
-	else{
-		glBegin(GL_QUADS);
-		glColor3b(convertColor(color[0].x),convertColor(color[0].y),convertColor(color[0].z));
-		glVertex2f((float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE);
-
-		glColor3b(convertColor(color[1].x),convertColor(color[1].y),convertColor(color[1].z));
-		glVertex2f((float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE);
-
-		glColor3b(convertColor(color[2].x),convertColor(color[2].y),convertColor(color[2].z));
-		glVertex2f((float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE);
-
-		glColor3b(convertColor(color[3].x),convertColor(color[3].y),convertColor(color[3].z));
-		glVertex2f((float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE);
-		glEnd();
-	}
+    if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
+        batchDraw();
+        current_shaderprogram = &shader_lighting_program;
+        buffer_drawtype = GL_TRIANGLES;
+    }
+    float color_div = FIXED_ONE << 4;
+    if(hdr)
+        color_div *= 0.33f;
+    VertexLighting* vertex = (VertexLighting*)(vertex_buffer + vertex_buffer_ptr);
+    for(int i = 4;i--;){
+        vertex[i] = (VertexLighting){
+            .pos = {-(float)coordinats[i].y / FIXED_ONE,-(float)coordinats[i].x / FIXED_ONE,1.0f},
+            .lighting = {(float)color[i].z / color_div,(float)color[i].y / color_div,(float)color[i].x / color_div}
+        };
+    }
+    vertex_buffer_ptr += sizeof(VertexLighting) * 4;
 }
 
 void drawPolygonGL(DrawSurface* surface,Vec2* coordinats,int n_point,Vec3 color){
-	if(modern_gl){
-		Vec3 gl_color[] = {
-			color,
-			color,
-			color,
-			color,
-		};
-		drawColoredPolygonGL(surface,coordinats,gl_color,n_point);
-	}
-	else{
-		glBegin(GL_QUADS);
-		glColor3b(convertColor(color.x),convertColor(color.y),convertColor(color.z));
-		glVertex2f((float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE);
-		glVertex2f((float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE);
-		glVertex2f((float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE);
-		glVertex2f((float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE);
-		glEnd();
-	}
+    Vec3 gl_color[] = {
+        color,
+        color,
+        color,
+        color,
+    };
+    drawColoredPolygonGL(surface,coordinats,gl_color,n_point);
 }
 
 void drawColoredPolygon3dGL(DrawSurface* surface,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
@@ -645,70 +607,32 @@ void drawColoredPolygon3dGL(DrawSurface* surface,Vec3* coordinats,Vec3* color,Li
 		{point_2[3].x,point_2[3].y,point_2[3].z},
 		{point_2[2].x,point_2[2].y,point_2[2].z}
 	};
-	if(modern_gl){
-		if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
-			batchDraw();
-			current_shaderprogram = &shader_lighting_program;
-			buffer_drawtype = GL_TRIANGLES;
-		}
-		float color_div = FIXED_ONE << 4;
-		if(hdr)
-			color_div *= 0.33f;
-		VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
-		vertex[0] = (VertexLighting){
-			.pos = {-(float)d_point[0].y / FIXED_ONE,-(float)d_point[0].x / FIXED_ONE,(float)d_point[0].z / FIXED_ONE},
-			.lighting = {(float)color[0].z / color_div,(float)color[0].y / color_div,(float)color[0].x / color_div},
-		};
-		vertex[1] = (VertexLighting){
-			.pos = {-(float)d_point[1].y / FIXED_ONE,-(float)d_point[1].x / FIXED_ONE,(float)d_point[1].z / FIXED_ONE},
-			.lighting = {(float)color[1].z / color_div,(float)color[1].y / color_div,(float)color[1].x / color_div},
-		};
-		vertex[2] = (VertexLighting){
-			.pos = {-(float)d_point[2].y / FIXED_ONE,-(float)d_point[2].x / FIXED_ONE,(float)d_point[2].z / FIXED_ONE},
-			.lighting = {(float)color[2].z / color_div,(float)color[2].y / color_div,(float)color[2].x / color_div},
-		};
-		vertex[3] = (VertexLighting){
-			.pos = {-(float)d_point[3].y / FIXED_ONE,-(float)d_point[3].x / FIXED_ONE,(float)d_point[3].z / FIXED_ONE},
-			.lighting = {(float)color[3].z / color_div,(float)color[3].y / color_div,(float)color[3].x / color_div},
-		};
-		vertex_buffer_ptr += sizeof(VertexLighting) * 4;
-	}
-	else{
-		glBegin(GL_QUADS);
-		glColor3b(convertColor(color[0].x),convertColor(color[0].y),convertColor(color[0].z));
-		glVertex2f((float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE);
-
-		glColor3b(convertColor(color[1].x),convertColor(color[1].y),convertColor(color[1].z));
-		glVertex2f((float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE);
-
-		glColor3b(convertColor(color[2].x),convertColor(color[2].y),convertColor(color[2].z));
-		glVertex2f((float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE);
-
-		glColor3b(convertColor(color[3].x),convertColor(color[3].y),convertColor(color[3].z));
-		glVertex2f((float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE);
-		glEnd();
-	}
+    if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
+        batchDraw();
+        current_shaderprogram = &shader_lighting_program;
+        buffer_drawtype = GL_TRIANGLES;
+    }
+    float color_div = FIXED_ONE << 4;
+    if(hdr)
+        color_div *= 0.33f;
+    VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
+    for(int i = 4;i--;){
+        vertex[i] = (VertexLighting){
+            .pos = {-(float)d_point[i].y / FIXED_ONE,-(float)d_point[i].x / FIXED_ONE,(float)d_point[i].z / FIXED_ONE},
+            .lighting = {(float)color[i].z / color_div,(float)color[i].y / color_div,(float)color[i].x / color_div},
+        };
+    }
+    vertex_buffer_ptr += sizeof(VertexLighting) * 4;
 }
 
 void drawPolygon3dGL(DrawSurface* surface,Vec3* coordinats,Vec3 color){
-	if(modern_gl){
-		Vec3 gl_color[] = {
-			color,
-			color,
-			color,
-			color,
-		};
-		drawColoredPolygon3dGL(surface,coordinats,gl_color,0);
-	}
-	else{
-		glBegin(GL_QUADS);
-		glColor3b(convertColor(color.x),convertColor(color.y),convertColor(color.z));
-		glVertex2f((float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE);
-		glVertex2f((float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE);
-		glVertex2f((float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE);
-		glVertex2f((float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE);
-		glEnd();
-	}
+    Vec3 gl_color[] = {
+        color,
+        color,
+        color,
+        color,
+    };
+    drawColoredPolygon3dGL(surface,coordinats,gl_color,0);
 }
 
 static bool anisotropic;
@@ -734,16 +658,11 @@ void textureUpdateGL(Texture* texture){
 static void textureUpload(Texture* texture){
 	glGenTextures(1,&texture->gl_id);
 	glBindTexture(GL_TEXTURE_2D,texture->gl_id);
-	if(modern_gl){
-		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST_MIPMAP_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_REPEAT);
-	}
-	else{
-		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-	}
+
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_REPEAT);
 		
 	if(anisotropic)
 		glTexParameterf(GL_TEXTURE_2D,GL_TEXTURE_MAX_ANISOTROPY_EXT,anisotropic_max);
@@ -757,65 +676,64 @@ void drawTexturePolygonGL(DrawSurface* surface,Texture* texture,Vec2* texture_co
 	else
 		glBindTexture(GL_TEXTURE_2D,texture->gl_id);
 
-	if(modern_gl){
-		if(current_shaderprogram != &shader_texture_lighting_program || current_texture != texture->gl_id || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightingTexture) * 4 || buffer_drawtype != GL_TRIANGLES){
-			batchDraw();
-			current_texture = texture->gl_id;
-			current_shaderprogram = &shader_texture_lighting_program;
-			buffer_drawtype = GL_TRIANGLES;
-		}
-		float color_div = FIXED_ONE << 4;
-		if(hdr)
-			color_div *= 0.33f;
-		VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
-		vertex[0] = (VertexLightingTexture){
-			.pos = {-(float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
-			.texture_pos = {(float)texture_coordinats[0].x / FIXED_ONE,(float)texture_coordinats[0].y / FIXED_ONE}
-		};
-		vertex[1] = (VertexLightingTexture){
-			.pos = {-(float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
-			.texture_pos = {(float)texture_coordinats[1].x / FIXED_ONE,(float)texture_coordinats[1].y / FIXED_ONE}
-		};
-		vertex[2] = (VertexLightingTexture){
-			.pos = {-(float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
-			.texture_pos = {(float)texture_coordinats[2].x / FIXED_ONE,(float)texture_coordinats[2].y / FIXED_ONE}
-		};
-		vertex[3] = (VertexLightingTexture){
-			.pos = {-(float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
-			.texture_pos = {(float)texture_coordinats[3].x / FIXED_ONE,(float)texture_coordinats[3].y / FIXED_ONE}
-		};
-		vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
-	}
-	else{
-		glEnable(GL_TEXTURE_2D);
-		glBegin(GL_QUADS);
-		glColor3b(convertColor(color.x),convertColor(color.y),convertColor(color.z));
-		glTexCoord2f((float)texture_coordinats[0].x / FIXED_ONE,(float)texture_coordinats[0].y / FIXED_ONE);
-		glVertex2f((float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE);
-
-		glTexCoord2f((float)texture_coordinats[1].x / FIXED_ONE,(float)texture_coordinats[1].y / FIXED_ONE);
-		glVertex2f((float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE);
-
-		glTexCoord2f((float)texture_coordinats[2].x / FIXED_ONE,(float)texture_coordinats[2].y / FIXED_ONE);
-		glVertex2f((float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE);
-
-		glTexCoord2f((float)texture_coordinats[3].x / FIXED_ONE,(float)texture_coordinats[3].y / FIXED_ONE);
-		glVertex2f((float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE);
-		glEnd();
-
-		glDisable(GL_TEXTURE_2D);
-	}
+    if(current_shaderprogram != &shader_texture_lighting_program || current_texture != texture->gl_id || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightingTexture) * 4 || buffer_drawtype != GL_TRIANGLES){
+        batchDraw();
+        current_texture = texture->gl_id;
+        current_shaderprogram = &shader_texture_lighting_program;
+        buffer_drawtype = GL_TRIANGLES;
+    }
+    float color_div = FIXED_ONE << 4;
+    if(hdr)
+        color_div *= 0.33f;
+    VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
+    for(int i = 4;i--;){
+        vertex[i] = (VertexLightingTexture){
+            .pos = {-(float)coordinats[i].y / FIXED_ONE,-(float)coordinats[i].x / FIXED_ONE,1.0f},
+            .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
+            .texture_pos = {(float)texture_coordinats[i].x / FIXED_ONE,(float)texture_coordinats[i].y / FIXED_ONE}
+        };
+    }
+    vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
 }
 
 void drawTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point){
-	if(!texture->gl_id)
+    float color_div = FIXED_ONE << 4;
+    if(hdr)
+        color_div *= 0.33f;
+    if(!texture->gl_id)
 		textureUpload(texture);
 	else
 		glBindTexture(GL_TEXTURE_2D,texture->gl_id);
+    if(n_point != 4){
+        batchDraw();
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
+        current_texture = texture->gl_id;
+        current_shaderprogram = &shader_texture_lighting_program;
+        
+        glBindVertexArray(*current_shaderprogram->vao);
+        glBindTexture(GL_TEXTURE_2D,current_texture);
+        glUseProgram(current_shaderprogram->id);
+        
+        buffer_drawtype = GL_TRIANGLES;
+        VertexLightingTexture vertex[3];
+        Vec3 point_2[3];
+        point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_options.fov);
+        point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_options.fov);
+        point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_options.fov);
+        for(int i = 3;i--;){
+            vertex[i] = (VertexLightingTexture){
+                .pos = {-(float)point_2[i].y / FIXED_ONE,-(float)point_2[i].x / FIXED_ONE,(float)point_2[i].z / FIXED_ONE},
+                .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
+                .texture_pos = {(float)texture_coordinats[i].x / FIXED_ONE,(float)texture_coordinats[i].y / FIXED_ONE}
+            };
+        }
+        vertex_buffer_ptr += sizeof(VertexLightingTexture) * 3;
+        
+        glBufferData(GL_ARRAY_BUFFER,vertex_buffer_ptr,vertex,GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_TRIANGLES,0,3);
+        vertex_buffer_ptr = 0;
+        return;
+    }
 
 	Vec3 point_2[4];
 	point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_options.fov);
@@ -830,124 +748,83 @@ void drawTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_
 		{point_2[2].x,point_2[2].y,point_2[2].z}
 	};
     
-	if(modern_gl){
-		if(current_shaderprogram != &shader_texture_lighting_program || current_texture != texture->gl_id || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightingTexture) * 4 || buffer_drawtype != GL_TRIANGLES){
-			batchDraw();
-			current_texture = texture->gl_id;
-			current_shaderprogram = &shader_texture_lighting_program;
-			buffer_drawtype = GL_TRIANGLES;
-		}
-		float color_div = FIXED_ONE << 4;
-		if(hdr)
-			color_div *= 0.33f;
-		VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
-		vertex[0] = (VertexLightingTexture){
-			.pos = {-(float)d_point[0].y / FIXED_ONE,-(float)d_point[0].x / FIXED_ONE,(float)d_point[0].z / FIXED_ONE},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
-			.texture_pos = {(float)texture_coordinats[0].x / FIXED_ONE,(float)texture_coordinats[0].y / FIXED_ONE}
-		};
-		vertex[1] = (VertexLightingTexture){
-			.pos = {-(float)d_point[1].y / FIXED_ONE,-(float)d_point[1].x / FIXED_ONE,(float)d_point[1].z / FIXED_ONE},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
-			.texture_pos = {(float)texture_coordinats[1].x / FIXED_ONE,(float)texture_coordinats[1].y / FIXED_ONE}
-		};
-		vertex[2] = (VertexLightingTexture){
-			.pos = {-(float)d_point[2].y / FIXED_ONE,-(float)d_point[2].x / FIXED_ONE,(float)d_point[2].z / FIXED_ONE},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
-			.texture_pos = {(float)texture_coordinats[2].x / FIXED_ONE,(float)texture_coordinats[2].y / FIXED_ONE}
-		};
-		vertex[3] = (VertexLightingTexture){
-			.pos = {-(float)d_point[3].y / FIXED_ONE,-(float)d_point[3].x / FIXED_ONE,(float)d_point[3].z / FIXED_ONE},
-			.lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
-			.texture_pos = {(float)texture_coordinats[3].x / FIXED_ONE,(float)texture_coordinats[3].y / FIXED_ONE}
-		};
-		vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
-	}
-	else{
-		glEnable(GL_TEXTURE_2D);
-		glBegin(GL_QUADS);
-		glColor3b(convertColor(color.x),convertColor(color.y),convertColor(color.z));
-		glTexCoord2f((float)texture_coordinats[0].x / FIXED_ONE,(float)texture_coordinats[0].y / FIXED_ONE);
-		glVertex2f((float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE);
-
-		glTexCoord2f((float)texture_coordinats[1].x / FIXED_ONE,(float)texture_coordinats[1].y / FIXED_ONE);
-		glVertex2f((float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE);
-
-		glTexCoord2f((float)texture_coordinats[2].x / FIXED_ONE,(float)texture_coordinats[2].y / FIXED_ONE);
-		glVertex2f((float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE);
-
-		glTexCoord2f((float)texture_coordinats[3].x / FIXED_ONE,(float)texture_coordinats[3].y / FIXED_ONE);
-		glVertex2f((float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE);
-		glEnd();
-
-		glDisable(GL_TEXTURE_2D);
-	}
+    if(current_shaderprogram != &shader_texture_lighting_program || current_texture != texture->gl_id || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightingTexture) * 4 || buffer_drawtype != GL_TRIANGLES){
+        batchDraw();
+        current_texture = texture->gl_id;
+        current_shaderprogram = &shader_texture_lighting_program;
+        buffer_drawtype = GL_TRIANGLES;
+    }
+    VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
+    for(int i = 4;i--;){
+        vertex[i] = (VertexLightingTexture){
+            .pos = {-(float)d_point[i].y / FIXED_ONE,-(float)d_point[i].x / FIXED_ONE,(float)d_point[i].z / FIXED_ONE},
+            .lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
+            .texture_pos = {(float)texture_coordinats[i].x / FIXED_ONE,(float)texture_coordinats[i].y / FIXED_ONE}
+        };
+    }
+    vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
 }
 
 void drawColoredTexturePolygonGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3* color,int n_point){
 	if(!texture->gl_id)
 		textureUpload(texture);
 
-	if(modern_gl){
-		if(current_shaderprogram != &shader_texture_lighting_program || current_texture != texture->gl_id || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightingTexture) * 4 || buffer_drawtype != GL_TRIANGLES){
-			batchDraw();
-			current_texture = texture->gl_id;
-			current_shaderprogram = &shader_texture_lighting_program;
-			buffer_drawtype = GL_TRIANGLES;
-		}
-		float color_div = FIXED_ONE << 4;
-		if(hdr)
-			color_div *= 0.33f;
-		VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
-		vertex[0] = (VertexLightingTexture){
-			.pos = {(float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color[0].x / color_div,(float)color[0].y / color_div,(float)color[0].z / color_div},
-			.texture_pos = {(float)texture_coordinats[0].x / FIXED_ONE,(float)texture_coordinats[0].y / FIXED_ONE}
-		};
-		vertex[1] = (VertexLightingTexture){
-			.pos = {(float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color[1].x / color_div,(float)color[1].y / color_div,(float)color[1].z / color_div},
-			.texture_pos = {(float)texture_coordinats[1].x / FIXED_ONE,(float)texture_coordinats[1].y / FIXED_ONE}
-		};
-		vertex[2] = (VertexLightingTexture){
-			.pos = {(float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color[2].x / color_div,(float)color[2].y / color_div,(float)color[2].z / color_div},
-			.texture_pos = {(float)texture_coordinats[2].x / FIXED_ONE,(float)texture_coordinats[2].y / FIXED_ONE}
-		};
-		vertex[3] = (VertexLightingTexture){
-			.pos = {(float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color[3].x / color_div,(float)color[3].y / color_div,(float)color[3].z / color_div},
-			.texture_pos = {(float)texture_coordinats[3].x / FIXED_ONE,(float)texture_coordinats[3].y / FIXED_ONE}
-		};
-		vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
-	}
-	else{
-		glEnable(GL_TEXTURE_2D);
-		glBindTexture(GL_TEXTURE_2D,texture->gl_id);
-		glBegin(GL_QUADS);
-		glColor3b(convertColor(color[0].x),convertColor(color[0].y),convertColor(color[0].z));
-		glTexCoord2f((float)texture_coordinats[0].x / FIXED_ONE,(float)texture_coordinats[0].y / FIXED_ONE);
-		glVertex2f((float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE);
-
-		glColor3b(convertColor(color[1].x),convertColor(color[1].y),convertColor(color[1].z));
-		glTexCoord2f((float)texture_coordinats[1].x / FIXED_ONE,(float)texture_coordinats[1].y / FIXED_ONE);
-		glVertex2f((float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE);
-
-		glColor3b(convertColor(color[2].x),convertColor(color[2].y),convertColor(color[2].z));
-		glTexCoord2f((float)texture_coordinats[2].x / FIXED_ONE,(float)texture_coordinats[2].y / FIXED_ONE);
-		glVertex2f((float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE);
-
-		glColor3b(convertColor(color[3].x),convertColor(color[3].y),convertColor(color[3].z));
-		glTexCoord2f((float)texture_coordinats[3].x / FIXED_ONE,(float)texture_coordinats[3].y / FIXED_ONE);
-		glVertex2f((float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE);
-		glEnd();
-		glDisable(GL_TEXTURE_2D);
-	}
+    if(current_shaderprogram != &shader_texture_lighting_program || current_texture != texture->gl_id || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightingTexture) * 4 || buffer_drawtype != GL_TRIANGLES){
+        batchDraw();
+        current_texture = texture->gl_id;
+        current_shaderprogram = &shader_texture_lighting_program;
+        buffer_drawtype = GL_TRIANGLES;
+    }
+    float color_div = FIXED_ONE << 4;
+    if(hdr)
+        color_div *= 0.33f;
+    VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
+    for(int i = 4;i--;){
+        vertex[i] = (VertexLightingTexture){
+            .pos = {(float)coordinats[i].y / FIXED_ONE,-(float)coordinats[i].x / FIXED_ONE,1.0f},
+            .lighting = {(float)color[i].x / color_div,(float)color[i].y / color_div,(float)color[i].z / color_div},
+            .texture_pos = {(float)texture_coordinats[i].x / FIXED_ONE,(float)texture_coordinats[i].y / FIXED_ONE}
+        };
+    }
+    vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
 }
 
-static void coloredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,ShaderProgram* shader_program){
-	if(!texture->gl_id)
+static void coloredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,ShaderProgram* shader_program,int n_vertex){
+    float color_div = FIXED_ONE << 4;
+    if(hdr)
+        color_div *= 0.25f;
+    if(!texture->gl_id)
 		textureUpload(texture);
+    if(n_vertex != 4){
+        batchDraw();
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,0);
+        current_texture = texture->gl_id;
+        current_shaderprogram = &shader_texture_lighting_program;
+        
+        glBindVertexArray(*current_shaderprogram->vao);
+        glBindTexture(GL_TEXTURE_2D,current_texture);
+        glUseProgram(current_shaderprogram->id);
+        
+        buffer_drawtype = GL_TRIANGLES;
+        VertexLightingTexture vertex[3];
+        Vec3 point_2[3];
+        point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_options.fov);
+        point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_options.fov);
+        point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_options.fov);
+        for(int i = 3;i--;){
+            vertex[i] = (VertexLightingTexture){
+                .pos = {-(float)point_2[i].y / FIXED_ONE,-(float)point_2[i].x / FIXED_ONE,(float)point_2[i].z / FIXED_ONE},
+                .lighting = {(float)color[i].x / color_div,(float)color[i].y / color_div,(float)color[i].z / color_div},
+                .texture_pos = {(float)texture_coordinats[i].x / FIXED_ONE,(float)texture_coordinats[i].y / FIXED_ONE}
+            };
+        }
+        vertex_buffer_ptr += sizeof(VertexLightingTexture) * 3;
+        
+        glBufferData(GL_ARRAY_BUFFER,vertex_buffer_ptr,vertex,GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_TRIANGLES,0,3);
+        vertex_buffer_ptr = 0;
+        return;
+    }
     Vec3 point_2[4];
 	point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_options.fov);
 	point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_options.fov);
@@ -961,217 +838,108 @@ static void coloredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* 
 		{point_2[2].x,point_2[2].y,point_2[2].z}
 	};
     
-	if(modern_gl){
-		if(current_shaderprogram != shader_program || current_texture != texture->gl_id || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightingTexture) * 4 || buffer_drawtype != GL_TRIANGLES){
-			batchDraw();
-			current_texture = texture->gl_id;
-			current_shaderprogram = shader_program;
-			buffer_drawtype = GL_TRIANGLES;
-		}
-		float color_div = FIXED_ONE << 4;
-		if(hdr)
-			color_div *= 0.25f;
-		VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
-		vertex[0] = (VertexLightingTexture){
-			.pos = {-(float)d_point[0].y / FIXED_ONE,-(float)d_point[0].x / FIXED_ONE,(float)d_point[0].z / FIXED_ONE},
-			.lighting = {(float)color[0].z / color_div,(float)color[0].y / color_div,(float)color[0].x / color_div},
-			.texture_pos = {(float)texture_coordinats[0].x / FIXED_ONE,(float)texture_coordinats[0].y / FIXED_ONE},
-		};
-		vertex[1] = (VertexLightingTexture){
-			.pos = {-(float)d_point[1].y / FIXED_ONE,-(float)d_point[1].x / FIXED_ONE,(float)d_point[1].z / FIXED_ONE},
-			.lighting = {(float)color[1].z / color_div,(float)color[1].y / color_div,(float)color[1].x / color_div},
-			.texture_pos = {(float)texture_coordinats[1].x / FIXED_ONE,(float)texture_coordinats[1].y / FIXED_ONE},
-		};
-		vertex[2] = (VertexLightingTexture){
-			.pos = {-(float)d_point[2].y / FIXED_ONE,-(float)d_point[2].x / FIXED_ONE,(float)d_point[2].z / FIXED_ONE},
-			.lighting = {(float)color[2].z / color_div,(float)color[2].y / color_div,(float)color[2].x / color_div},
-			.texture_pos = {(float)texture_coordinats[2].x / FIXED_ONE,(float)texture_coordinats[2].y / FIXED_ONE},
-		};
-		vertex[3] = (VertexLightingTexture){
-			.pos = {-(float)d_point[3].y / FIXED_ONE,-(float)d_point[3].x / FIXED_ONE,(float)d_point[3].z / FIXED_ONE},
-			.lighting = {(float)color[3].z / color_div,(float)color[3].y / color_div,(float)color[3].x / color_div},
-			.texture_pos = {(float)texture_coordinats[3].x / FIXED_ONE,(float)texture_coordinats[3].y / FIXED_ONE},
-		};
-		vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
-	}
-	else{
-		glEnable(GL_TEXTURE_2D);
-		glBindTexture(GL_TEXTURE_2D,texture->gl_id);
-		glBegin(GL_QUADS);
-		glColor3b(convertColor(color[0].x),convertColor(color[0].y),convertColor(color[0].z));
-		glTexCoord2f((float)texture_coordinats[0].x / FIXED_ONE,(float)texture_coordinats[0].y / FIXED_ONE);
-		glVertex4f((float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE,0.0f,(float)coordinats[0].z / FIXED_ONE);
-
-		glColor3b(convertColor(color[1].x),convertColor(color[1].y),convertColor(color[1].z));
-		glTexCoord2f((float)texture_coordinats[1].x / FIXED_ONE,(float)texture_coordinats[1].y / FIXED_ONE);
-		glVertex4f((float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE,0.0f,(float)coordinats[1].z / FIXED_ONE);
-
-		glColor3b(convertColor(color[2].x),convertColor(color[2].y),convertColor(color[2].z));
-		glTexCoord2f((float)texture_coordinats[2].x / FIXED_ONE,(float)texture_coordinats[2].y / FIXED_ONE);
-		glVertex4f((float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE,0.0f,(float)coordinats[2].z / FIXED_ONE);
-
-		glColor3b(convertColor(color[3].x),convertColor(color[3].y),convertColor(color[3].z));
-		glTexCoord2f((float)texture_coordinats[3].x / FIXED_ONE,(float)texture_coordinats[3].y / FIXED_ONE);
-		glVertex4f((float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE,0.0f,(float)coordinats[3].z / FIXED_ONE);
-		glEnd();
-		glDisable(GL_TEXTURE_2D);
-	}
+    if(current_shaderprogram != shader_program || current_texture != texture->gl_id || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightingTexture) * 4 || buffer_drawtype != GL_TRIANGLES){
+        batchDraw();
+        current_texture = texture->gl_id;
+        current_shaderprogram = shader_program;
+        buffer_drawtype = GL_TRIANGLES;
+    }
+    VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
+    for(int i = 4;i--;){
+        vertex[i] = (VertexLightingTexture){
+            .pos = {-(float)d_point[i].y / FIXED_ONE,-(float)d_point[i].x / FIXED_ONE,(float)d_point[i].z / FIXED_ONE},
+            .lighting = {(float)color[i].z / color_div,(float)color[i].y / color_div,(float)color[i].x / color_div},
+            .texture_pos = {(float)texture_coordinats[i].x / FIXED_ONE,(float)texture_coordinats[i].y / FIXED_ONE},
+        };
+    }
+    vertex_buffer_ptr += sizeof(VertexLightingTexture) * 4;
 }
 
-void drawColoredTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
-	coloredTexturePolygon3d(surface,texture,texture_coordinats,coordinats,color,&shader_texture_lighting_program);
+void drawColoredTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap,int n_vertex){
+	coloredTexturePolygon3d(surface,texture,texture_coordinats,coordinats,color,&shader_texture_lighting_program,n_vertex);
 }
 
 void drawColoredTextureSkyboxPolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
-	coloredTexturePolygon3d(surface,texture,texture_coordinats,coordinats,color,&shader_skybox_program);
+	coloredTexturePolygon3d(surface,texture,texture_coordinats,coordinats,color,&shader_skybox_program,4);
 }
 
 void drawLineGL(DrawSurface* surface,int x1,int y1,int x2,int y2,Vec3 color){
-	if(modern_gl){
-		if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 2 || buffer_drawtype != GL_LINES){
-			batchDraw();
-			current_shaderprogram = &shader_lighting_program;
-			buffer_drawtype = GL_LINES;
-		}
-		float color_div = FIXED_ONE << 4;
-		VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
-		vertex[0] = (VertexLighting){
-			.pos = {-(float)y1 / FIXED_ONE,-(float)x1 / FIXED_ONE,1.0f},
-			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
-		};
-		vertex[1] = (VertexLighting){
-			.pos = {-(float)y2 / FIXED_ONE,-(float)x2 / FIXED_ONE,1.0f},
-			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
-		};
-		vertex_buffer_ptr += sizeof(VertexLighting) * 2;
-	}
-	else{
-		glBegin(GL_LINES);
-		glColor3b(convertColor(color.x),convertColor(color.y),convertColor(color.z));
-		glVertex2f((float)y1 / FIXED_ONE,-(float)x1 / FIXED_ONE);
-		glVertex2f((float)y2 / FIXED_ONE,-(float)x2 / FIXED_ONE);
-		glEnd();
-	}
+    if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 2 || buffer_drawtype != GL_LINES){
+        batchDraw();
+        current_shaderprogram = &shader_lighting_program;
+        buffer_drawtype = GL_LINES;
+    }
+    float color_div = FIXED_ONE << 4;
+    VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
+    vertex[0] = (VertexLighting){
+        .pos = {-(float)y1 / FIXED_ONE,-(float)x1 / FIXED_ONE,1.0f},
+        .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
+    };
+    vertex[1] = (VertexLighting){
+        .pos = {-(float)y2 / FIXED_ONE,-(float)x2 / FIXED_ONE,1.0f},
+        .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
+    };
+    vertex_buffer_ptr += sizeof(VertexLighting) * 2;
 }
 
 void drawSegmentGL(DrawSurface* surface,int x1,int y1,int x2,int y2,int thickness,Vec3 color){
-	if(modern_gl){
-		if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
-			batchDraw();
-			current_shaderprogram = &shader_lighting_program;
-			buffer_drawtype = GL_TRIANGLES;
-		}
-		float color_div = FIXED_ONE << 4;
-		VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
-		Vec2 direction = vec2Direction((Vec2){x1 << 8,y1 << 8},(Vec2){x2 << 8,y2 << 8});
+    if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
+        batchDraw();
+        current_shaderprogram = &shader_lighting_program;
+        buffer_drawtype = GL_TRIANGLES;
+    }
+    float color_div = FIXED_ONE << 4;
+    VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
+    Vec2 direction = vec2Direction((Vec2){x1 << 8,y1 << 8},(Vec2){x2 << 8,y2 << 8});
         
-        Vec2 quad[] = {
-			vec2Add((Vec2){x1,y1},vec2MulS(vec2Rotate(direction,FIXED_ONE / 8 * 3),thickness)),
-			vec2Add((Vec2){x1,y1},vec2MulS(vec2Rotate(direction,FIXED_ONE / 8 * 5),thickness)),
-			vec2Add((Vec2){x2,y2},vec2MulS(vec2Rotate(direction,FIXED_ONE / 8 * 1),thickness)),
-			vec2Add((Vec2){x2,y2},vec2MulS(vec2Rotate(direction,FIXED_ONE / 8 * 7),thickness)),
-		};
-		vertex[0] = (VertexLighting){
-			.pos = {-(float)quad[0].y / FIXED_ONE,-(float)quad[0].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
-		};
-		vertex[1] = (VertexLighting){
-			.pos = {-(float)quad[1].y / FIXED_ONE,-(float)quad[1].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
-		};
-		vertex[2] = (VertexLighting){
-			.pos = {-(float)quad[3].y / FIXED_ONE,-(float)quad[3].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
-		};
-		vertex[3] = (VertexLighting){
-			.pos = {-(float)quad[2].y / FIXED_ONE,-(float)quad[2].x / FIXED_ONE,1.0f},
-			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
-		};
-		vertex_buffer_ptr += sizeof(VertexLighting) * 4;
-	}
-	else{
-		glBegin(GL_LINES);
-		glColor3b(convertColor(color.x),convertColor(color.y),convertColor(color.z));
-		glVertex2f((float)y1 / FIXED_ONE,-(float)x1 / FIXED_ONE);
-		glVertex2f((float)y2 / FIXED_ONE,-(float)x2 / FIXED_ONE);
-		glEnd();
-	}
+    Vec2 quad[] = {
+        vec2Add((Vec2){x1,y1},vec2MulS(vec2Rotate(direction,FIXED_ONE / 8 * 3),thickness)),
+        vec2Add((Vec2){x1,y1},vec2MulS(vec2Rotate(direction,FIXED_ONE / 8 * 5),thickness)),
+        vec2Add((Vec2){x2,y2},vec2MulS(vec2Rotate(direction,FIXED_ONE / 8 * 7),thickness)),
+        vec2Add((Vec2){x2,y2},vec2MulS(vec2Rotate(direction,FIXED_ONE / 8 * 1),thickness)),
+    };
+    for(int i = 4;i--;){
+        vertex[i] = (VertexLighting){
+            .pos = {-(float)quad[i].y / FIXED_ONE,-(float)quad[i].x / FIXED_ONE,1.0f},
+            .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
+        };
+    }
+    vertex_buffer_ptr += sizeof(VertexLighting) * 4;
 }
 
 void drawSegment3dGL(DrawSurface* surface,Vec3* coordinats,int thickness,Vec3 color){
-	if(modern_gl){
-		if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
-			batchDraw();
-			current_shaderprogram = &shader_lighting_program;
-			buffer_drawtype = GL_TRIANGLES;
-		}
-		float color_div = FIXED_ONE << 4;
-		VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
-		vertex[0] = (VertexLighting){
-			.pos = {-(float)coordinats[0].y / FIXED_ONE,-(float)coordinats[0].x / FIXED_ONE,(float)coordinats[0].z / FIXED_ONE},
-			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
-		};
-		vertex[1] = (VertexLighting){
-			.pos = {-(float)coordinats[1].y / FIXED_ONE,-(float)coordinats[1].x / FIXED_ONE,(float)coordinats[1].z / FIXED_ONE},
-			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
-		};
-		vertex[2] = (VertexLighting){
-			.pos = {-(float)coordinats[2].y / FIXED_ONE,-(float)coordinats[2].x / FIXED_ONE,(float)coordinats[2].z / FIXED_ONE},
-			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
-		};
-		vertex[3] = (VertexLighting){
-			.pos = {-(float)coordinats[3].y / FIXED_ONE,-(float)coordinats[3].x / FIXED_ONE,(float)coordinats[3].z / FIXED_ONE},
-			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
-		};
-		vertex_buffer_ptr += sizeof(VertexLighting) * 4;
-	}
-	else{
-		/*
-		glBegin(GL_LINES);
-		glColor3b(convertColor(color.x),convertColor(color.y),convertColor(color.z));
-		glVertex2f((float)y1 / FIXED_ONE,-(float)x1 / FIXED_ONE);
-		glVertex2f((float)y2 / FIXED_ONE,-(float)x2 / FIXED_ONE);
-		glEnd();
-		*/
-	}
+    if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
+        batchDraw();
+        current_shaderprogram = &shader_lighting_program;
+        buffer_drawtype = GL_TRIANGLES;
+    }
+    float color_div = FIXED_ONE << 4;
+    VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
+    for(int i = 4;i--;){
+        vertex[i] = (VertexLighting){
+            .pos = {-(float)coordinats[i].y / FIXED_ONE,-(float)coordinats[i].x / FIXED_ONE,(float)coordinats[i].z / FIXED_ONE},
+            .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
+        };
+    }
+    vertex_buffer_ptr += sizeof(VertexLighting) * 4;
 }
 
 void drawRectangleGL(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color){
-	if(modern_gl){
-		if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
-			batchDraw();
-			current_shaderprogram = &shader_lighting_program;
-			buffer_drawtype = GL_TRIANGLES;
-		}
-		float color_div = FIXED_ONE << 4;
-		VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
-		vertex[0] = (VertexLighting){
-			.pos = {-(float)(y) / FIXED_ONE,-(float)(x) / FIXED_ONE,1.0f},
-			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
-		};
-		vertex[1] = (VertexLighting){
-			.pos = {-(float)(y + size_y) / FIXED_ONE,-(float)(x) / FIXED_ONE,1.0f},
-			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
-		};
-		vertex[2] = (VertexLighting){
-			.pos = {-(float)(y + size_y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
-			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
-		};
-		vertex[3] = (VertexLighting){
-			.pos = {-(float)(y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
-			.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
-		};
-		vertex_buffer_ptr += sizeof(VertexLighting) * 4;
-	}
-	else{
-		glBegin(GL_QUADS);
-		glColor3b(convertColor(color.x),convertColor(color.y),convertColor(color.z));
-		glVertex2f((float)y / FIXED_ONE,-(float)x / FIXED_ONE);
-		glVertex2f((float)(y + size_y) / FIXED_ONE,-(float)x / FIXED_ONE);
-		glVertex2f((float)(y + size_y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE);
-		glVertex2f((float)y / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE);
-		glEnd();
-	}
+    if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
+        batchDraw();
+        current_shaderprogram = &shader_lighting_program;
+        buffer_drawtype = GL_TRIANGLES;
+    }
+    float color_div = FIXED_ONE << 4;
+    VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
+    Vec2 position[] = {{y,x},{y + size_y,x},{y + size_y,x + size_x},{y,x + size_x}};
+    for(int i = 4;i--;){
+        vertex[i] = (VertexLighting){
+            .pos = {-(float)(position[i].x) / FIXED_ONE,-(float)(position[i].y) / FIXED_ONE,1.0f},
+            .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
+        };
+    }
+    vertex_buffer_ptr += sizeof(VertexLighting) * 4;
 }
 
 void drawEllipsesGL(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color){
@@ -1184,26 +952,15 @@ void drawEllipsesGL(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 
 	}
 	float color_div = FIXED_ONE << 4;
 	VertexCircle* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
-	vertex[0] = (VertexCircle){
-		.pos = {-(float)(y - size_y) / FIXED_ONE,-(float)(x - size_x) / FIXED_ONE,1.0f},
-		.coordinates = {-1.0f,-1.0f},
-		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
-	};
-	vertex[1] = (VertexCircle){
-		.pos = {-(float)(y + size_y) / FIXED_ONE,-(float)(x - size_x) / FIXED_ONE,1.0f},
-		.coordinates = {1.0f,-1.0f},
-		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
-	};
-	vertex[2] = (VertexCircle){
-		.pos = {-(float)(y + size_y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
-		.coordinates = {1.0f,1.0f},
-		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
-	};
-	vertex[3] = (VertexCircle){
-		.pos = {-(float)(y - size_y) / FIXED_ONE,-(float)(x + size_x) / FIXED_ONE,1.0f},
-		.coordinates = {-1.0f,1.0f},
-		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
-	};
+    float gl_coordinates[][2] = {{-1.0f,-1.0f},{1.0f,-1.0f},{1.0f,1.0f},{-1.0f,1.0f}};
+    Vec2 position[] = {{y - size_y,x - size_x},{y + size_y,x - size_x},{y + size_y,x + size_x},{y - size_y,x + size_x}};
+    for(int i = 4;i--;){
+        vertex[i] = (VertexCircle){
+            .pos = {-(float)(position[i].x) / FIXED_ONE,-(float)(position[i].y) / FIXED_ONE,1.0f},
+            .coordinates = {gl_coordinates[i][0],gl_coordinates[i][1]},
+            .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
+        };
+    }
 	vertex_buffer_ptr += sizeof(VertexCircle) * 4;
 }
 
@@ -1217,26 +974,14 @@ void drawCircle3dGL(DrawSurface* surface,Vec3* coordinates,Vec3 color){
 	}
 	float color_div = FIXED_ONE << 4;
 	VertexCircle* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
-	vertex[0] = (VertexCircle){
-		.pos = {-(float)(coordinates[0].y) / FIXED_ONE,-(float)(coordinates[0].x) / FIXED_ONE,(float)coordinates[0].z / FIXED_ONE},
-		.coordinates = {-1.0f,-1.0f},
-		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
-	};
-	vertex[1] = (VertexCircle){
-		.pos = {-(float)(coordinates[1].y) / FIXED_ONE,-(float)(coordinates[1].x) / FIXED_ONE,(float)coordinates[1].z / FIXED_ONE},
-		.coordinates = {1.0f,-1.0f},
-		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
-	};
-	vertex[2] = (VertexCircle){
-		.pos = {-(float)(coordinates[2].y) / FIXED_ONE,-(float)(coordinates[2].x) / FIXED_ONE,(float)coordinates[2].z / FIXED_ONE},
-		.coordinates = {1.0f,1.0f},
-		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
-	};
-	vertex[3] = (VertexCircle){
-		.pos = {-(float)(coordinates[3].y) / FIXED_ONE,-(float)(coordinates[3].x) / FIXED_ONE,(float)coordinates[3].z / FIXED_ONE},
-		.coordinates = {-1.0f,1.0f},
-		.lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
-	};
+    float gl_coordinates[][2] = {{-1.0f,-1.0f},{1.0f,-1.0f},{1.0f,1.0f},{-1.0f,1.0f}};
+    for(int i = 4;i--;){
+        vertex[i] = (VertexCircle){
+            .pos = {-(float)(coordinates[i].y) / FIXED_ONE,-(float)(coordinates[i].x) / FIXED_ONE,(float)coordinates[i].z / FIXED_ONE},
+            .coordinates = {gl_coordinates[i][0],gl_coordinates[i][1]},
+            .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
+        };
+    }
 	vertex_buffer_ptr += sizeof(VertexCircle) * 4;
 }
 

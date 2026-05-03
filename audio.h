@@ -15,6 +15,8 @@ typedef enum{
 	AUDIO_EXPLOSION,
 } AudioType;
 
+void audioInit(void);
+void audioDeviceBufferUpdate(void);
 void audioPlay(Vec3 position,AudioType type);
 
 #endif

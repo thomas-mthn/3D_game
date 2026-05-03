@@ -13,7 +13,6 @@ String g_spell_names[] = {
 int g_mana;
 bool g_equipped_staff;
 Staff g_equipped;
-int g_attack_animation;
 
 SpellStatic g_spell_static[] = {
 	[SPELL_ADJ_DAMAGE] = {
@@ -64,7 +63,6 @@ void staffGenerate(Vec3 position){
 	voxelSet(staff_model,(Vec3){size / 2 + 1,size / 2 + 1,size - 1},depth + 1,VOXEL_BLOCK_BLUE);
 
 	Entity* staff = entityCreate(position,ENTITY_STAFF);
-	staff->model = staff_model;
 	staff->velocity.x += tRnd() % (FIXED_ONE / 8) - FIXED_ONE / 16;
 	staff->velocity.y += tRnd() % (FIXED_ONE / 8) - FIXED_ONE / 16;
 	staff->velocity.z += tRnd() % (FIXED_ONE / 8) + FIXED_ONE / 8;
@@ -177,8 +175,6 @@ void staffFire(void){
 	spell->adj_damage = adj_table[SPELL_ADJ_DAMAGE].amount;
 	spell->velocity = vec3Shr(direction,2);
 	spell->velocity = vec3MulS(spell->velocity,FIXED_ONE * (adj_table[SPELL_ADJ_SPEED].amount + 1));
-
-	g_attack_animation = FIXED_ONE;
 
 	audioPlay(g_surface.position,AUDIO_SHOOT);
 }

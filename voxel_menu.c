@@ -150,11 +150,11 @@ static void toggleVsync(VoxelGuiElement* self);
 static void toggleEditorMode(VoxelGuiElement* self){
 	entityDestroyAll();
 	if(g_options.editor){
-		g_movement_fly = true;
+		g_player.movement_fly = true;
 		g_voxel_placement = true;
 	}
 	else{
-		g_movement_fly = false;
+		g_player.movement_fly = false;
 		g_voxel_placement = false;
 	}
 }
@@ -213,7 +213,7 @@ void antiAliasingLoadMenu(VoxelGuiElement* self){
 }
 
 static void toggleMovement(VoxelGuiElement* self){
-	g_movement_fly ^= true;
+	g_player.movement_fly ^= true;
 }
 
 void debugOptions(VoxelGuiElement* self){
