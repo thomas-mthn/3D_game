@@ -32,6 +32,12 @@
 #define CLONE_NEWNET         0x40000000
 #define CLONE_IO             0x80000000
 
+#define O_RDONLY   0
+#define O_WRONLY   (1 << 0)
+#define O_CREAT    (1 << 6)
+#define O_TRUNC    (1 << 9)
+#define O_NONBLOCK (1 << 11)
+
 #define FUTEX_WAIT 0
 #define FUTEX_WAKE 1
 

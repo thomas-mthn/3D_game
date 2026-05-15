@@ -1,11 +1,10 @@
 #include "pathfinding.h"
 #include "vec2.h"
 #include "memory.h"
-#include "physics.h"
 
 bool directPath(Vec3 position,Vec3 size,Vec3 destination){
 #if 0
-	int distance = vec3Distance(vec3Shr(position,4),vec3Shr(destination,4)) << 4;
+	real distance = vec3Distance(vec3Shr(position,4),vec3Shr(destination,4)) << 4;
 	Vec3 direction = vec3Direction(position,destination);
 	for(int i = 0;i < distance / FIXED_ONE;i++){
 		if(boxTreeCollision(position,size,0,0).collided){
@@ -90,7 +89,7 @@ static bool routeIsUniquePosition(Route* route,Vec3 position){
 
 unsigned g_pathfind_hashtable[0x40 * 0x40 * 2];
 
-static bool tileAlreadyChecked(Vec3 position){
+static bool tileAlreadyChecked(Vec3i position){
 	unsigned hash = tHash(tHash(position.x) ^ position.y);
 	unsigned index = hash % countof(g_pathfind_hashtable);
 
@@ -104,6 +103,7 @@ static bool tileAlreadyChecked(Vec3 position){
 }
 
 bool pathFinding(Vec3 position,Vec3 size,Vec3 destination,Route* route_result){
+#if 0
 	for(int i = 0;i < countof(g_pathfind_hashtable);i++)
 		g_pathfind_hashtable[i] = 0;
 
@@ -137,7 +137,11 @@ bool pathFinding(Vec3 position,Vec3 size,Vec3 destination,Route* route_result){
 		};
 		for(int i = 0;i < countof(offset);i++){
 			Route route2 = route;
-			Vec3 position_forward = vec3Add(route.positions[route.n_positions - 1],offset[i]);
+			Vec3i position_forward = {
+                route.positions[route.n_positions - 1].x + offset[i].x,
+                route.positions[route.n_positions - 1].y + offset[i].y,
+                route.positions[route.n_positions - 1].z + offset[i].z,
+            };
 		
 			if(tileAlreadyChecked(position_forward))
 				continue;
@@ -162,7 +166,7 @@ bool pathFinding(Vec3 position,Vec3 size,Vec3 destination,Route* route_result){
 			}
 			if(route2.n_positions == countof(route.positions))
 				goto exit;
-			int score = (vec2Distance((Vec2){position_forward.x << 8,position_forward.y << 8},(Vec2){destination.x << 8,destination.y << 8}) >> 8) + route2.n_positions;
+			real score = (vec2Distance((Vec2){position_forward.x << 8,position_forward.y << 8},(Vec2){destination.x << 8,destination.y << 8}) >> 8) + route2.n_positions;
 			route2.score = score;
 			
 			if(heapInsert(route_list,route2)){
@@ -179,4 +183,5 @@ bool pathFinding(Vec3 position,Vec3 size,Vec3 destination,Route* route_result){
  exit:
     virtualFree(route_list,sizeof *route_list);
 	return result;
+#endif
 }

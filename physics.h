@@ -4,8 +4,8 @@
 #include "langext.h"
 #include "vec3.h"
 
-#define PHYSICS_FRICTION_AIR    0x1000
-#define PHYSICS_FRICTION_GROUND 0x10000
+#define PHYSICS_FRICTION_AIR    (FIXED_ONE / 16)
+#define PHYSICS_FRICTION_GROUND FIXED_ONE
 #define PHYSICS_FRICTION_WATER  (FIXED_ONE - (FIXED_ONE >> 2))
 #define PHYSICS_GRAVITY         (FIXED_ONE / 8)
 
@@ -21,7 +21,7 @@ structure(CollisionFlags){
 
 structure(Collision){
     Vec3 normal;
-    int time;
+    real time;
     enum{
         COLLISION_NONE,
         COLLISION_VOXEL,
@@ -31,6 +31,7 @@ structure(Collision){
         Voxel* voxel;
         Entity* entity;
     };
+    bool in_water : 1;
 };
 
 structure(MovementFlags){
@@ -40,7 +41,7 @@ structure(MovementFlags){
 
 void movementFly(void);
 void movementNormal(void);
-bool movementUpdate(Entity* entity);
+void movementUpdate(Entity* entity);
 
 void physicsPointResolve(Vec3* position,Vec3* velocity);
 

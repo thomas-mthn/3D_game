@@ -7,11 +7,11 @@
 
 #include "vec2.h"
 #include "vec3.h"
-#include "texture.h"
 #include "string.h"
 #include "memory.h"
 
 structure(Span);
+structure(Texture);
 
 typedef enum{
 	RENDER_BACKEND_SOFTWARE,
@@ -56,8 +56,9 @@ structure(DrawSurface){
 
     //camera
     Vec2 angle;
-    int rotation_matrix[4];
+    real rotation_matrix[4];
     Vec3 position;
+    Vec2 fov;
     
     //winapi
 	void* window_context;
@@ -97,9 +98,9 @@ void surfaceChangeSize(DrawSurface* surface,int width,int height);
 void surfaceChangeBackend(DrawSurface* surface,RenderBackend backend);
 void surfaceBlit(DrawSurface* surface);
 
-void drawLine(DrawSurface* surface,int x1,int y1,int x2,int y2,Vec3 color);
+void drawLine(DrawSurface* surface,real x1,real y1,real x2,real y2,Vec3 color);
 void drawLine3d(DrawSurface* surface,Vec3 position_1,Vec3 position_2,int color);
-void drawSegment(DrawSurface* surface,int x1,int y1,int x2,int y2,int thickness,Vec3 color);
+void drawSegment(DrawSurface* surface,real x1,real y1,real x2,real y2,real thickness,Vec3 color);
 void drawSegment3d(DrawSurface* surface,Vec3* coordinats,int thickness,Vec3 color);
 void drawPolygon(DrawSurface* surface,Vec2* coordinats,int n_point,Vec3 color);
 void drawPolygon3d(DrawSurface* surface,Vec3* coordinats,Vec3 color);
@@ -110,38 +111,38 @@ void drawTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_co
 void drawColoredTexturePolygon(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3* color,int n_point);
 void drawColoredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap,int n_vertex);
 void drawSkyboxPolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap);
-void drawCircle(DrawSurface* surface,int x,int y,int radius,Vec3 color);
-void drawEllipses(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color);
+void drawCircle(DrawSurface* surface,real x,real y,real radius,Vec3 color);
+void drawEllipses(DrawSurface* surface,real x,real y,real size_x,real size_y,Vec3 color);
 void drawCircle3d(DrawSurface* surface,Vec3* coordinates,Vec3 color);
-void drawRing(DrawSurface* surface,int x,int y,int radius,int thickness,Vec3 color);
-void drawRectangle(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color);
-void drawStringEx(DrawSurface* surface,int x,int y,String string,int scale,Vec3 color,int thickness);
-void drawNumber(DrawSurface* surface,int x,int y,int number,int scale);
+void drawRing(DrawSurface* surface,real x,real y,real radius,int thickness,Vec3 color);
+void drawRectangle(DrawSurface* surface,real x,real y,real size_x,real size_y,Vec3 color);
+void drawStringEx(DrawSurface* surface,real x,real y,String string,real scale,Vec3 color,int thickness);
+void drawNumber(DrawSurface* surface,real x,real y,int number,real scale);
 
-static void drawString(DrawSurface* surface,int x,int y,String string,int scale,Vec3 color){
-    drawStringEx(surface,x,y,string,scale,color,FIXED_ONE >> 3);
+static void drawString(DrawSurface* surface,real x,real y,String string,real scale,Vec3 color){
+    drawStringEx(surface,x,y,string,scale,color,(int)FIXED_ONE >> 3);
 }
 
-static void drawSquare(DrawSurface* surface,int x,int y,int size,Vec3 color){
+static void drawSquare(DrawSurface* surface,real x,real y,real size,Vec3 color){
 	drawRectangle(surface,x,y,size,size,color);
 }
 
-static void drawFrame(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color,int thickness){
+static void drawFrame(DrawSurface* surface,real x,real y,real size_x,real size_y,Vec3 color,int thickness){
 	drawRectangle(surface,x,y,size_x,thickness,color);
 	drawRectangle(surface,x,y,thickness,size_y,color);
 	drawRectangle(surface,x,y + size_y - thickness,size_x,thickness,color);
 	drawRectangle(surface,x + size_x - thickness,y,thickness,size_y,color);
 }
 
-static int transformDraw(int size,int v){
+static int transformDraw(int size,real v){
     v *= size / 2;
-    v >>= FIXED_PRECISION;
-    v += size / 2;
-    return v;
+    int v_i = realToInt(v);
+    v_i += size / 2;
+    return v_i;
 }
 
-static int scaleDraw(int size,int v){
-    return v * (size / 2) >> FIXED_PRECISION;
+static int scaleDraw(int size,real v){
+    return realToInt(v * (size / 2));
 }
 
 extern DrawSurface g_surface;

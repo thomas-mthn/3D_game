@@ -28,7 +28,13 @@
 #define noinline
 #endif
 
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#define alignas(VALUE) _Alignas(VALUE)
+#elif defined(_MSC_VER)
 #define alignas(VALUE) _declspec(align(VALUE))
+#else
+#define alignas(VALUE)
+#endif
 
 typedef int8_t   int8;
 typedef uint8_t  uint8;
@@ -52,5 +58,15 @@ typedef void (*funcptr_t)(void);
 #if __STDC_VERSION__ < 202311
 #define nullptr NULL
 #endif
+
+typedef union{
+    struct{int x,y,z;};
+    int a[3];
+} Vec3i;
+
+typedef union Vec2i{
+    struct{int x,y;};
+    int a[2];
+} Vec2i;
 
 #endif

@@ -8,18 +8,22 @@
 #define LUXEL_MAX_MIPMAP 12
 
 #ifdef __wasm__
-#define N_LUXEL_CACHE 0x100000
+#define N_LUXEL_CACHE 0x40000
 #else
-#define N_LUXEL_CACHE 0x400000
+#define N_LUXEL_CACHE 0x40000
 #endif
 
+#define LUXEL_DIRECTSAMPLED (1 << 15)
+
 structure(Luxel){
-	uint32 hash;
+    uint32 hash;
 	Vec3 luminance;
     Vec3 luminance_direct;
-	uint16 n_sample;
 	uint16 tick_last_updated;
-    bool luminance_direct_sampled;
+    union{
+        uint16 n_sample;
+        uint16 flags;
+    };
 };
 
 structure(LightmapTree){
@@ -27,61 +31,62 @@ structure(LightmapTree){
     Vec3 luminance;
 };
 
+structure(LightmapGPU){
+    int child[4];
+    float color[3];
+    int reserved;
+};
+
+structure(RayLuminanceFlag){
+    bool fulltrace : 1;
+    bool no_emit : 1;
+};
+
 static int surfaceAngle(Vec3 position,Vec3 normal){
 	return FIXED_ONE;
-	int dot = vec3Dot(vec3Normalize(getLookDirection(g_surface.angle)),normal);
-	int angle = tAbs(dot) / 2 + FIXED_ONE / 2;
-	angle = fixedDivR(FIXED_ONE,angle);
+	real dot = vec3Dot(vec3Normalize(getLookDirection(g_surface.angle)),normal);
+	real angle = tAbs(dot) / 2 + FIXED_ONE / 2;
+	angle = realDivR(FIXED_ONE,angle);
 
     return angle;
 }
 
-static int mipmapGet(Vec3 position,Vec3 normal,int distance,int angle){
-	int angle_distance = fixedMulR(angle,distance);
+static int mipmapGet(Vec3 position,Vec3 normal,real distance,real angle){
+	real angle_distance = realMulR(angle,distance);
+    if(IS_FLOAT(real)){
+        union{
+            float f;
+            int i;
+        } bits = {.f = angle_distance};
+        return ((bits.i >> 23) & 0xFF) - 127 + 16;
+    }
 	return bitScanReverse(angle_distance);
 }
 
-Vec3 luxelVoxelGet2(Vec3 position,int mipmap);
-Vec3 luxelVoxelGet(Vec3 position,int mipmap,Vec2 axis);
 Vec3 skyboxSample(Vec3 direction);
-Vec3 rayLuminance(Vec3 position,Vec3 direction);
+Vec3 rayLuminance(Vec3 position,Vec3 direction,RayLuminanceFlag flags);
 Vec3 rayLuminanceInit(TraverseInit init,Vec3 position,Vec3 direction);
 Vec3 luminanceQuery(Voxel* voxel,Vec3 normal,Vec3 position,int n_sample);
-Vec3 squarePointClosestPosition(Vec3 square_pos,int square_size,Vec3 normal);
+Vec3 squarePointClosestPosition(Vec3 square_pos,real square_size,Vec3 normal);
 
 void lightingOctree(void);
 Vec3 rayLuminanceTrace(Vec3 position,Vec3 direction);
 
 Luxel* luxelDynamicGet(unsigned hash);
 
-void lightmapTreeGenerate(LightmapTree* node,Voxel* voxel,Vec3 block_pos,int side,Vec2 coord,int depth,int surface_angle,Vec2 size);
+Vec3 lightmapGet(LightmapTree* lightmap,Vec2 uv);
+Vec3 lightmapBilinear(LightmapTree* lightmap,Vec2 uv);
+void lightmapTreeGenerate(LightmapTree* node,Voxel* voxel,Vec3 block_pos,int side,Vec2i coord,int depth,real surface_angle,Vec2 size);
+
+void lightmapGenerateRecursiveGPU(LightmapGPU* node,Voxel* voxel,Vec3 block_pos,int side,Vec2i coord,int depth,real surface_angle,Vec2 size);
 
 void lightingEntityDynamic(Voxel* voxel,Entity* entity);
+void lightingEntityShadow(Voxel* voxel,Entity* entity);
+
+Vec3 lightingPositionLuminanceGet(Vec3 position,int depth);
 
 extern Luxel g_luxel_cache[];
-
-static unsigned hash4(unsigned x,unsigned y,unsigned z,unsigned w){
-    unsigned h = 0x811C9DC5;
-    
-    h ^= x; 
-	h *= 0x27d4eb2d;
-    h ^= y; 
-	h *= 0x165667b1;
-    h ^= z; 
-	h *= 0x1b873593;
-    h ^= w; 
-	h *= 0x85ebca6b;
-    
-    h ^= h >> 16;
-    return h;
-}
-
-static unsigned luxelHashGet(Vec3 position,int depth){
-	return hash4(position.x,position.y,position.z,depth);
-}
-
-static Luxel* luxelGet(unsigned hash){
-	return g_luxel_cache + hash % N_LUXEL_CACHE;
-}
+extern int g_lightmap_gpu_ptr;
+extern LightmapGPU g_lightmap_gpu[];
 
 #endif

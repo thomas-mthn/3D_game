@@ -206,16 +206,15 @@ void* allocatorFreeListAlloc(AllocatorFreeList* free_list,size_t size){
 	block->next = 0;
     block->next_free = 0;
     block->flags &= ~MEMBLOCK_FREE;
-    static MemoryBlock* tail;
 	if(free_list->block_list){
-		block->previous = tail;
-		tail->next = block;
+		block->previous = free_list->tail;
+		free_list->tail->next = block;
 	}
 	else{
 		block->previous = 0;
 		free_list->block_list = block;
 	};
-    tail = block;
+    free_list->tail = block;
 	return block + 1;
 }
 

@@ -1,5 +1,4 @@
 #include "font.h"
-#include "fixed.h"
 
 FontChar g_vector_font[0x100] = {
     [' '] = {.width = FIXED_ONE},
@@ -99,7 +98,7 @@ FontChar g_vector_font[0x100] = {
             {0xC0,0x80,0x40,0x40},
             {0x90,0x18,0x90,0x68},
         },
-        .width = FIXED_ONE - 0x2000,
+        .width = FIXED_ONE - REAL_UNIT * 0x20,
     },
     ['B'] = {
         .position = {
@@ -109,7 +108,7 @@ FontChar g_vector_font[0x100] = {
             {0xC0,0x00,0x80,0x00},
             {0x40,0x00,0x80,0x00},
         },
-        .width = FIXED_ONE / 2 + 0x2000,
+        .width = FIXED_ONE / 2 + REAL_UNIT * 0x20,
     },
     ['C'] = {
         .position = {
@@ -128,7 +127,7 @@ FontChar g_vector_font[0x100] = {
             {0x40,0x60,0x60,0x80},
             {0x60,0x80,0xA0,0x80},
         },
-        .width = FIXED_ONE - 0x2000,
+        .width = FIXED_ONE - REAL_UNIT * 0x20,
     },
     ['E'] = {
         .position = {
@@ -137,7 +136,7 @@ FontChar g_vector_font[0x100] = {
             {0xC0,0x00,0xC0,0x80},
             {0x80,0x00,0x80,0x40},
         },
-        .width = FIXED_ONE - 0x2000,
+        .width = FIXED_ONE - REAL_UNIT * 0x20,
     },
     ['F'] = {
         .position = {
@@ -145,7 +144,7 @@ FontChar g_vector_font[0x100] = {
             {0x80,0x00,0x80,0x40},
             {0x40,0x00,0x40,0x60},
         },
-        .width = FIXED_ONE - 0x4000,
+        .width = FIXED_ONE - REAL_UNIT * 0x40,
     },
     ['G'] = {
         .position = {
@@ -157,7 +156,7 @@ FontChar g_vector_font[0x100] = {
             {0x40,0x40,0x40,0x00},
             {0x40,0x00,0x80,0x00},
         },
-        .width = FIXED_ONE - 0x4000,
+        .width = FIXED_ONE - REAL_UNIT * 0x40,
     },
     ['H'] = {
         .position = {
@@ -180,14 +179,14 @@ FontChar g_vector_font[0x100] = {
             {0x80,0x00,0xC0,0x60},
             {0x80,0x00,0x40,0x60},
         },
-        .width = FIXED_ONE - 0x4000,
+        .width = FIXED_ONE - REAL_UNIT * 0x40,
     },
     ['L'] = {
         .position = {
             {0x40,0x00,0xC0,0x00},
             {0xC0,0x00,0xC0,0x60},
         },
-        .width = FIXED_ONE / 2 + 0x2000,
+        .width = FIXED_ONE / 2 + REAL_UNIT * 0x20,
     },
     ['M'] = {
         .position = {
@@ -223,7 +222,7 @@ FontChar g_vector_font[0x100] = {
             {0x80,0x00,0x40,0x00},
             {0x80,0x00,0xC0,0x00},
         },
-        .width = FIXED_ONE - 0x2000,
+        .width = FIXED_ONE - REAL_UNIT * 0x20,
     },
     ['Q'] = {
         .position = {
@@ -233,7 +232,7 @@ FontChar g_vector_font[0x100] = {
             {0x80,0x00,0x40,0x00},
             {0x80,0x40,0xC0,0x40},
         },
-        .width = FIXED_ONE - 0x2000,
+        .width = FIXED_ONE - REAL_UNIT * 0x20,
     },
     ['R'] = {
         .position = {
@@ -251,14 +250,14 @@ FontChar g_vector_font[0x100] = {
             {0x80,0x40,0xC0,0x40},
             {0x40,0x00,0x40,0x40},
         },
-        .width = FIXED_ONE - 0x4000,
+        .width = FIXED_ONE - REAL_UNIT * 0x40,
     },
     ['T'] = {
         .position = {
             {0x40,0x40,0xC0,0x40},
             {0x40,0x00,0x40,0x80},
         },
-        .width = FIXED_ONE - 0x4000,
+        .width = FIXED_ONE - REAL_UNIT * 0x40,
     },
     ['U'] = {
         .position = {
@@ -297,7 +296,7 @@ FontChar g_vector_font[0x100] = {
             {0x40,0x80,0x80,0x40},
             {0x80,0x40,0xC0,0x40},
         },
-        .width = FIXED_ONE - 0x2000,
+        .width = FIXED_ONE - REAL_UNIT * 0x20,
     },
     ['a'] = {
         .position = {
@@ -305,7 +304,7 @@ FontChar g_vector_font[0x100] = {
             {0xC0,0x80,0x40,0x40},
             {0x90,0x18,0x90,0x68},
         },
-        .width = FIXED_ONE - 0x2000,
+        .width = FIXED_ONE - REAL_UNIT * 0x20,
     },
     ['b'] = {
         .position = {
@@ -315,7 +314,7 @@ FontChar g_vector_font[0x100] = {
             {0xC0,0x00,0x80,0x00},
             {0x40,0x00,0x80,0x00},
         },
-        .width = FIXED_ONE / 2 + 0x2000,
+        .width = FIXED_ONE / 2 + REAL_UNIT * 0x20,
     },
     ['c'] = {
         .position = {
@@ -334,7 +333,7 @@ FontChar g_vector_font[0x100] = {
             {0x40,0x60,0x60,0x80},
             {0x60,0x80,0xA0,0x80},
         },
-        .width = FIXED_ONE - 0x2000,
+        .width = FIXED_ONE - REAL_UNIT * 0x20,
     },
     ['e'] = {
         .position = {
@@ -343,7 +342,7 @@ FontChar g_vector_font[0x100] = {
             {0xC0,0x00,0xC0,0x80},
             {0x80,0x00,0x80,0x40},
         },
-        .width = FIXED_ONE - 0x2000,
+        .width = FIXED_ONE - REAL_UNIT * 0x20,
     },
     ['f'] = {
         .position = {
@@ -351,7 +350,7 @@ FontChar g_vector_font[0x100] = {
             {0x80,0x00,0x80,0x40},
             {0x40,0x00,0x40,0x60},
         },
-        .width = FIXED_ONE - 0x4000,
+        .width = FIXED_ONE - REAL_UNIT * 0x40,
     },
     ['g'] = {
         .position = {
@@ -363,7 +362,7 @@ FontChar g_vector_font[0x100] = {
             {0x40,0x40,0x40,0x00},
             {0x40,0x00,0x80,0x00},
         },
-        .width = FIXED_ONE - 0x4000,
+        .width = FIXED_ONE - REAL_UNIT * 0x40,
     },
     ['h'] = {
         .position = {
@@ -386,14 +385,14 @@ FontChar g_vector_font[0x100] = {
             {0x80,0x00,0xC0,0x60},
             {0x80,0x00,0x40,0x60},
         },
-        .width = FIXED_ONE - 0x4000,
+        .width = FIXED_ONE - REAL_UNIT * 0x40,
     },
     ['l'] = {
         .position = {
             {0x40,0x00,0xC0,0x00},
             {0xC0,0x00,0xC0,0x60},
         },
-        .width = FIXED_ONE / 2 + 0x2000,
+        .width = FIXED_ONE / 2 + REAL_UNIT * 0x20,
     },
     ['m'] = {
         .position = {
@@ -429,7 +428,7 @@ FontChar g_vector_font[0x100] = {
             {0x80,0x00,0x40,0x00},
             {0x80,0x00,0xC0,0x00},
         },
-        .width = FIXED_ONE - 0x2000,
+        .width = FIXED_ONE - REAL_UNIT * 0x20,
     },
     ['q'] = {
         .position = {
@@ -439,7 +438,7 @@ FontChar g_vector_font[0x100] = {
             {0x80,0x00,0x40,0x00},
             {0x80,0x40,0xC0,0x40},
         },
-        .width = FIXED_ONE - 0x2000,
+        .width = FIXED_ONE - REAL_UNIT * 0x20,
     },
     ['r'] = {
         .position = {
@@ -457,14 +456,14 @@ FontChar g_vector_font[0x100] = {
             {0x80,0x40,0xC0,0x40},
             {0x40,0x00,0x40,0x40},
         },
-        .width = FIXED_ONE - 0x4000,
+        .width = FIXED_ONE - REAL_UNIT * 0x40,
     },
     ['t'] = {
         .position = {
             {0x40,0x40,0xC0,0x40},
             {0x40,0x00,0x40,0x80},
         },
-        .width = FIXED_ONE - 0x4000,
+        .width = FIXED_ONE - REAL_UNIT * 0x40,
     },
     ['u'] = {
         .position = {
@@ -503,7 +502,7 @@ FontChar g_vector_font[0x100] = {
             {0x40,0x80,0x80,0x40},
             {0x80,0x40,0xC0,0x40},
         },
-        .width = FIXED_ONE - 0x2000,
+        .width = FIXED_ONE - REAL_UNIT * 0x20,
     },
     [':'] = {
         .position = {

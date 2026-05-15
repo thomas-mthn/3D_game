@@ -40,24 +40,10 @@ Texture g_textures[] = {
 	[TEXTURE_PICKUP] = {.size = 0x40},
 	[TEXTURE_BOLT] = {.size = 0x40},
 	[TEXTURE_SMOKE] = {.size = 0x40},
-	[TEXTURE_SKYBOX_YZ_UP] = {.size = 0x100},
-	[TEXTURE_SKYBOX_YZ_DOWN] = {.size = 0x100},
-	[TEXTURE_SKYBOX_XZ_UP] = {.size = 0x100},
-	[TEXTURE_SKYBOX_XZ_DOWN] = {.size = 0x100},
-	[TEXTURE_SKYBOX_XY_UP] = {.size = 0x100},
-	[TEXTURE_SKYBOX_XY_DOWN] = {.size = 0x100},
-	[TEXTURE_SKYBOX_XY_UP] = {.size = 0x100},
 	[TEXTURE_STONE2] = {.size = 0x400},
 };
 
-TextureType g_skybox_textures[] = {
-	TEXTURE_SKYBOX_YZ_UP,
-	TEXTURE_SKYBOX_YZ_DOWN,
-	TEXTURE_SKYBOX_XZ_UP,
-	TEXTURE_SKYBOX_XZ_DOWN,
-	TEXTURE_SKYBOX_XY_UP,
-	TEXTURE_SKYBOX_XY_DOWN,
-};
+Cubemap g_skybox = {.size = 0x100};
 
 #if !defined(__wasm__) && !defined(__linux__)
 void textureResetGL(void){
@@ -105,10 +91,10 @@ int textureLookup(Texture* texture,int x,int y,int mipmap){
 	int offset = 0;
 	for(int i = 0;i < mipmap;i++)
 		offset += texture->size * texture->size >> i * 2;
-	x = fixedFract(x);
-	y = fixedFract(y);
-	x = x * texture->size / FIXED_ONE >> mipmap;
-	y = y * texture->size / FIXED_ONE >> mipmap;
+	x = tFract(x);
+	y = tFract(y);
+	x = realShr(x * texture->size / FIXED_ONE,mipmap);
+	y = realShr(y * texture->size / FIXED_ONE,mipmap);
 	return texture->pixel_data[offset + y * (texture->size >> mipmap) + x];
 }
 
@@ -168,6 +154,112 @@ static void textureGenerate(char* path,int size,TextureType type){
     }
 }
 
+#include "console.h"
+
+int cubemapColorGet2(Cubemap* cubemap,Vec3 direction){
+    real abs_x = tAbs(direction.x);
+    real abs_y = tAbs(direction.y);
+    real abs_z = tAbs(direction.z);
+
+    int side;
+    real major;
+    real u, v;
+
+    if(abs_x >= abs_y && abs_x >= abs_z){
+        side = (direction.a[0] >= 0) ? SIDE_YZ_UP : SIDE_YZ_DOWN; 
+        major = direction.a[0];
+
+        u = direction.a[0] >= 0 ? direction.a[1] : -direction.a[1];
+        v = direction.a[0] >= 0 ? direction.a[2] : -direction.a[2];
+    }
+    else if(abs_y >= abs_x && abs_y >= abs_z){
+        side = (direction.a[1] >= 0) ? SIDE_XZ_UP : SIDE_XZ_DOWN;
+        major = direction.a[1];
+        
+        u = direction.a[1] >= 0 ? direction.a[0] : -direction.a[0];
+        v = direction.a[1] >= 0 ? direction.a[2] : -direction.a[2];
+    }
+    else{
+        side = (direction.a[2] >= 0) ? SIDE_XY_UP : SIDE_XY_DOWN;
+        major = direction.a[2];
+        
+        u = direction.a[2] >= 0 ? direction.a[0] : -direction.a[0];
+        v = direction.a[2] >= 0 ? direction.a[1] : -direction.a[1];
+    }
+    
+    if(tAbs(major) < REAL_EPSILON)
+        major = major < 0 ? -REAL_EPSILON : REAL_EPSILON;
+
+    real inv_major = tReciprocal(major);  
+    u = realMulR(u,inv_major);
+    v = realMulR(v,inv_major);
+
+    int x = realToInt(realMulR(u + FIXED_ONE,intToReal(cubemap->size)));
+    int y = realToInt(realMulR(v + FIXED_ONE,intToReal(cubemap->size)));
+
+    PRINT_VAR(x);
+    PRINT_VAR(y);
+    
+    return cubemap->textures[side].pixel_data[y * cubemap->size + x];
+}
+
+int cubemapColorGet(Cubemap* cubemap,Vec3 direction){
+    real abs_x = tAbs(direction.x);
+    real abs_y = tAbs(direction.y);
+    real abs_z = tAbs(direction.z);
+
+    int side;
+    real major;
+    real u, v;
+
+    if(abs_x >= abs_y && abs_x >= abs_z){
+        side = (direction.a[0] >= 0) ? SIDE_YZ_UP : SIDE_YZ_DOWN; 
+        major = direction.a[0];
+
+        u = direction.a[0] >= 0 ? direction.a[1] : -direction.a[1];
+        v = direction.a[0] >= 0 ? direction.a[2] : -direction.a[2];
+    }
+    else if(abs_y >= abs_x && abs_y >= abs_z){
+        side = (direction.a[1] >= 0) ? SIDE_XZ_UP : SIDE_XZ_DOWN;
+        major = direction.a[1];
+        
+        u = direction.a[1] >= 0 ? direction.a[0] : -direction.a[0];
+        v = direction.a[1] >= 0 ? direction.a[2] : -direction.a[2];
+    }
+    else{
+        side = (direction.a[2] >= 0) ? SIDE_XY_UP : SIDE_XY_DOWN;
+        major = direction.a[2];
+        
+        u = direction.a[2] >= 0 ? direction.a[0] : -direction.a[0];
+        v = direction.a[2] >= 0 ? direction.a[1] : -direction.a[1];
+    }
+    
+    if(tAbs(major) < REAL_EPSILON)
+        major = major < 0 ? -REAL_EPSILON : REAL_EPSILON;
+
+    real inv_major = tReciprocal(major);  
+    u = realMulR(u,inv_major);
+    v = realMulR(v,inv_major);
+
+    int x = realToInt(realMulR(u + FIXED_ONE,intToReal(cubemap->size))) / 2;
+    int y = realToInt(realMulR(v + FIXED_ONE,intToReal(cubemap->size))) / 2;
+    
+    return cubemap->textures[side].pixel_data[y * cubemap->size + x];
+}
+
+Vec3 cubemapDirectionGet(Cubemap* cubemap,Side side,int x,int y){
+    real r_x = intToReal(x) * 2 / cubemap->size - FIXED_ONE;
+    real r_y = intToReal(y) * 2 / cubemap->size - FIXED_ONE;
+    
+    Vec2i axis = g_axis_table[side];
+    
+    Vec3 ray_direction;
+    ray_direction.a[axis.y] = r_x;
+    ray_direction.a[axis.x] = r_y;
+    ray_direction.a[side >> 1] = side & 1 ? -FIXED_ONE : FIXED_ONE;
+    return ray_direction;
+}
+
 void texturesGenerate(void){
 	for(int i = 0;i < countof(g_textures);i++)
 		textureAllocate(g_textures + i);
@@ -193,12 +285,12 @@ void texturesGenerate(void){
 	textureAllocate(&grass_markov);
 
 	for(int i = 0;i < grass_markov.size * grass_markov.size;i++){ 
-        int x = i / grass_markov.size * FIXED_ONE * 2 / grass_markov.size - FIXED_ONE;
-        int y = i % grass_markov.size * FIXED_ONE * 2 / grass_markov.size - FIXED_ONE;
+        real x = i / grass_markov.size * FIXED_ONE * 2 / grass_markov.size - FIXED_ONE;
+        real y = i % grass_markov.size * FIXED_ONE * 2 / grass_markov.size - FIXED_ONE;
         Vec3 color_dirt = pixelColorToColor(0x30A830);
         Vec3 color_grass = pixelColorToColor(0x40C040);
 
-        int w = tClamp(tCos((fixedMulR(x,x) + fixedMulR(y,y)) * 2) + FIXED_ONE,0,FIXED_ONE);
+        int w = tClamp(tCos((realMulR(x,x) + realMulR(y,y)) * 2) + FIXED_ONE,0,FIXED_ONE);
         Vec3 luminance = vec3Mix(color_dirt,color_grass,w);
         grass_markov.pixel_data[i] = colorToPixelColor(luminance);
     }
@@ -252,19 +344,19 @@ void texturesGenerate(void){
 	};
 		
 	for(int i = 0;i < texture->size * texture->size;i++){
-		int x = i / texture->size * FIXED_ONE / 2;
-		int y = i % texture->size * FIXED_ONE / 16;
+		real x = i / texture->size * FIXED_ONE / 2;
+		real y = i % texture->size * FIXED_ONE / 16;
 
-		int v00 = tHash(tHash(fixedToInt(x)) ^ fixedToInt(y)) % FIXED_ONE;
-		int v01 = tHash(tHash(fixedToInt(x)) ^ fixedToInt(y) + 1) % FIXED_ONE;
+		real v00 = tFract(tHash(tHash(realToInt(x)) ^ realToInt(y)));
+		real v01 = tFract(tHash(tHash(realToInt(x)) ^ realToInt(y) + 1));
 
-		int v10 = tHash(tHash(fixedToInt(x) + 1) ^ fixedToInt(y)) % FIXED_ONE;
-		int v11 = tHash(tHash(fixedToInt(x) + 1) ^ fixedToInt(y) + 1) % FIXED_ONE;
+		real v10 = tFract(tHash(tHash(realToInt(x) + 1) ^ realToInt(y)));
+		real v11 = tFract(tHash(tHash(realToInt(x) + 1) ^ realToInt(y) + 1));
 
-		int luminance = bilinearScalar((Vec2){x,y},(int[]){v00,v01,v10,v11}) / 2 + FIXED_ONE / 2;
+		real luminance = bilinearScalar((Vec2){x,y},(real[]){v00,v01,v10,v11}) / 2 + FIXED_ONE / 2;
 
-		Vec3 color = vec3MulS((Vec3){FIXED_ONE / 3 + FIXED_ONE / 12 << 4,FIXED_ONE / 4 << 4,FIXED_ONE / 12 << 4},luminance);
-		color = vec3Add(color,vec3Single(tRnd() % (FIXED_ONE / 2) - FIXED_ONE / 4));
+		Vec3 color = vec3MulS((Vec3){(FIXED_ONE / 3 + FIXED_ONE / 12) * 16,FIXED_ONE / 4 * 16,FIXED_ONE / 12 * 16},luminance);
+		color = vec3Add(color,vec3Single(realRandom(FIXED_ONE / 2) - FIXED_ONE / 4));
 		texture->pixel_data[i] = colorToPixelColor(color);
 	}
 
@@ -280,12 +372,13 @@ void texturesGenerate(void){
 		}
 	}
 
-	int random_x = tRnd() % (FIXED_ONE * 0x100);
-	int random_y = tRnd() % (FIXED_ONE * 0x100);
-
-	for(int j = 0;j < countof(g_skybox_textures);j++){
-		Vec2 axis = g_axis_table[j];
-		texture = g_textures + g_skybox_textures[j];
+	real random_x = realRandom(FIXED_ONE * 0x100);
+	real random_y = realRandom(FIXED_ONE * 0x100);
+    
+	for(Side j = 0;j < SIDE_COUNT;j++){
+		Vec2i axis = g_axis_table[j];
+		texture = g_skybox.textures + j;
+        *texture = textureCreate(g_skybox.size);
 		surface = (DrawSurface){
 			.data = texture->pixel_data,
 			.width = texture->size,
@@ -294,52 +387,22 @@ void texturesGenerate(void){
 		
 		for(int i = 0;i < texture->size * texture->size;i++){
 			Vec3 color = {0};
-			int x = i / texture->size * FIXED_ONE * 2 / texture->size - FIXED_ONE;
-			int y = i % texture->size * FIXED_ONE * 2 / texture->size - FIXED_ONE;
+			int x = i / texture->size;
+			int y = i % texture->size;
+            
+			Vec3 ray_direction = vec3Normalize(cubemapDirectionGet(&g_skybox,j,x,y));
 
-			Vec3 ray_direction;
-			((int*)&ray_direction)[axis.y] = x;
-			((int*)&ray_direction)[axis.x] = y;
-			((int*)&ray_direction)[j >> 1] = j & 1 ? -FIXED_ONE : FIXED_ONE;
-			ray_direction = vec3Normalize(ray_direction);
-
-			int distance = rayPlaneIntersection((Vec3){0},ray_direction,(Plane){.normal = {0,0,FIXED_ONE},.distance = -FIXED_ONE});
-			if(distance < 0 || distance > FIXED_ONE * 8){
-				texture->pixel_data[i] = colorToPixelColor(vec3Single(FIXED_ONE << 4));
+			real distance = rayPlaneIntersection((Vec3){0},ray_direction,(Plane){.normal = {0,0,FIXED_ONE},.distance = -FIXED_ONE});
+            
+            if(distance < 0){
 				continue;
 			}
 			Vec3 position = vec3MulS(ray_direction,distance);
 
-			int luminance = 0;
-
-			for(int j = 0;j < 4;j++){
-				Vec3 position_copy = position;
-				position_copy.x = fixedMulR(position_copy.x + random_x,(2 << j) * 0x10000);
-				position_copy.y = fixedMulR(position_copy.y + random_y,(2 << j) * 0x10000);
-
-				int v00 = tHash(tHash(fixedToInt(position_copy.x)) ^ fixedToInt(position_copy.y)) % FIXED_ONE;
-				int v01 = tHash(tHash(fixedToInt(position_copy.x)) ^ fixedToInt(position_copy.y) + 1) % FIXED_ONE;
-
-				int v10 = tHash(tHash(fixedToInt(position_copy.x) + 1) ^ fixedToInt(position_copy.y)) % FIXED_ONE;
-				int v11 = tHash(tHash(fixedToInt(position_copy.x) + 1) ^ fixedToInt(position_copy.y) + 1) % FIXED_ONE;
-
-				luminance += bilinearScalar((Vec2){position_copy.x,position_copy.y},(int[]){v00,v01,v10,v11});
-
-				//luminance = FIXED_ONE - tClamp(luminance,0,FIXED_ONE / 2);
-
-				//vec3Add(&color,vec3Single(tRnd() % (FIXED_ONE / 2) - FIXED_ONE / 4));
-			}
-
-			luminance >>= 2;
-
-			luminance = FIXED_ONE - tClamp(luminance,FIXED_ONE / 2,FIXED_ONE);
-
-			luminance <<= 4;
-
-			texture->pixel_data[i] = colorToPixelColor(vec3Mix(vec3Single(luminance),vec3Single(FIXED_ONE << 4),distance / 8));
+            texture->pixel_data[i] = colorToPixelColor(vec3Single(tReciprocal(distance) * 1600));
 		}
 	}
-
+    
     textureGenerate("img/planks.bmp",1024,TEXTURE_PLANKS);
 	softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_STONE_BRICK;
@@ -438,10 +501,10 @@ void texturesGenerate(void){
 	Texture circle = {.size = 0x80};
 	textureAllocate(&circle);
 	for(int i = 0;i < circle.size * circle.size;i++){ 
-        int x = i / circle.size * FIXED_ONE * 2 / circle.size - FIXED_ONE;
-        int y = i % circle.size * FIXED_ONE * 2 / circle.size - FIXED_ONE;
-        int luminance = tClamp(FIXED_ONE - (fixedMulR(x,x) + fixedMulR(y,y)),FIXED_ONE / 2,FIXED_ONE);
-        circle.pixel_data[i] = colorToPixelColor((Vec3){luminance << 4,luminance << 4,luminance << 4});
+        real x = i / circle.size * FIXED_ONE * 2 / circle.size - FIXED_ONE;
+        real y = i % circle.size * FIXED_ONE * 2 / circle.size - FIXED_ONE;
+        real luminance = tClamp(FIXED_ONE - (realMulR(x,x) + realMulR(y,y)),FIXED_ONE / 2,FIXED_ONE);
+        circle.pixel_data[i] = colorToPixelColor(vec3Shl(vec3Single(luminance),4));
     }
 	generateMipmaps(&circle);
 	

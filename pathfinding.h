@@ -6,9 +6,9 @@
 #define PATH_FIND_SIZE 15
 
 structure(Route){
-	int  score;
+	real score;
 	int  n_positions;
-	Vec3 positions[0x40];
+	Vec3i positions[0x40];
 };
 
 bool directPath(Vec3 position,Vec3 size,Vec3 destination);

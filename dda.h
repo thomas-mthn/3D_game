@@ -1,6 +1,7 @@
 #ifndef DDA_H
 #define DDA_H
 
+#include "langext.h"
 #include "vec3.h"
 #include "vec2.h"
 
@@ -10,20 +11,20 @@ structure(Ray2){
 	Vec2 delta;
 	Vec2 side;
 
-	Vec2 step;
-	Vec2 square_pos;
+	Vec2i step;
+	Vec2i square_pos;
 
 	int square_side;
 };
 
 structure(Ray3){
-	Vec3 pos;
-	Vec3 dir;
-	Vec3 delta;
-	Vec3 side;
+	Vec3i pos;
+	Vec3i dir;
+	Vec3i delta;
+	Vec3i side;
 
-	Vec3 step;
-	Vec3 square_pos;
+	Vec3i step;
+	Vec3i square_pos;
 
 	int square_side;
 };
@@ -53,18 +54,6 @@ static void iterateRay3(Ray3* ray){
 	ray->square_pos.z += ray->step.z;
 	ray->side.z += ray->delta.z;
 	ray->square_side = VEC3_Z;
-}
-
-static void recalculateRay3(Ray3* ray){
-	ray->side.x = fixedFract(ray->pos.x);
-	ray->side.y = fixedFract(ray->pos.y);
-	ray->side.z = fixedFract(ray->pos.z);
-
-	ray->side.x = fixedMulR((ray->dir.x < 0 ? ray->side.x : FIXED_ONE - ray->side.x),ray->delta.x);
-	ray->side.y = fixedMulR((ray->dir.y < 0 ? ray->side.y : FIXED_ONE - ray->side.y),ray->delta.y);
-	ray->side.z = fixedMulR((ray->dir.z < 0 ? ray->side.z : FIXED_ONE - ray->side.z),ray->delta.z);
-
-	ray->square_pos = (Vec3){ray->pos.x >> FIXED_PRECISION,ray->pos.y >> FIXED_PRECISION,ray->pos.z >> FIXED_PRECISION};
 }
 
 static void iterateRay2(Ray2* ray){

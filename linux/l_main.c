@@ -9,17 +9,12 @@
 #include "../main.h"
 #include "../gui2d.h"
 #include "../console.h"
-#include "../audio.h"
-#include "../thread.h"
+
+#include "../platform/audio.h"
+#include "../platform/storage.h"
 
 #include "l_main.h"
 #include "l_syscall.h"
-
-#define O_RDONLY   0
-#define O_WRONLY   (1 << 0)
-#define O_CREAT    (1 << 6)
-#define O_TRUNC    (1 << 9)
-#define O_NONBLOCK (1 << 11)
 
 structure(LinuxDirent){
     unsigned long  d_ino;
@@ -118,23 +113,6 @@ void linuxOctreeSerialize(Voxel* root_voxel,char* file_name){
     virtualFree(voxel_diskdata,voxel_mem_count + sizeof voxel_count);
 }
 
-FileContent linuxFileRead(char* file_name){
-    int file = systemOpen(file_name,0,0);
-
-	if(file < 0)
-		return (FileContent){0};
-    
-    KernelStat stat;
-    systemFileStat(file,&stat);
-	unsigned file_size = stat.st_size;
-	char* content = virtualAllocate(file_size);
-    
-    systemRead(file,content,file_size);
-    systemClose(file);
-    
-	return (FileContent){.content = content,.size = file_size};
-}
-
 void linuxBlit(int* data,int width,int height){
 	XImage* image = XCreateImage(
         g_surface.display,
@@ -187,12 +165,6 @@ void linuxPrint(String string){
 
 static bool cursor_in_window = false;
 
-void linuxSaveConfig(void){
-    int config_file = systemOpen("config.bin",O_WRONLY | O_CREAT,0);
-    systemWrite(config_file,&g_options,sizeof g_options);
-    systemClose(config_file);
-}
-
 #define WINDOW_SIZE_X (640 * 2)
 #define WINDOW_SIZE_Y (480 * 2)
 
@@ -203,7 +175,7 @@ void set_window_icon(Display *dpy, Window win) {
 void linuxWindowInit(void){
     XStoreName(g_surface.display,g_surface.window,"3D Game");
     XSelectInput(g_surface.display,g_surface.window,ExposureMask | KeyPressMask | PointerMotionMask | ButtonPressMask | ButtonReleaseMask | StructureNotifyMask);
-    
+#if 0    
     Atom net_wm_icon = XInternAtom(g_surface.display, "_NET_WM_ICON", False);
     Atom cardinal = XInternAtom(g_surface.display, "CARDINAL", False);
 
@@ -231,7 +203,7 @@ void linuxWindowInit(void){
         (void*)icon_data_linux,
         ICON_SIZE * ICON_SIZE + 2
     );
-    
+#endif
     XMapWindow(g_surface.display,g_surface.window);
     XFlush(g_surface.display);
 }
@@ -246,14 +218,12 @@ static void* audioThread(void* arg){
 }
 
 int main(void){
-    int config_file = systemOpen("config.bin",0,0);
-	if(config_file == -1){
-		linuxSaveConfig();
-	}
-	else{
-        systemRead(config_file,&g_options,sizeof g_options);
-	    systemClose(config_file);
-	}
+    bool config_file = storageFileExist(IS_FLOAT(real) ? "configf.bin" : "configi.bin");
+	if(config_file)
+        storageFileReadStatic(&g_options,sizeof g_options,IS_FLOAT(real) ? "configf.bin" : "configi.bin");
+	else
+        storageFileWrite(&g_options,sizeof g_options,IS_FLOAT(real) ? "configf.bin" : "configi.bin");
+	
     g_options.editor = true;
     int fd = systemOpen("/dev/input/by-id",0,0);
     char buf[0x1000];
@@ -329,7 +299,7 @@ int main(void){
         
         if(cursor_in_window){
             for(;;){
-                ssize_t n = systemRead(mouse_file,(char*)&ev,sizeof(ev));
+                ssize_t n = systemRead(mouse_file,(char*)&ev,sizeof ev);
                 if(n == E_AGAIN)
                     break;
                 if(n != sizeof(ev)) 
@@ -440,13 +410,17 @@ int main(void){
 		unsigned tick = getTick();
 		
         unsigned n_tick = tick - prev_tick;
-        
+
+#if 0
+        PRINT_VAR(n_tick);
+#endif
         for(int i = n_tick / MAX_TICK_LENGTH;i--;){
-            g_time.delta = MAX_TICK_LENGTH;
+            g_time.delta = intToReal(MAX_TICK_LENGTH) / 0x10000;
+
             tickRun();
         }
-        
-        g_time.delta = n_tick % MAX_TICK_LENGTH;
+        g_time.delta = intToReal(n_tick % MAX_TICK_LENGTH) / 0x10000;
+
         tickRun();
 
         prev_tick = tick;

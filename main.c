@@ -1,6 +1,5 @@
 ﻿#include "main.h"
 #include "draw.h"
-#include "fixed.h"
 #include "vec2.h"
 #include "vec3.h"
 #include "memory.h"
@@ -15,13 +14,15 @@
 #include "voxel_menu.h"
 #include "geometry.h"
 #include "equib_model.h"
-#include "audio.h"
 #include "span.h"
 #include "libc.h"
-#include "thread.h"
 #include "console.h"
 #include "gui2d.h"
 #include "opencl.h"
+
+#include "platform/thread.h"
+#include "platform/storage.h"
+#include "platform/audio.h"
 
 #ifdef __linux__
 
@@ -53,17 +54,19 @@ GameOptions g_options = {
 	.editor = true,
 	.fast_startup = true,
     .lighting_engine = false,
-	.fov = {FIXED_ONE / 2,FIXED_ONE / 3},
+    .rd_fov = FIXED_ONE,
 	.render_backend = RENDER_BACKEND_GL,
     .gl_wireframe = false,
     .textures = true,
     .smooth_lighting = true,
-    .rd_occlusion = true,
+    .rd_occlusion = false,
+    .ms_sensitivity = FIXED_ONE / 0x1000,
+    .gl_qlightmap = true,
 };
 
 bool g_voxel_placement;
 
-int g_exposure = FIXED_ONE;
+real g_exposure = FIXED_ONE;
 bool g_luminance_overlay;
 
 uint8 g_key[0x100];
@@ -74,21 +77,15 @@ bool g_pickup_collected;
 Plane g_view_plane[4];
 
 Player g_player = {
-    .entity = {
-        .position = PLAYER_SPAWN_POSITION,
-        .health = FIXED_ONE,
-        .has_hitbox = true,
-        .hitbox = PLAYER_SIZE,
-    },
-    .voxel_select = VOXEL_SLOPE_XNP,
+    .voxel_select = VOXEL_SLOPE_XNN,
     .edit_depth = 10,
 };
 
-int bilinearScalar(Vec2 position,int* values){
-	int color_x0 = tMix(values[0],values[1],fixedFract(position.y));
-	int color_x1 = tMix(values[2],values[3],fixedFract(position.y));
+real bilinearScalar(Vec2 position,real* values){
+	real color_x0 = tMix(values[0],values[1],tFract(position.y));
+	real color_x1 = tMix(values[2],values[3],tFract(position.y));
 
-	return tMix(color_x0,color_x1,fixedFract(position.x));
+	return tMix(color_x0,color_x1,tFract(position.x));
 }
 
 bool keyDown(int key){
@@ -104,14 +101,14 @@ Vec2 getLookAngle(Vec3 direction){
 
 Vec3 getLookDirection(Vec2 angle){
     return (Vec3){
-    	fixedMulR(tCos(angle.x),tCos(angle.y)),
-        fixedMulR(tSin(angle.x),tCos(angle.y)),
+    	realMulR(tCos(angle.x),tCos(angle.y)),
+        realMulR(tSin(angle.x),tCos(angle.y)),
         tSin(angle.y)
     };
 }
 
 static void pointInScreenSpaceSide(Vec3 point,int* sides){
-	Vec3 transformed = vec3Shr(vec3Sub(point,g_surface.position),0);
+	Vec3 transformed = vec3Sub(point,g_surface.position);
 	
 	if(vec3Dot(transformed,getLookDirection(g_surface.angle)) < 0)
 		sides[0] += 1;
@@ -123,7 +120,7 @@ static void pointInScreenSpaceSide(Vec3 point,int* sides){
 }
 
 bool pointInScreenSpace(Vec3 point){
-	Vec3 transformed = vec3Shr(vec3Sub(point,g_surface.position),0);
+	Vec3 transformed = vec3Sub(point,g_surface.position);
 	
 	if(vec3Dot(transformed,getLookDirection(g_surface.angle)) < 0)
 		return false;
@@ -151,59 +148,63 @@ bool cubeInScreenSpace(Vec3* point){
 	return result[0] != 8 && result[1] != 8 && result[2] != 8 && result[3] != 8 && result[4] != 8;
 }
 
-Vec3 screenRayDirection(int* tri,int x,int y,int fov_x,int fov_y){
+Vec3 screenRayDirection(real* tri,real x,real y,real fov_x,real fov_y){
 	Vec3 ray_ang;
 	
-	int pixel_offset_x = fixedMulR(x,fixedDivR(FIXED_ONE,fov_x));
-	int pixel_offset_y = fixedMulR(y,fixedDivR(FIXED_ONE,fov_y));
-	ray_ang.x = fixedMulR(tri[0],tri[2]);
-	ray_ang.y = fixedMulR(tri[1],tri[2]);
-	ray_ang.x -= fixedMulR(fixedMulR(tri[0],tri[3]),pixel_offset_x);
-	ray_ang.y -= fixedMulR(fixedMulR(tri[1],tri[3]),pixel_offset_x);
-	ray_ang.y += fixedMulR(tri[0],pixel_offset_y);
-	ray_ang.x -= fixedMulR(tri[1],pixel_offset_y);
-	ray_ang.z = tri[3] + fixedMulR(tri[2],pixel_offset_x);
+	real pixel_offset_x = realMulR(x,tReciprocal(fov_x));
+	real pixel_offset_y = realMulR(y,tReciprocal(fov_y));
+	ray_ang.x = realMulR(tri[0],tri[2]);
+	ray_ang.y = realMulR(tri[1],tri[2]);
+	ray_ang.x -= realMulR(realMulR(tri[0],tri[3]),pixel_offset_x);
+	ray_ang.y -= realMulR(realMulR(tri[1],tri[3]),pixel_offset_x);
+	ray_ang.y += realMulR(tri[0],pixel_offset_y);
+	ray_ang.x -= realMulR(tri[1],pixel_offset_y);
+	ray_ang.z = tri[3] + realMulR(tri[2],pixel_offset_x);
 	return ray_ang;
 }
 
 Vec3 pointToScreen(Vec3 point){
 	Vec3 screen_point;
 	Vec3 pos = vec3Sub(point,g_surface.position);
-	int temp;
-	temp  = fixedMulR(pos.y,g_surface.rotation_matrix[0]) - fixedMulR(pos.x,g_surface.rotation_matrix[1]);
-	pos.x = fixedMulR(pos.y,g_surface.rotation_matrix[1]) + fixedMulR(pos.x,g_surface.rotation_matrix[0]);
+	real temp;
+	temp  = realMulR(pos.y,g_surface.rotation_matrix[0]) - realMulR(pos.x,g_surface.rotation_matrix[1]);
+	pos.x = realMulR(pos.y,g_surface.rotation_matrix[1]) + realMulR(pos.x,g_surface.rotation_matrix[0]);
 	pos.y = temp;
-	temp  = fixedMulR(pos.z,g_surface.rotation_matrix[2]) - fixedMulR(pos.x,g_surface.rotation_matrix[3]);
-	pos.x = fixedMulR(pos.z,g_surface.rotation_matrix[3]) + fixedMulR(pos.x,g_surface.rotation_matrix[2]);
+	temp  = realMulR(pos.z,g_surface.rotation_matrix[2]) - realMulR(pos.x,g_surface.rotation_matrix[3]);
+	pos.x = realMulR(pos.z,g_surface.rotation_matrix[3]) + realMulR(pos.x,g_surface.rotation_matrix[2]);
 	pos.z = temp;
 
 	if(pos.x <= 0)
 		return vec3Single(0);
 
-	screen_point.x = fixedDivR(fixedMulR(pos.z,g_options.fov.x),pos.x);
-	screen_point.y = fixedDivR(fixedMulR(pos.y,g_options.fov.y),pos.x);
+	screen_point.x = realDivR(realMulR(pos.z,g_surface.fov.x),pos.x);
+	screen_point.y = realDivR(realMulR(pos.y,g_surface.fov.y),pos.x);
 	if(screen_point.x > FIXED_ONE * 16 || screen_point.x < -FIXED_ONE * 16 || screen_point.y > FIXED_ONE * 16 || screen_point.y < -FIXED_ONE * 16)
 		return vec3Single(0);
 	screen_point.z = pos.x;
 	return screen_point;
 }
 
-Vec3 pointToScreenRenderer(Vec3 point,int* tri,Vec3 renderer_position,Vec2 fov){
+Vec3 pointToScreenRenderer(Vec3 point,real* tri,Vec3 renderer_position,Vec2 fov){
 	Vec3 screen_point;
 	Vec3 pos = vec3Sub(point,renderer_position);
-	int temp;
-	temp  = fixedMulR(pos.y,tri[0]) - fixedMulR(pos.x,tri[1]);
-	pos.x = fixedMulR(pos.y,tri[1]) + fixedMulR(pos.x,tri[0]);
+	real temp;
+	temp  = realMulR(pos.y,tri[0]) - realMulR(pos.x,tri[1]);
+	pos.x = realMulR(pos.y,tri[1]) + realMulR(pos.x,tri[0]);
 	pos.y = temp;
-	temp  = fixedMulR(pos.z,tri[2]) - fixedMulR(pos.x,tri[3]);
-	pos.x = fixedMulR(pos.z,tri[3]) + fixedMulR(pos.x,tri[2]);
+	temp  = realMulR(pos.z,tri[2]) - realMulR(pos.x,tri[3]);
+	pos.x = realMulR(pos.z,tri[3]) + realMulR(pos.x,tri[2]);
 	pos.z = temp;
 
-	screen_point.x = fixedMulR(pos.z,fov.x);
-	screen_point.y = fixedMulR(pos.y,fov.y);
+	screen_point.x = realMulR(pos.z,fov.x);
+	screen_point.y = realMulR(pos.y,fov.y);
 
 	screen_point.z = pos.x;
 	return screen_point;
+}
+
+void configSave(void){
+    storageFileWrite(&g_options,sizeof g_options,IS_FLOAT(real) ? "configf.bin" : "configi.bin");
 }
 
 bool inventoryFull(void){
@@ -303,12 +304,12 @@ int* iconGenerate(void){
 }
 
 void tickRun(void){
-	if(g_player.entity.health <= 0){
+	if(g_player.entity->health <= 0){
 		entityDestroyAll();
 		g_surface.position = (Vec3)PLAYER_SPAWN_POSITION;
 		g_surface.angle = (Vec2)PLAYER_SPAWN_ANGLE;
-		g_player.entity.health = FIXED_ONE;
-		g_player.entity.velocity = (Vec3){0};
+		g_player.entity->health = FIXED_ONE;
+		g_player.entity->velocity = (Vec3){0};
 	}
     if(keyDown(KEY_LBUTTON) && g_equipped_staff && !g_gui_clicked){
 		staffFire();
@@ -331,9 +332,9 @@ void tickRun(void){
 	int n_entity = 0;
 	for(Entity* entity = g_entity;entity;entity = entity->next)
 		n_entity += 1;
-	int change = fixedDivR(FIXED_ONE,(n_entity + 1) * FIXED_ONE) / 64;
+	int change = realDivR(FIXED_ONE,(n_entity + 1) * FIXED_ONE) / 64;
 	
-	if(tRnd() % FIXED_ONE < change && !g_options.editor)
+	if(realRandom(FIXED_ONE) < change && !g_options.editor)
 		entitySpawn();
 		
 	Voxel* previous = 0;
@@ -361,23 +362,23 @@ void tickRun(void){
 			} break;
             case VOXEL_DOOR:{
                 voxel->animation -= 8 << voxel->depth;
-                int block_size = depthToSize(voxel->depth);
+                real block_size = depthToSize(voxel->depth);
                 Vec3 block_pos = voxelWorldPos(voxel);
-                int door_size = fixedMulR(block_size,FIXED_ONE - voxel->animation) / 2;
+                real door_size = realMulR(block_size,FIXED_ONE - voxel->animation) / 2;
                 if(voxel->opened)
                     door_size = block_size / 2 - door_size;
-                int door_size_inv = block_size / 2 - door_size;
+                real door_size_inv = block_size / 2 - door_size;
                 bool box_1 = intersectBoxBox(g_surface.position,PLAYER_SIZE,block_pos,(Vec3){block_size,door_size,block_size});
 
                 if(box_1){
                     voxel->animation += 16 << voxel->depth;
-                    g_player.entity.velocity.y += 0x100;
+                    g_player.entity->velocity.y += 0x100;
                 }
 
                 bool box_2 = intersectBoxBox(g_surface.position,PLAYER_SIZE,(Vec3){block_pos.x,block_pos.y + block_size / 2 + door_size_inv,block_pos.z},(Vec3){block_size,door_size,block_size});
                 if(box_2){
                     voxel->animation += 16 << voxel->depth;
-                    g_player.entity.velocity.y -= 0x100;
+                    g_player.entity->velocity.y -= 0x100;
                 }
                 
                 if(voxel->animation <= 0){
@@ -424,7 +425,7 @@ void tickRun(void){
 
 	spinningStaffSpin();
 
-    g_time.time += g_time.delta;
+    g_time.time += IS_FLOAT(real) ? g_time.delta * 0x10000 : g_time.delta;
 	g_time.tick += 1;
 }
 
@@ -450,20 +451,20 @@ int bitScanReverse(unsigned value){
 
 Plane getPlane(Voxel* voxel,Vec3 dir,unsigned side){
     Plane plane;
-	int size = depthToSize(voxel->depth);
+	real size = depthToSize(voxel->depth);
 	Vec3 pos = voxelWorldPos(voxel);
 	switch(side){
 		case VEC3_X:
 			plane.normal = (Vec3){(dir.x < 0) ? FIXED_ONE : -FIXED_ONE,0,0};
-		    plane.distance = (dir.x < 0) ? -((int*)&pos)[side] - size : ((int*)&pos)[side];
+		    plane.distance = (dir.x < 0) ? -pos.a[side] - size : pos.a[side];
 		    break;
 		case VEC3_Y:
 			plane.normal = (Vec3){0,(dir.y < 0) ? FIXED_ONE : -FIXED_ONE,0};
-		    plane.distance = (dir.y < 0) ? -((int*)&pos)[side] - size : ((int*)&pos)[side];
+		    plane.distance = (dir.y < 0) ? -pos.a[side] - size : pos.a[side];
 		    break;
 		case VEC3_Z:
 			plane.normal = (Vec3){0,0,(dir.z < 0) ? FIXED_ONE : -FIXED_ONE};
-		    plane.distance = (dir.z < 0) ? -((int*)&pos)[side] - size : ((int*)&pos)[side];
+		    plane.distance = (dir.z < 0) ? -pos.a[side] - size : pos.a[side];
 		    break;
 	}
 	return plane;
@@ -472,27 +473,27 @@ Plane getPlane(Voxel* voxel,Vec3 dir,unsigned side){
 int treeRayTraceDistance(Voxel* voxel,Vec3 position,Vec3 dir,int side){
 	if(!voxel)
 		return INT_MAX;
-    int block_size = depthToSize(voxel->depth);
+    real block_size = depthToSize(voxel->depth);
 	Vec3 pos = voxelWorldPos(voxel);
-    Vec2 axis = g_axis_table[side << 1];
+    Vec2i axis = g_axis_table[side << 1];
     Plane plane = getPlane(voxel,dir,side);
     return rayPlaneIntersection(position,dir,plane);
 }
 
-static void addSubVoxel(Vec3 vpos,Vec3 pos,int depth,int remove_depth,VoxelType voxel_type){
+static void addSubVoxel(Vec3i vpos,Vec3i pos,int depth,int remove_depth,VoxelType voxel_type){
 	if(--depth == -1)
 		return;
 	bool offset_x = pos.x >> depth & 1;
 	bool offset_y = pos.y >> depth & 1;
 	bool offset_z = pos.z >> depth & 1;
 	for(int i = 0;i < 8;i++){
-		Vec3 lpos = {(i & 1 << 2) >> 2,(i & 1 << 1) >> 1,(i & 1 << 0) >> 0};
+		Vec3i lpos = {(i & 1 << 2) >> 2,(i & 1 << 1) >> 1,(i & 1 << 0) >> 0};
 		if(offset_x == lpos.x && offset_y == lpos.y && offset_z == lpos.z){
-			Vec3 pos2 = {vpos.x + offset_x << 1,vpos.y + offset_y << 1,vpos.z + offset_z << 1};
+			Vec3i pos2 = {vpos.x + offset_x << 1,vpos.y + offset_y << 1,vpos.z + offset_z << 1};
 			addSubVoxel(pos2,pos,depth,remove_depth,voxel_type);
 			continue;
 		}
-		voxelSet(&g_voxel,vec3Add(vpos,lpos),remove_depth - depth,voxel_type);
+		voxelSet(&g_voxel,(Vec3i){vpos.x + lpos.x,vpos.y + lpos.y,vpos.z + lpos.z},remove_depth - depth,voxel_type);
 	}
 }
 
@@ -509,8 +510,8 @@ void applicationExit(void){
 #endif
 }
 
-static char keyTranslate(char key){
-    char key_char_table[] = {
+static KeyTranslate keyTranslate(Key key){
+    KeyTranslate key_char_table[] = {
         [KEY_A] = 'A',[KEY_B] = 'B',[KEY_C] = 'C',[KEY_D] = 'D',[KEY_E] = 'E',[KEY_F] = 'F',
         [KEY_G] = 'G',[KEY_H] = 'H',[KEY_I] = 'I',[KEY_J] = 'J',[KEY_K] = 'K',[KEY_L] = 'L',
         [KEY_M] = 'M',[KEY_N] = 'N',[KEY_O] = 'O',[KEY_P] = 'P',[KEY_Q] = 'Q',[KEY_R] = 'R',
@@ -521,9 +522,11 @@ static char keyTranslate(char key){
         [KEY_SPACE] = ' ',[KEY_RETURN] = '\n',
         [KEY_OEM_7] = '`',[KEY_OEM_4] = '-',[KEY_OEM_2] = '=',[KEY_OEM_6] = '[',[KEY_OEM_1] = ']',
         [KEY_OEM_PLUS] = ';',[KEY_OEM_5] = '\\',[KEY_OEM_3] = '\'',[KEY_OEM_COMMA] = ',',
-        [KEY_OEM_PERIOD] = '.',[KEY_OEM_MINUS] = '/',[KEY_RETURN] = '\n',[KEY_BACK] = KEYTRANSLATE_BACK,
+        [KEY_OEM_PERIOD] = '.',[KEY_OEM_MINUS] = '/',[KEY_RETURN] = '\n',[KEY_BACK] = KEY_TRANSLATE_BACK,
+        [KEY_TAB] = '\t',[KEY_UP] = KEY_TRANSLATE_UP,[KEY_DOWN] = KEY_TRANSLATE_DOWN,
+        [KEY_LEFT] = KEY_TRANSLATE_LEFT,[KEY_RIGHT] = KEY_TRANSLATE_RIGHT,
     };
-    char key_char_shift_table[] = {
+    KeyTranslate key_char_shift_table[] = {
         [KEY_1] = '!',[KEY_2] = '@',[KEY_3] = '#',[KEY_4] = '$',[KEY_5] = '%',
         [KEY_6] = '^',[KEY_7] = '&',[KEY_8] = '*',[KEY_9] = '(',[KEY_0] = ')',
         [KEY_OEM_7] = '~',[KEY_OEM_4] = '_',[KEY_OEM_2] = '+',[KEY_OEM_6] = '{',[KEY_OEM_1] = '}',
@@ -537,15 +540,7 @@ static char keyTranslate(char key){
     return shift ? key_char_shift_table[key] : key_char_table[key];
 }
 
-void configSave(void){
-#ifdef _MSC_VER
-    win32SaveConfig();
-#elif defined(__linux__)
-    linuxSaveConfig();
-#endif
-}
-
-void keyPress(int key){
+void keyPress(Key key){
     if(g_voxel_interact){
         if(g_voxel_interact->type == VOXEL_CONSOLE){
             consoleInput(keyTranslate(key));
@@ -587,7 +582,7 @@ void keyPress(int key){
             RayHit hit = rayHitPosition(g_surface.position,getLookDirection(g_surface.angle));
             if(hit.voxel){
                 Vec3 spawn = vec3Direction(g_surface.position,hit.position);
-                spawn = vec3Sub(hit.position,vec3MulS(spawn,FIXED_ONE + FIXED_ONE / 16));
+                spawn = vec3Sub(hit.position,vec3MulS(spawn,FIXED_ONE * 2));
                 entityCreate(spawn,ENTITY_SLIME);
             }
 		} break;
@@ -605,38 +600,38 @@ void keyPress(int key){
             if(g_voxel_placement)
                 g_player.weapon->health = 0;
             else
-                g_player.weapon = entityCreate(g_player.entity.position,ENTITY_WEAPON);
+                g_player.weapon = entityCreate(g_player.entity->position,ENTITY_WEAPON);
             
 		} break;
 		case KEY_O:{
 			static Vec3 pre_settings_position;
 			if(in_settings){
-				voxelSet(&g_voxel,(Vec3){0,0,(1 << 4) - 1},4,VOXEL_AIR);
+				voxelSet(&g_voxel,(Vec3i){0,0,(1 << 4) - 1},4,VOXEL_AIR);
 				
 				g_surface.position = pre_settings_position;
 
-                configSave();
+                storageFileReadStatic(&g_options,sizeof g_options,"config.bin");
 			}
 			else{
 				pre_settings_position = g_surface.position;
                 
-				voxelSet(&g_voxel,(Vec3){0,0,(1 << 5) - 2},5,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){0,0,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){0,1,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){0,2,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){0,3,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){0,4,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){1,4,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){2,4,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){3,4,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){4,4,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){4,3,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){4,2,(1 << 7) - 4},7,VOXEL_MENU);
-				voxelSet(&g_voxel,(Vec3){4,1,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){4,0,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){3,0,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){2,0,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
-				voxelSet(&g_voxel,(Vec3){1,0,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){0,0,(1 << 5) - 2},5,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){0,0,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){0,1,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){0,2,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){0,3,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){0,4,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){1,4,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){2,4,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){3,4,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){4,4,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){4,3,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){4,2,(1 << 7) - 4},7,VOXEL_MENU);
+				voxelSet(&g_voxel,(Vec3i){4,1,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){4,0,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){3,0,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){2,0,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
+				voxelSet(&g_voxel,(Vec3i){1,0,(1 << 7) - 4},7,VOXEL_UNDESTRUCTIBLE);
 
 				g_surface.position = (Vec3){0xA0000,0xA0000,(1 << 25) - 0x80000};
 			}
@@ -672,46 +667,46 @@ static Vec2 voxelPosition2D(Voxel* voxel,Vec3 position,Vec3 dir,int side){
     return uvMirror(voxelGuiPositionGet(voxel,position,dir,side),side << 1 | dir.a[side] < 0);
 }
 
-bool blockOutlinePositionGet(Vec3* position){
+bool blockOutlinePositionGet(Vec3i* position){
 	Vec3Axis side;
 	Vec3 dir = getLookDirection(g_surface.angle);
 	Voxel* voxel = treeRayTraceAndInit(g_surface.position,dir,&side,(TreeTraceFlags){.everything_solid = true});
 	if(!voxel)
 		return false;
-	Vec3 block_pos_i = (Vec3){voxel->position_x,voxel->position_y,voxel->position_z};
+	Vec3i block_pos_i = {voxel->position_x,voxel->position_y,voxel->position_z};
 	block_pos_i.a[side] += (dir.a[side] < 0) * 2 - 1;
 			
 	if(voxel->depth > g_player.edit_depth){
 		int shift = voxel->depth - g_player.edit_depth;
-		*position = vec3Shr(block_pos_i,shift);
+		*position = (Vec3i){block_pos_i.x >> shift,block_pos_i.y >> shift,block_pos_i.z >> shift};
 	}
 	else{
 		int shift = g_player.edit_depth - voxel->depth;
-		*position = vec3Shl(block_pos_i,shift);
+		*position = (Vec3i){block_pos_i.x << shift,block_pos_i.y << shift,block_pos_i.z << shift};
 	}
 	if(voxel->depth < g_player.edit_depth){
 		int depht_difference = g_player.edit_depth - voxel->depth;
 		Vec2 uv = voxelPosition2D(voxel,g_surface.position,dir,side);
-		Vec2 axis = g_axis_table[side << 1];
+		Vec2i axis = g_axis_table[side << 1];
 		uv.x *= 1 << depht_difference;
 		uv.y *= 1 << depht_difference;
 		position->a[side] += ((dir.a[side] > 0) << depht_difference) - (dir.a[side] > 0);
-		position->a[axis.x] += uv.x >> FIXED_PRECISION;
-		position->a[axis.y] += uv.y >> FIXED_PRECISION;
+		position->a[axis.x] += realToInt(uv.x);
+		position->a[axis.y] += realToInt(uv.y);
 	}
 	return true;
 }
 
 VoxelSerialized* g_voxel_template;
 
-static void voxelTemplatePlace(VoxelSerialized* voxel_array,int voxel_index,Vec3 position,int depth){
+static void voxelTemplatePlace(VoxelSerialized* voxel_array,int voxel_index,Vec3i position,int depth){
 	if(voxel_index == -1)
 		return;
 	VoxelSerialized* voxel = (VoxelSerialized*)((char*)voxel_array + voxel_index);
 	if(voxel->type == VOXEL_PARENT){
 		VoxelSerializedParent* voxel_parent = (VoxelSerializedParent*)voxel;
 		for(int i = 0;i < 8;i++){
-			Vec3 child_position = {
+			Vec3i child_position = {
 				position.x << 1 | (i >> 0 & 1),
 				position.y << 1 | (i >> 1 & 1),
 				position.z << 1 | (i >> 2 & 1)
@@ -740,19 +735,8 @@ Entity* g_boss;
 
 void lButtonDown(void){
 	Voxel* voxel = g_voxel_pointed.voxel;
-    if(!voxel)
-		return;
-    if(keyDown(KEY_LMENU)){
-        if(voxel->type == VOXEL_CONSOLE || voxel->type == VOXEL_STRING)
-            g_voxel_interact = voxel;
-        return;
-    }
-    if(g_voxel_interact){
-        g_voxel_interact = 0;
-        return;
-    }
 	if(!g_voxel_placement){
-		if(voxelGuiOnClick(voxel,g_voxel_pointed.side)){
+		if(voxel && voxelGuiOnClick(voxel,g_voxel_pointed.side)){
 			g_gui_clicked = true;
 			return;
 		}
@@ -760,13 +744,11 @@ void lButtonDown(void){
 			Vec3 direction = getLookDirection(g_surface.angle);
 			Vec3Axis side;
 			Voxel* voxel = treeRayTraceAndInit(g_surface.position,direction,&side,(TreeTraceFlags){0});
-			int distance;
+			real distance;
 			if(voxel)
 				distance = treeRayTraceDistance(voxel,g_surface.position,direction,side);
 			else
 				distance = INT_MAX;
-
-			
 #if 0
 			Entity* entity = entityRayCollisionRecursive(&g_voxel,g_surface.position,direction);
 			voxelEntityRemove();
@@ -778,52 +760,63 @@ void lButtonDown(void){
 #endif
 		    g_player.weapon->attack_cooldown = FIXED_ONE;
 		}
-		if(voxel){
-			Voxel* voxel = g_voxel_pointed.voxel;
-			switch(voxel->type){
-				case VOXEL_BOSS:{
-					if(g_boss)
-						break;
-					Vec3 block_position = voxelWorldPos(voxel);
-					block_position.x += depthToSize(voxel->depth) / 2;
-					block_position.y += depthToSize(voxel->depth) / 2;
-					block_position.z += depthToSize(voxel->depth) + FIXED_ONE;
-					g_boss = entityCreate(block_position,ENTITY_BOSS);
-					g_gui_clicked = true;
-					voxel->animation = FIXED_ONE;
-					voxelTickListAdd(voxel);
-				} return;
-				case VOXEL_CHEST:{
-					if(voxel->chest_open)
-						break;
-					Vec3 block_position = voxelWorldPos(voxel);
-					block_position.x += depthToSize(voxel->depth) / 2;
-					block_position.y += depthToSize(voxel->depth) / 2;
-					block_position.z += depthToSize(voxel->depth) + FIXED_ONE;
+        if(!voxel)
+            return;
+        Voxel* voxel = g_voxel_pointed.voxel;
+        switch(voxel->type){
+            case VOXEL_BOSS:{
+                if(g_boss)
+                    break;
+                Vec3 block_position = voxelWorldPos(voxel);
+                block_position.x += depthToSize(voxel->depth) / 2;
+                block_position.y += depthToSize(voxel->depth) / 2;
+                block_position.z += depthToSize(voxel->depth) + FIXED_ONE;
+                g_boss = entityCreate(block_position,ENTITY_BOSS);
+                g_gui_clicked = true;
+                voxel->animation = FIXED_ONE;
+                voxelTickListAdd(voxel);
+            } return;
+            case VOXEL_CHEST:{
+                if(voxel->chest_open)
+                    break;
+                Vec3 block_position = voxelWorldPos(voxel);
+                block_position.x += depthToSize(voxel->depth) / 2;
+                block_position.y += depthToSize(voxel->depth) / 2;
+                block_position.z += depthToSize(voxel->depth) + FIXED_ONE;
 
-					static bool dropped_staff;
-					if(!dropped_staff || tRndChance(8)){
-						staffGenerate(block_position);
-						dropped_staff = true;
-					}
-					else{
-						for(int i = 0x10;i--;){
-							Entity* pickup = entityCreate(block_position,ENTITY_PICKUP);
-							pickup->velocity.x += tRnd() % (FIXED_ONE / 8) - FIXED_ONE / 16;
-							pickup->velocity.y += tRnd() % (FIXED_ONE / 8) - FIXED_ONE / 16;
-							pickup->velocity.z += tRnd() % (FIXED_ONE / 8) + FIXED_ONE / 8;
-							pickup->color_emit = (Vec3){tRnd() % FIXED_ONE,tRnd() % FIXED_ONE,tRnd() % FIXED_ONE};
-						}
-					}
-					voxel->chest_open = true;
-					voxel->animation = FIXED_ONE;
-					audioPlay(block_position,AUDIO_CHEST_OPEN);
-					voxelTickListAdd(voxel);
-					g_gui_clicked = true;
-				} return;
-			}
+                static bool dropped_staff;
+                if(!dropped_staff || tRndChance(8)){
+                    staffGenerate(block_position);
+                    dropped_staff = true;
+                }
+                else{
+                    for(int i = 0x10;i--;){
+                        Entity* pickup = entityCreate(block_position,ENTITY_PICKUP);
+                        pickup->velocity.x += realRandom(FIXED_ONE / 8) - FIXED_ONE / 16;
+                        pickup->velocity.y += realRandom(FIXED_ONE / 8) - FIXED_ONE / 16;
+                        pickup->velocity.z += realRandom(FIXED_ONE / 8) + FIXED_ONE / 8;
+                        pickup->color_emit = (Vec3){realRandom(FIXED_ONE),realRandom(FIXED_ONE),realRandom(FIXED_ONE)};
+                    }
+                }
+                voxel->chest_open = true;
+                voxel->animation = FIXED_ONE;
+                audioPlay(block_position,AUDIO_CHEST_OPEN);
+                voxelTickListAdd(voxel);
+                g_gui_clicked = true;
+            } return;
 		}
 	}
+    if(!voxel)
+		return;
+    if(keyDown(KEY_LMENU)){
+        if(voxel->type == VOXEL_CONSOLE || voxel->type == VOXEL_STRING)
+            g_voxel_interact = voxel;
+        return;
+    }
+    if(g_voxel_interact){
+        g_voxel_interact = 0;
+        return;
+    }
 	VoxelStatic* voxel_s = g_voxel_static + voxel->type;
 	if(g_voxel_placement){
 		if(button_link){
@@ -854,12 +847,12 @@ void lButtonDown(void){
 	if(voxel_s->no_blockplace)
 		return;
 	
-	Vec3 octree_position;
+	Vec3i octree_position;
 	if(!blockOutlinePositionGet(&octree_position))
 		return;
 	if(keyDown(KEY_LCONTROL)){
 		static struct{
-			Vec3 position;
+			Vec3i position;
 			int depth;
 			bool setted;
 		} voxel_fill_begin;
@@ -869,12 +862,12 @@ void lButtonDown(void){
 			voxel_fill_begin.setted = true;
 		}
 		else{
-			Vec3 begin = voxel_fill_begin.position;
+			Vec3i begin = voxel_fill_begin.position;
 			VoxelType type = g_player.voxel_select;
 			for(int x = tMin(begin.x,octree_position.x);x <= tMax(begin.x,octree_position.x);x++){
 				for(int y = tMin(begin.y,octree_position.y);y <= tMax(begin.y,octree_position.y);y++){
 					for(int z = tMin(begin.z,octree_position.z);z <= tMax(begin.z,octree_position.z);z++)
-						voxelSet(&g_voxel,(Vec3){x,y,z},g_player.edit_depth,type);
+						voxelSet(&g_voxel,(Vec3i){x,y,z},g_player.edit_depth,type);
 				}
 			}
 			voxel_fill_begin.setted = false;
@@ -900,37 +893,37 @@ void rButtonDown(void){
 	Voxel* voxel = treeRayTraceAndInit(g_surface.position,direction,&side,(TreeTraceFlags){0});
 	if(!voxel)
 		return;
-	Vec3 block_pos_i = {voxel->position_x,voxel->position_y,voxel->position_z};
+	Vec3i block_pos_i = {voxel->position_x,voxel->position_y,voxel->position_z};
 
 	Voxel voxel_cpy = *voxel;
 
-	voxelSet(&g_voxel,(Vec3){voxel->position_x,voxel->position_y,voxel->position_z},voxel->depth,VOXEL_AIR);
+	voxelSet(&g_voxel,(Vec3i){voxel->position_x,voxel->position_y,voxel->position_z},voxel->depth,VOXEL_AIR);
 
 	if(voxel->depth >= g_player.edit_depth)
 		return;
 			
 	int depht_difference = g_player.edit_depth - voxel_cpy.depth;
-	Vec3 octree_position = vec3Shl(block_pos_i,depht_difference);
-	Vec2 axis = g_axis_table[side << 1];
+	Vec3i octree_position = (Vec3i){block_pos_i.x << depht_difference,block_pos_i.y << depht_difference,block_pos_i.z << depht_difference};
+	Vec2i axis = g_axis_table[side << 1];
 	Vec2 uv = voxelGuiPositionGet(&voxel_cpy,g_surface.position,direction,side);
     uv = uvMirror(uv,side << 1 | direction.a[side] < 0);
 	uv.x *= 1 << depht_difference;
 	uv.y *= 1 << depht_difference;
 	octree_position.a[side] += ((direction.a[side] < 0) << depht_difference) - (direction.a[side] < 0);
-	octree_position.a[axis.x] += uv.x >> FIXED_PRECISION;
-	octree_position.a[axis.y] += uv.y >> FIXED_PRECISION;
-	Vec3 pos_i;
+	octree_position.a[axis.x] += realToInt(uv.x);
+	octree_position.a[axis.y] += realToInt(uv.y);
+	Vec3i pos_i;
 	int depht_difference_size = 1 << depht_difference;
-	pos_i.x = (int)octree_position.x & depht_difference_size - 1;
-	pos_i.y = (int)octree_position.y & depht_difference_size - 1;
-	pos_i.z = (int)octree_position.z & depht_difference_size - 1;
+	pos_i.x = octree_position.x & depht_difference_size - 1;
+	pos_i.y = octree_position.y & depht_difference_size - 1;
+	pos_i.z = octree_position.z & depht_difference_size - 1;
 
-	addSubVoxel(vec3Shl(block_pos_i,1),pos_i,depht_difference,g_player.edit_depth,voxel_cpy.type);
+	addSubVoxel((Vec3i){block_pos_i.x << 1,block_pos_i.y << 1,block_pos_i.z << 1},pos_i,depht_difference,g_player.edit_depth,voxel_cpy.type);
 }
 
 void mButtonDown(void){
 	if(keyDown(KEY_LCONTROL)){
-		Vec3 octree_position;
+		Vec3i octree_position;
 		if(!blockOutlinePositionGet(&octree_position))
 			return;
 		Voxel* voxel = voxelGet(octree_position,g_player.edit_depth);
@@ -954,24 +947,10 @@ void mButtonDown(void){
 }
 
 void mouseMove(int delta_x,int delta_y){
-	g_surface.angle.x += delta_x << 3;
-	g_surface.angle.y += delta_y << 3;
+	g_surface.angle.x += realMulR(intToReal(delta_x) / 0x100,g_options.ms_sensitivity);
+	g_surface.angle.y += realMulR(intToReal(delta_y) / 0x100,g_options.ms_sensitivity);
 
     g_surface.angle.y = tClamp(g_surface.angle.y,FIXED_ONE / 4,FIXED_ONE - FIXED_ONE / 4);
-}
-
-static int mandelbrot(int px,int py){
-	int x = 0;
-	int y = 0;
-
-	for(int i = 0;i < 0x100;i++){
-		int xtemp = fixedMulR(x,x) - fixedMulR(y,y) + px;
-		y = fixedMulR(x * 2,y) + py;
-		x = xtemp;
-		if(x + y > FIXED_ONE * 0x10)
-			return i;
-	}
-	return 0x100;
 }
 
 VoxelPointed g_voxel_pointed;
@@ -1019,22 +998,22 @@ void boxQuadWireframeDraw(Vec3 position,Vec3 size,int color,bool octree){
 }
 
 Vec3 fibonnaciSphereSample(int i,int n){
-    int golden_angle = 25080;
+    real golden_angle = REAL_UNIT * 0x62;
 
-    int z = FIXED_ONE - ((i * 2 + 1) * FIXED_ONE) / n;
+    real z = FIXED_ONE - ((i * 2 + 1) * FIXED_ONE) / n;
 
-    int zz = fixedMulR(z,z);
-    int r = tSqrt(FIXED_ONE - zz);
+    real zz = realMulR(z,z);
+    real r = tSqrt(FIXED_ONE - zz);
 
-    int phi = fixedFract(i * golden_angle);
+    real phi = tFract(i * golden_angle);
 
-    int x = fixedMulR(r,tCos(phi));
-    int y = fixedMulR(r,tSin(phi));
+    real x = realMulR(r,tCos(phi));
+    real y = realMulR(r,tSin(phi));
 
-    return vec3Normalize((Vec3){x,y,z});
+    return (Vec3){x,y,z};
 }
 
-static void generateBlockOutline(Vec3 sub_block_pos,int sub_block_size){
+static void generateBlockOutline(Vec3 sub_block_pos,real sub_block_size){
 	Vec3 look_direction = getLookDirection(g_surface.angle);
 	Vec3Axis side;
 
@@ -1055,48 +1034,39 @@ static void generateBlockOutline(Vec3 sub_block_pos,int sub_block_size){
 	if(g_voxel_static[g_voxel_pointed.voxel->type].no_blockplace || !g_voxel_placement)
 		return;
 
-	int edit_size = depthToSize(g_player.edit_depth);
+	real edit_size = depthToSize(g_player.edit_depth);
 
-	Vec3 block_pos_i = {voxel->position_x,voxel->position_y,voxel->position_z};
+	Vec3i block_pos_i = {voxel->position_x,voxel->position_y,voxel->position_z};
 
 	block_pos_i.a[side] += (look_direction.a[side] < 0) * 2 - 1;
-	Vec3 octree_position;
+	Vec3i octree_position;
 	if(voxel->depth > g_player.edit_depth){
-		int difference = voxel->depth - g_player.edit_depth;
-		octree_position = (Vec3){block_pos_i.x >> difference,block_pos_i.y >> difference,block_pos_i.z >> difference};
+		int shift = voxel->depth - g_player.edit_depth;
+		octree_position = (Vec3i){block_pos_i.x >> shift,block_pos_i.y >> shift,block_pos_i.z >> shift};
 	}
 	else{
-		int difference = g_player.edit_depth - voxel->depth;
-		octree_position = (Vec3){block_pos_i.x << difference,block_pos_i.y << difference,block_pos_i.z << difference};
+		int shift = g_player.edit_depth - voxel->depth;
+		octree_position = (Vec3i){block_pos_i.x << shift,block_pos_i.y << shift,block_pos_i.z << shift};;
 	}
 	Vec3 point[8];
 	Vec2 screen_point[8];
-
+    
 	if(voxel->depth < g_player.edit_depth){
-		Vec2 axis = g_axis_table[side << 1];
-		uv.x *= 1 << g_player.edit_depth - voxel->depth;
-		uv.y *= 1 << g_player.edit_depth - voxel->depth;
+		Vec2i axis = g_axis_table[side << 1];
+        uv = vec2MulS(uv,intToReal(1 << g_player.edit_depth - voxel->depth));
 		octree_position.a[side] += ((look_direction.a[side] > 0) << (g_player.edit_depth - voxel->depth)) - (look_direction.a[side] > 0);
-		octree_position.a[axis.x] += uv.x >> 16;
-		octree_position.a[axis.y] += uv.y >> 16;
+		octree_position.a[axis.x] += realToInt(uv.x);
+		octree_position.a[axis.y] += realToInt(uv.y);
 	}
 	
-	octree_position = (Vec3){octree_position.x * edit_size,octree_position.y * edit_size,octree_position.z * edit_size};
-	fixedMul(&sub_block_size,edit_size);
+	Vec3 octree_position_r = {octree_position.x * edit_size,octree_position.y * edit_size,octree_position.z * edit_size};
+	realMul(&sub_block_size,edit_size);
 	sub_block_pos = (Vec3){sub_block_pos.x * edit_size,sub_block_pos.y * edit_size,sub_block_pos.z * edit_size};
 
-	boxQuadWireframeDraw(vec3Add(octree_position,sub_block_pos),vec3Single(sub_block_size),0xFFFFFF,false);
+	boxQuadWireframeDraw(vec3Add(octree_position_r,sub_block_pos),vec3Single(sub_block_size),0xFFFFFF,false);
 }
 
 #define GEN_SIZE (1 << 4)
-
-FileContent fileRead(char* path){
-#ifdef __linux__
-    return linuxFileRead(path);
-#else
-    return win32FileRead(path);
-#endif
-}
 
 void worldDestroy(void){
     allocatorFreeListFreeAll(&g_allocator_world);
@@ -1106,26 +1076,26 @@ void worldDestroy(void){
 }
 
 void worldDefaultGenerate(void){
-    voxelSet(&g_voxel,(Vec3){64,64,64},7,VOXEL_CONSOLE);
-    voxelSet(&g_voxel,(Vec3){0,0,0},1,VOXEL_BLOCK);
-	voxelSet(&g_voxel,(Vec3){0,1,0},1,VOXEL_BLOCK);
-	voxelSet(&g_voxel,(Vec3){1,1,0},1,VOXEL_BLOCK);
-	voxelSet(&g_voxel,(Vec3){1,0,0},1,VOXEL_BLOCK);
+    voxelSet(&g_voxel,(Vec3i){64,64,64},7,VOXEL_CONSOLE);
+    voxelSet(&g_voxel,(Vec3i){0,0,0},1,VOXEL_STONE);
+	voxelSet(&g_voxel,(Vec3i){0,1,0},1,VOXEL_STONE);
+	voxelSet(&g_voxel,(Vec3i){1,1,0},1,VOXEL_STONE);
+	voxelSet(&g_voxel,(Vec3i){1,0,0},1,VOXEL_STONE);
 }
 
 static String worldNameToPath(String name){
     String path = STRING_LITERAL("world/");
-    String path_name = stringConcat(path,name);
-    String path_name_ext = stringConcat(path_name,(String)STRING_LITERAL(".octvxl\0"));
+    String path_name = stringConcat(&g_arena_frame,path,name);
+    String path_name_ext = stringConcat(&g_arena_frame,path_name,(String)STRING_LITERAL(".octvxl\0"));
     return path_name_ext;
 }
 
 bool worldExist(String name){
-    return fileRead(worldNameToPath(name).data).content;
+    return storageFileExist(worldNameToPath(name).data);
 }
 
 bool worldLoad(String name){
-    FileContent file = fileRead(worldNameToPath(name).data);
+    FileContent file = storageFileRead(&g_arena_frame,worldNameToPath(name).data);
 
 	if(!file.content)
 		return false;
@@ -1139,9 +1109,9 @@ bool worldLoad(String name){
         return false;
     Voxel** voxel_array = virtualAllocate(sizeof(Voxel*) * world.size);
 	int index_i = 0;
-	g_voxel = *octreeDeserializeRecursive((void*)world.content,0,0,0,(Vec3){0,0,0},voxel_array,&index_i);
+	g_voxel = *octreeDeserializeRecursive((void*)world.content,0,0,0,(Vec3i){0,0,0},voxel_array,&index_i);
 	index_i = 0;
-	octreeDeserializeLink((void*)world.content,0,0,(Vec3){0,0,0},voxel_array,&index_i);
+	octreeDeserializeLink((void*)world.content,0,0,(Vec3i){0,0,0},voxel_array,&index_i);
 	virtualFree(voxel_array,sizeof(Voxel*) * world.size);
     return true;
 }
@@ -1156,9 +1126,31 @@ void worldSave(String name){
 
 char g_voxel_lighting_tree[0x100000];
 
+Vec2 aspectRatioTransform(Vec2 v){
+    real ratio = realDivR(tMax(g_surface.window_width,g_surface.window_height),tMin(g_surface.window_width,g_surface.window_height));
+    
+    if(g_surface.window_width < g_surface.window_height)
+        v.x = realDivR(v.x,ratio);
+    else
+        v.y = realDivR(v.y,ratio);
+    
+    return v;
+}
+
 void mainInit(void){
+    for(int i = 0;i < 0x100;i++){
+        PRINT_VAR(i);
+        PRINT_VAR(realToInt(tArcTan2(tCos(intToReal(i) / 0x100),tSin(intToReal(i) / 0x100)) * 0x100));
+        PRINT_VAR(realToInt(tArcSin(intToReal(i) / 0x100) * 0x100));
+    }
+    printNumberNL(mipmapGet((Vec3){0},(Vec3){0},intToReal(0x10),FIXED_ONE));
+    printNumberNL(mipmapGet((Vec3){0},(Vec3){0},intToReal(0x20),FIXED_ONE));
+    printNumberNL(mipmapGet((Vec3){0},(Vec3){0},intToReal(0x40),FIXED_ONE));
+    printNumberNL(mipmapGet((Vec3){0},(Vec3){0},intToReal(0x80),FIXED_ONE));
     if(!worldLoad((String)STRING_LITERAL("world_1")))
         worldDefaultGenerate();
+
+    voxelChildMaskSet(&g_voxel);
     
     threadInit();
     openclInit();
@@ -1167,33 +1159,37 @@ void mainInit(void){
 		g_player.movement_fly = true;
 		g_voxel_placement = true;
 	}
+
+    g_player.entity = entityCreate((Vec3)PLAYER_SPAWN_POSITION,ENTITY_PLAYER);
     
     if(!g_voxel_placement)
-        g_player.weapon = entityCreate(g_player.entity.position,ENTITY_WEAPON);
+        g_player.weapon = entityCreate(g_player.entity->position,ENTITY_WEAPON);
 
 	for(int i = 0;i < 5 * 6;i++){
-		int offset_x = i / 5 * 0x2800;
-		int offset_y = i % 5 * 0x2800;
+		real offset_x = i / 5 * (REAL_UNIT * 0x28);
+		real offset_y = i % 5 * (REAL_UNIT * 0x28);
 		g_inventory_gui[i] = (VoxelGuiElement){
 			.type = VOXEL_GUI_INVENTORY_SLOT,
-			.position = (Vec2){offset_x + 0x800,0x800 + offset_y},
+			.position = (Vec2){offset_x + REAL_UNIT * 0x08,REAL_UNIT * 0x08 + offset_y},
 			.inventory_slot = g_inventory + i,
 		};
 	}
 	g_surface.backend = g_options.render_backend;
 	entityInit();
 	surfaceInit(&g_surface);
+    g_surface.fov = aspectRatioTransform(vec2Single(g_options.rd_fov));
 	texturesGenerate();
 }
 
 #define SKYBOX_POLYGON_SIZE 16
+#define SKYBOX_POLYGON_RSIZE (FIXED_ONE * SKYBOX_POLYGON_SIZE)
 
 static void setViewPlanes(void){
     Vec3 corner_angle[] = {
-		screenRayDirection(g_surface.rotation_matrix,-FIXED_ONE,-FIXED_ONE,g_options.fov.x,g_options.fov.y),
-		screenRayDirection(g_surface.rotation_matrix,FIXED_ONE,-FIXED_ONE,g_options.fov.x,g_options.fov.y),
-		screenRayDirection(g_surface.rotation_matrix,FIXED_ONE,FIXED_ONE,g_options.fov.x,g_options.fov.y),
-		screenRayDirection(g_surface.rotation_matrix,-FIXED_ONE,FIXED_ONE,g_options.fov.x,g_options.fov.y),
+		screenRayDirection(g_surface.rotation_matrix,-FIXED_ONE,-FIXED_ONE,g_surface.fov.x,g_surface.fov.y),
+		screenRayDirection(g_surface.rotation_matrix,FIXED_ONE,-FIXED_ONE,g_surface.fov.x,g_surface.fov.y),
+		screenRayDirection(g_surface.rotation_matrix,FIXED_ONE,FIXED_ONE,g_surface.fov.x,g_surface.fov.y),
+		screenRayDirection(g_surface.rotation_matrix,-FIXED_ONE,FIXED_ONE,g_surface.fov.x,g_surface.fov.y),
 	};
 	g_view_plane[0].normal = vec3Cross(corner_angle[0],corner_angle[1]);
 	g_view_plane[1].normal = vec3Cross(corner_angle[1],corner_angle[2]);
@@ -1214,6 +1210,7 @@ structure(RayTracePixelsArg){
 };
 
 static void nextSpellDraw(void){
+#if 0
     Gui2dFlags bottom_left = (Gui2dFlags){.invert_x = true,.invert_y = true};
     gui2dStringDraw(0x4000,0x1000,(String)STRING_LITERAL("next spell"),0x1000,0xFFFFFF,0x1000,bottom_left);
 	int i = 0;
@@ -1237,8 +1234,8 @@ static void nextSpellDraw(void){
 		if(spell_slot->type != INVENTORY_SPELL)
 			break;
 
-		int x = 0xA00 * 2;
-		int y = offset * 0x2000 + 0x1000;
+		real x = 0xA00 * 2;
+		real y = offset * 0x2000 + 0x1000;
 
         int frame_color = 0x202020;
 		int color = 0x8080800;
@@ -1249,8 +1246,8 @@ static void nextSpellDraw(void){
 
         int thickness = 0x100;
         
-        int size_x = FIXED_ONE / 8 - thickness * 6;
-        int size_y = FIXED_ONE / 8 - thickness * 6;
+        real size_x = FIXED_ONE / 8 - thickness * 6;
+        real size_y = FIXED_ONE / 8 - thickness * 6;
 
         gui2dFrameDraw(x,y,size_x,size_y,color,thickness,bottom_left);
         gui2dRectangleDraw(x + thickness,y + thickness,size_x - thickness * 2,size_y - thickness * 2,frame_color,bottom_left);
@@ -1261,8 +1258,8 @@ static void nextSpellDraw(void){
 			} break;
 			case SPELL_BOMB:{
                 return;
-				int size = 0x300;
-                int fuse = 0x800;
+				real size = 0x300;
+                real fuse = 0x800;
 
                 gui2dEllipsesDraw(x,y,size * 4,size * 4,0x202020,bottom_left);
                 gui2dEllipsesDraw(x - size / 2,y + size / 2,size,size,0x606060,bottom_left);
@@ -1271,12 +1268,12 @@ static void nextSpellDraw(void){
                 gui2dRectangleDraw(x - size * 2 - size / 4 - fuse / 2,y,fuse,size,0x404040,bottom_left);
                 gui2dRectangleDraw(x - size * 2 - size / 4 - fuse / 2 - size / 2,y,size,size,0x404040,bottom_left);
 #if 0
-				drawEllipses(&g_surface,x,y,fixedMulR(size * 4,g_options.fov.x),fixedMulR(size * 4,g_options.fov.y),vec3Single(1 << 14));
-				drawEllipses(&g_surface,x - size / 2,y + size / 2,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),vec3Single(1 << 18));
-				drawRectangle(&g_surface,x - size * 2 - size / 4,y - size / 8 - size / 2,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y) * 4,vec3Single(1 << 16));
+				drawEllipses(&g_surface,x,y,fixedMulR(size * 4,g_surface.fov.x),fixedMulR(size * 4,g_surface.fov.y),vec3Single(1 << 14));
+				drawEllipses(&g_surface,x - size / 2,y + size / 2,fixedMulR(size,g_surface.fov.x),fixedMulR(size,g_surface.fov.y),vec3Single(1 << 18));
+				drawRectangle(&g_surface,x - size * 2 - size / 4,y - size / 8 - size / 2,fixedMulR(size,g_surface.fov.x),fixedMulR(size,g_surface.fov.y) * 4,vec3Single(1 << 16));
 				
-				drawRectangle(&g_surface,x - size * 2 - size / 4 - fuse / 2,y,fixedMulR(fuse,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x83B2EB));
-				drawRectangle(&g_surface,x - size * 2 - size / 4 - fuse / 2 - size / 2,y,fixedMulR(size,g_options.fov.x),fixedMulR(size,g_options.fov.y),pixelColorToColor(0x1050FF));
+				drawRectangle(&g_surface,x - size * 2 - size / 4 - fuse / 2,y,fixedMulR(fuse,g_surface.fov.x),fixedMulR(size,g_surface.fov.y),pixelColorToColor(0x83B2EB));
+				drawRectangle(&g_surface,x - size * 2 - size / 4 - fuse / 2 - size / 2,y,fixedMulR(size,g_surface.fov.x),fixedMulR(size,g_surface.fov.y),pixelColorToColor(0x1050FF));
 #endif
             } break;
 			case SPELL_ORB:{
@@ -1304,19 +1301,25 @@ static void nextSpellDraw(void){
 
 		break;
 	}
+#endif
 }
+#include "console.h"
 
 void frameRender(void){
     if(g_options.gl_wireframe)
 		surfaceClear(&g_surface);
-
-    g_surface.position = g_player.entity.position;
+    
+    g_surface.position = g_player.entity->position;
     g_surface.position.z += FIXED_ONE / 2 + FIXED_ONE / 4;
 
     g_surface.rotation_matrix[0] = tCos(g_surface.angle.x);
     g_surface.rotation_matrix[1] = tSin(g_surface.angle.x);
     g_surface.rotation_matrix[2] = tCos(g_surface.angle.y);
     g_surface.rotation_matrix[3] = tSin(g_surface.angle.y);
+
+    g_options.ms_sensitivity = FIXED_ONE / 0x40;
+
+    g_options.lighting_engine = true;
     
 	setViewPlanes();
 
@@ -1325,13 +1328,14 @@ void frameRender(void){
 #if !defined(__wasm__) && !defined(__linux__)
 	if(g_surface.backend == RENDER_BACKEND_GL)
 		antiAliasingEnableGL(false);
-#endif
+#endif 
+#if 1
     if(!g_options.gl_wireframe){
         for(int i = 0;i < (SKYBOX_POLYGON_SIZE * SKYBOX_POLYGON_SIZE);i++){
-            int size = FIXED_ONE / SKYBOX_POLYGON_SIZE;
+            real size = FIXED_ONE / SKYBOX_POLYGON_SIZE;
 
-            int x = i / SKYBOX_POLYGON_SIZE * FIXED_ONE / SKYBOX_POLYGON_SIZE;
-            int y = i % SKYBOX_POLYGON_SIZE * FIXED_ONE / SKYBOX_POLYGON_SIZE;
+            real x = i / SKYBOX_POLYGON_SIZE * FIXED_ONE / SKYBOX_POLYGON_SIZE;
+            real y = i % SKYBOX_POLYGON_SIZE * FIXED_ONE / SKYBOX_POLYGON_SIZE;
 
             for(int k = 0;k < countof(g_axis_table);k++){
                 Vec3 coordinates[] = {
@@ -1353,7 +1357,7 @@ void frameRender(void){
                     coordinates[j].a[g_axis_table[k].y] += i % SKYBOX_POLYGON_SIZE * size * 2 - FIXED_ONE;
                     coordinates[j].a[k >> 1] += k % 2 ? -FIXED_ONE : FIXED_ONE;
                 }
-
+ 
                 if(
                    !pointInScreenSpace(coordinates[0]) && 
                    !pointInScreenSpace(coordinates[1]) && 
@@ -1363,8 +1367,7 @@ void frameRender(void){
                     continue;
             
                 for(int j = 0;j < countof(coordinates);j += 1){
-                    color[j] = vec3Shl(skyboxSample(vec3Direction(g_surface.position,coordinates[j])),4);
-                    color[j] = vec3MulS(color[j],g_exposure);
+                    color[j] = vec3MulS(COLOR_WHITE,g_exposure);
                 }
             
                 Vec2 texture_coordinates[] = {
@@ -1380,35 +1383,38 @@ void frameRender(void){
                         lightmap->child[i]->luminance = color[i];
                     }
                 }
-                drawSkyboxPolygon3d(&g_surface,g_textures + g_skybox_textures[k],texture_coordinates,coordinates,color,lightmap);
+                drawSkyboxPolygon3d(&g_surface,g_skybox.textures + k,texture_coordinates,coordinates,color,lightmap);
             }
         }
     }
+#endif
 #if !defined(__wasm__) && !defined(__linux__)
 	if(g_surface.backend == RENDER_BACKEND_GL)
 		antiAliasingEnableGL(true);
 #endif
+    
+    entityVoxelInsertSimulation();
 	entityDynamicLighting();
-
+    entityVoxelRemove();
+    
 	entityVoxelInsertRender();
 	
 	if(voxelPositionGet(g_surface.position)->type == VOXEL_WATER){
-		static int c[512 * 512 * 2];
-		for(int i = 0;i < 512 * 512;i += 1){
-			int x = i / 512;
-			int y = i % 512;
+        int WATER_RES = 256;
+		for(int i = 0;i < WATER_RES * WATER_RES;i += 1){
+			int x = i / WATER_RES;
+			int y = i % WATER_RES;
 
-			int n_x = x * FIXED_ONE / 256 - FIXED_ONE;
-			int n_y = y * FIXED_ONE / 256 - FIXED_ONE;
+			real n_x = x * FIXED_ONE / (WATER_RES / 2) - FIXED_ONE;
+			real n_y = y * FIXED_ONE / (WATER_RES / 2) - FIXED_ONE;
 
-			int offset_x = tCos((g_time.tick << 8) + n_x) >> 6;
-			int offset_y = tCos((g_time.tick << 8) + n_x) >> 6;
-			Vec3 direction = screenRayDirection(g_surface.rotation_matrix,n_x + offset_x,n_y + offset_y,g_options.fov.x,g_options.fov.y);
+			real offset_x = realShr(tCos((g_time.tick << 8) + n_x),6);
+			real offset_y = realShr(tCos((g_time.tick << 8) + n_x),6);
+			Vec3 direction = screenRayDirection(g_surface.rotation_matrix,n_x + offset_x,n_y + offset_y,g_surface.fov.x,g_surface.fov.y);
 
-			Vec3 color = vec3Shl(rayLuminance(g_surface.position,vec3Normalize(direction)),4);
+			Vec3 color = vec3Shr(rayLuminance(g_surface.position,vec3Normalize(direction),(RayLuminanceFlag){0}),4);
 
-			c[i] = colorToPixelColor(color);
-			drawRectangle(&g_surface,n_x,n_y,FIXED_ONE / 64,FIXED_ONE / 64,color);
+			drawRectangle(&g_surface,n_x,n_y,FIXED_ONE / (WATER_RES / 8),FIXED_ONE / (WATER_RES / 8),color);
 		}
 	}
 	else{
@@ -1419,7 +1425,8 @@ void frameRender(void){
 	}
 
 	voxelEntityRemove();
-
+    //return;
+#if 0
     if(g_options.lighting_engine){
         int brightness_acc = 0;
 
@@ -1431,28 +1438,31 @@ void frameRender(void){
             int x = i / exposure_samle_row_size;
             int y = i % exposure_samle_row_size;
 
-            int n_x = x * FIXED_ONE / (exposure_samle_row_size / 2) - FIXED_ONE;
-            int n_y = y * FIXED_ONE / (exposure_samle_row_size / 2) - FIXED_ONE;
+            real n_x = x * FIXED_ONE / (exposure_samle_row_size / 2) - FIXED_ONE;
+            real n_y = y * FIXED_ONE / (exposure_samle_row_size / 2) - FIXED_ONE;
 
-            Vec3 luminance = rayLuminanceInit(init,g_surface.position,screenRayDirection(g_surface.rotation_matrix,n_x,n_y,g_options.fov.x,g_options.fov.y));
+            Vec3 luminance = rayLuminanceInit(init,g_surface.position,screenRayDirection(g_surface.rotation_matrix,n_x,n_y,g_surface.fov.x,g_surface.fov.y));
 
-            brightness_acc += tMax(luminance.x,tMax(luminance.y,luminance.z)) >> 4;
+            brightness_acc += realShr(tMax(luminance.x,tMax(luminance.y,luminance.z)),4);
         }
 
         if(brightness_acc){
-            g_exposure = tMix(g_exposure,fixedDivR(FIXED_ONE,brightness_acc >> 4),FIXED_ONE / 0x100);
+            g_exposure = tMix(g_exposure,realDivR(FIXED_ONE,brightness_acc >> 4),FIXED_ONE / 0x100);
             g_exposure = tMix(g_exposure,FIXED_ONE,FIXED_ONE / 0x40);
         }
     }
+#endif
 	if(g_luminance_overlay){
 		for(int i = 0;i < 64 * 64;i++){
 			int x = i / 64;
 			int y = i % 64;
 
-			int n_x = x * FIXED_ONE / 32 - FIXED_ONE;
-			int n_y = y * FIXED_ONE / 32 - FIXED_ONE;
+			real n_x = x * FIXED_ONE / 32 - FIXED_ONE;
+			real n_y = y * FIXED_ONE / 32 - FIXED_ONE;
 
-			Vec3 color = vec3Shl(rayLuminance(g_surface.position,screenRayDirection(g_surface.rotation_matrix,n_x,n_y,g_options.fov.x,g_options.fov.y)),4);
+            Vec3 direction = screenRayDirection(g_surface.rotation_matrix,n_x,n_y,g_surface.fov.x,g_surface.fov.y);
+            
+			Vec3 color = vec3Shl(rayLuminance(g_surface.position,direction,(RayLuminanceFlag){0}),4);
 
 			drawRectangle(&g_surface,n_x / 4 - FIXED_ONE + FIXED_ONE / 4,n_y / 4 - FIXED_ONE + FIXED_ONE / 4,FIXED_ONE / 128,FIXED_ONE / 128,color);
 		}
@@ -1462,8 +1472,8 @@ void frameRender(void){
 			int x = i / OCCLUSION_BUFFER_SIZE;
 			int y = i % OCCLUSION_BUFFER_SIZE;
 
-			int n_x = x * FIXED_ONE / (OCCLUSION_BUFFER_SIZE / 2);
-			int n_y = y * FIXED_ONE / (OCCLUSION_BUFFER_SIZE / 2);
+			real n_x = x * FIXED_ONE / (OCCLUSION_BUFFER_SIZE / 2);
+			real n_y = y * FIXED_ONE / (OCCLUSION_BUFFER_SIZE / 2);
 
             int n_bit = sizeof(*g_surface.occlusion_buffer) * CHAR_BIT;
             
@@ -1475,8 +1485,8 @@ void frameRender(void){
 			int x = i / OCCLUSION_BUFFER_SIZE;
 			int y = i % OCCLUSION_BUFFER_SIZE;
 
-			int n_x = x * FIXED_ONE / (OCCLUSION_BUFFER_SIZE / 2);
-			int n_y = y * FIXED_ONE / (OCCLUSION_BUFFER_SIZE / 2);
+			real n_x = x * FIXED_ONE / (OCCLUSION_BUFFER_SIZE / 2);
+			real n_y = y * FIXED_ONE / (OCCLUSION_BUFFER_SIZE / 2);
 
             int n_bit = sizeof(*g_surface.occlusion_buffer) * CHAR_BIT;
             
@@ -1493,7 +1503,8 @@ void frameRender(void){
                 drawLine3d(&g_surface,p1,p2,0xFF00FF);    
             }
 		}
-		entityDrawHitbox();
+        if(g_options.rd_entity_hitbox)
+            entityDrawHitbox();
 	}
     if(g_options.ray_test){
         static struct{
@@ -1501,7 +1512,7 @@ void frameRender(void){
             Vec3 end;
         } rays[0x100];
         static uint8 counter;
-        Vec3 ray_start = vec3Add(g_player.entity.position,(Vec3){FIXED_ONE,FIXED_ONE,-FIXED_ONE});
+        Vec3 ray_start = vec3Add(g_player.entity->position,(Vec3){FIXED_ONE,FIXED_ONE,-FIXED_ONE});
         RayHit hit = rayHitPosition(ray_start,getLookDirection(g_surface.angle));
         if(hit.voxel){
             rays[counter].begin = ray_start;
@@ -1516,7 +1527,7 @@ void frameRender(void){
 	generateBlockOutline(vec3Single(0),FIXED_ONE);
 
 	genBlockSelect();
-
+#if 0
 	if(g_equipped_staff){
         int percentage = fixedDivR(g_mana,g_equipped.mana_max);
         gui2dFrameDraw(0x2800,0x1000,0x1000,0x8000,0x808080,0x100,(Gui2dFlags){0});
@@ -1526,10 +1537,10 @@ void frameRender(void){
 	}
     
     gui2dFrameDraw(0x1800,0x1000,0x1000,0x8000,0x808080,0x100,(Gui2dFlags){0});
-    gui2dRectangleDraw(0x1900,0x1100 + fixedMulR(0x7E00,FIXED_ONE - g_player.entity.health),0x0E00,fixedMulR(0x7E00,g_player.entity.health),0xFF3030,(Gui2dFlags){0});
-    gui2dRectangleDraw(0x1900,0x1100,0x0E00,fixedMulR(0x7E00,FIXED_ONE - g_player.entity.health),0x801818,(Gui2dFlags){0});
+    gui2dRectangleDraw(0x1900,0x1100 + fixedMulR(0x7E00,FIXED_ONE - g_player.entity->health),0x0E00,fixedMulR(0x7E00,g_player.entity->health),0xFF3030,(Gui2dFlags){0});
+    gui2dRectangleDraw(0x1900,0x1100,0x0E00,fixedMulR(0x7E00,FIXED_ONE - g_player.entity->health),0x801818,(Gui2dFlags){0});
     gui2dStringDraw(0x1900,0x8A00,(String)STRING_LITERAL("health"),0xE00,0x401010,0x1400,(Gui2dFlags){0});
-    
+#endif
 	if(button_link){
 		Vec3 p1 = (Vec3){0};
 		Vec3 p2 = pointToScreen(vec3AddS(voxelWorldPos(button_link),depthToSize(button_link->depth) / 2));
@@ -1553,7 +1564,7 @@ void frameRender(void){
 	//draw next spell in line
 	if(g_equipped.capacity)
         nextSpellDraw();
-
+#if 0
 	if(g_boss){
 		int progress = (fixedDivR(g_boss->health,g_boss->health));
         int bar_width = 0x10000;
@@ -1564,15 +1575,17 @@ void frameRender(void){
 
         gui2dStringDraw(0x1100,0x1000,(String)STRING_LITERAL("boss"),0xE00,0x401010,0x1400,(Gui2dFlags){.middle_y = true});
     }
-    
+#endif  
     tMemset(g_surface.occlusion_buffer,0,OCCLUSION_BUFFER_SIZE * OCCLUSION_BUFFER_SIZE / CHAR_BIT);
     tMemset(g_surface.occlusion_debug,0,OCCLUSION_BUFFER_SIZE * OCCLUSION_BUFFER_SIZE / CHAR_BIT);
-    
+
     //crosshair
-    gui2dRectangleDraw(-0x400,-0x80,0x800,0x100,0x00FF00,(Gui2dFlags){.middle_x = true,.middle_y = true});
-    gui2dRectangleDraw(-0x80,-0x400,0x100,0x800,0x00FF00,(Gui2dFlags){.middle_x = true,.middle_y = true});
-    
+    gui2dRectangleDraw((Vec2){-FIXED_ONE / 64,-FIXED_ONE / 512},(Vec2){FIXED_ONE / 32,FIXED_ONE / 256},0x00FF00,(Gui2dFlags){.middle_x = true,.middle_y = true});
+    gui2dRectangleDraw((Vec2){-FIXED_ONE / 512,-FIXED_ONE / 64},(Vec2){FIXED_ONE / 256,FIXED_ONE / 32},0x00FF00,(Gui2dFlags){.middle_x = true,.middle_y = true});
+
     memoryArenaFree(&g_arena_frame);
+
+    g_time.frame_tick += 1;
 }
 
 

@@ -1,6 +1,5 @@
 #include "span.h"
 #include "draw.h"
-#include "fixed.h"
 #include "geometry.h"
 #include "main.h"
 #include "texture.h"
@@ -41,16 +40,17 @@ structure(ClipContainer){
     Clip clip[0x100];
 };
 
-int perspective_lerp(int z1,int z2,int t){
-    int inv_z1 = fixedDivR(FIXED_ONE << 8,z1) >> 8;
-    int inv_z2 = fixedDivR(FIXED_ONE << 8,z2) >> 8;
+real perspective_lerp(real z1,real z2,real t){
+    real inv_z1 = realShr(realDivR(FIXED_ONE * 256,z1),8);
+    real inv_z2 = realShr(realDivR(FIXED_ONE * 256,z2),8);
 
-    int b = fixedMulR(t,inv_z2);
+    real b = realMulR(t,inv_z2);
     
-    return fixedDivR(b << 8,tMix(inv_z1,inv_z2,t)) >> 8;
+    return realShr(realDivR(realShl(b,8),tMix(inv_z1,inv_z2,t)),8);
 }
 
 static void setScanlineColor(ScanlineColor* color,Scanline scanline,ScanlineZ* scanline_z,Vec2 color_1,Vec2 color_2,Vec3 pos_1,Vec3 pos_2,int size){
+#if 0
     if(pos_1.x > pos_2.x){
         Vec2 tmp = color_1;
         color_1 = color_2;
@@ -107,9 +107,11 @@ static void setScanlineColor(ScanlineColor* color,Scanline scanline,ScanlineZ* s
         p_begin += 1;
         t += delta_t;               
     }
+#endif
 }
 
 static void setScanlineTexture(ScanlineTexture texture,Scanline scanline,ScanlineZ* scanline_z,Vec2 texture_1,Vec2 texture_2,Vec3 pos_1,Vec3 pos_2,int size){
+#if 0
     if(pos_1.x > pos_2.x){
         Vec2 tmp_tex = texture_1;
         texture_1 = texture_2;
@@ -167,9 +169,11 @@ static void setScanlineTexture(ScanlineTexture texture,Scanline scanline,Scanlin
         p_begin += 1;
         t += delta_t;               
     }
+#endif
 }
 
 static void setScanlineColorTexture(ScanlineColor* color,ScanlineTexture texture,ScanlineZ* scanline_z,Scanline scanline,Vec2 texture_1,Vec2 texture_2,Vec2 color_1,Vec2 color_2,Vec3 pos_1,Vec3 pos_2,int size){
+#if 0
     if(pos_1.x > pos_2.x){
         Vec2 tmp_tex = texture_1;
         texture_1 = texture_2;
@@ -237,49 +241,11 @@ static void setScanlineColorTexture(ScanlineColor* color,ScanlineTexture texture
         p_begin += 1;
         t += delta_t;               
     }
-}
-
-static Vec3 lightmapGet(LightmapTree* lightmap,Vec2 uv){
-    uv.x = tClamp(uv.x,0,FIXED_ONE - 1);
-    uv.y = tClamp(uv.y,0,FIXED_ONE - 1);
-    int bit = FIXED_PRECISION - 1;
-    while(lightmap->child[0]){
-        int index = (uv.x & 1 << bit) >> bit << 1 | (uv.y & 1 << bit) >> bit;
-        lightmap = lightmap->child[index];
-        bit -= 1;
-    }
-    return lightmap->luminance;
-}
-
-static Vec3 lightmapBilinear(LightmapTree* lightmap,Vec2 uv){
-    LightmapTree* node = lightmap;
-    int bit = FIXED_PRECISION - 1;
-    while(node->child[0]){
-        int index = (uv.x & 1 << bit) >> bit << 1 | (uv.y & 1 << bit) >> bit;
-        node = node->child[index];
-        bit -= 1;
-    }
-    bit += 1;
-    int luxel_size = 1 << bit + 1;
-
-    int mask = luxel_size - 1;
-    
-    Vec2 lightmap_pos = {uv.x & ~mask,uv.y & ~mask};
-    
-    Vec2 l_uv = {fixedDivR(uv.x & mask,luxel_size),fixedDivR(uv.y & mask,luxel_size)};
-    
-    Vec3 ll = lightmapGet(lightmap,(Vec2){lightmap_pos.x,lightmap_pos.y});
-    Vec3 lh = lightmapGet(lightmap,(Vec2){lightmap_pos.x,lightmap_pos.y + luxel_size});
-    Vec3 hh = lightmapGet(lightmap,(Vec2){lightmap_pos.x + luxel_size,lightmap_pos.y + luxel_size});
-    Vec3 hl = lightmapGet(lightmap,(Vec2){lightmap_pos.x + luxel_size,lightmap_pos.y});
-
-    Vec3 lx1 = vec3Mix(ll,hl,l_uv.x);
-    Vec3 lx2 = vec3Mix(lh,hh,l_uv.x);
-
-    return vec3Mix(lx1,lx2,l_uv.y); 
+#endif
 }
 
 static void spanDraw(DrawSurface* surface,Span* span,int height){
+    #if 0
     int i = span->begin;
 
     if(span->solid_color){
@@ -483,6 +449,7 @@ static void spanDraw(DrawSurface* surface,Span* span,int height){
         vec2Add(&span->texture_begin,texture_delta);
     }
         */
+#endif
 }
 
 void spanDrawList(DrawSurface* surface){
@@ -499,11 +466,11 @@ void spanDrawList(DrawSurface* surface){
                 if(span->begin < clip->begin && span->end > clip->end){
                     Span* span_new = memoryArenaAllocate(&g_arena_frame,sizeof(Span));
                     *span_new = *span;
-                    int mix = fixedDivR(clip->end - span->begin << FIXED_PRECISION,span->end - span->begin << FIXED_PRECISION);
+                    int mix = realDivR(clip->end - span->begin << FIXED_PRECISION,span->end - span->begin << FIXED_PRECISION);
 
                     span_new->interpolate_begin = tMix(span->interpolate_begin,span->interpolate_end,mix);
 
-                    mix = fixedDivR(clip->begin - span->begin << FIXED_PRECISION,span->end - span->begin << FIXED_PRECISION);
+                    mix = realDivR(clip->begin - span->begin << FIXED_PRECISION,span->end - span->begin << FIXED_PRECISION);
 
                     span->interpolate_end = tMix(span->interpolate_begin,span->interpolate_end,mix);
                     
@@ -613,7 +580,7 @@ static void spanAdd(int x,int begin,int end,Vec3 color){
 
 #endif
 
-void spanEllipsesAdd(DrawSurface* surface,int cx,int cy,int size_x,int size_y,Vec3 color){
+void spanEllipsesAdd(DrawSurface* surface,real cx,real cy,real size_x,real size_y,Vec3 color){
     cy = -cy;
     size_x = scaleDraw(surface->height,size_x);
     size_y = scaleDraw(surface->width,size_y);
@@ -623,8 +590,8 @@ void spanEllipsesAdd(DrawSurface* surface,int cx,int cy,int size_x,int size_y,Ve
     int max_x = tMin(cx + size_x,surface->height - 1);
     for(int x = min_x;x <= max_x;x++){
         int v = (x - (cx)) * FIXED_ONE / size_x;
-        int offset_real = tSqrt(FIXED_ONE - fixedMulR(v,v));
-        int offset = fixedMulR((size_y * FIXED_ONE),offset) / FIXED_ONE;
+        int offset_real = tSqrt(FIXED_ONE - realMulR(v,v));
+        int offset = realMulR((size_y * FIXED_ONE),offset) / FIXED_ONE;
 
         Span* span = spanListAdd(surface,x);
 
@@ -683,20 +650,21 @@ static Vec3 polygonPositionNew(Vec3 inside,Vec3 outside,int* between,int z_offse
     Plane plane = {.normal = getLookDirection(g_surface.angle),.distance = -z_offset};
     int distance = rayPlaneIntersection(vec3Sub(outside,g_surface.position),direction,plane);
     if(between)
-        *between = FIXED_ONE - fixedDivR(distance,vec3Distance(inside,outside));
+        *between = FIXED_ONE - realDivR(distance,vec3Distance(inside,outside));
     return vec3Add(outside,vec3MulS(direction,distance));
 }
 
 static int viewPlaneZ(Vec3 point,int* tri,Vec3 renderer_position){
 	Vec3 pos = vec3Sub(point,renderer_position);
     
-	pos.x = fixedMulR(pos.y,tri[1]) + fixedMulR(pos.x,tri[0]);
-	pos.x = fixedMulR(pos.z,tri[3]) + fixedMulR(pos.x,tri[2]);
+	pos.x = realMulR(pos.y,tri[1]) + realMulR(pos.x,tri[0]);
+	pos.x = realMulR(pos.z,tri[3]) + realMulR(pos.x,tri[2]);
 
 	return pos.x;
 }
 
 static int polygonClipProject(DrawSurface* surface,Vec3* polygon,Vec3* polygon_2d,Vec2* texture_coordinates,Vec2* texture_coordinates_2d,Vec2* lighting_coordinates_2d){
+#if 0
     Vec2 lighting_coordinates[] = {{0,0},{0,FIXED_ONE},{FIXED_ONE,FIXED_ONE},{FIXED_ONE,0},{0,0}};
     Vec3 d_point[] = {
         polygon[0],
@@ -771,7 +739,7 @@ static int polygonClipProject(DrawSurface* surface,Vec3* polygon,Vec3* polygon_2
         transformed[i] = pointToScreenRenderer(quad_new[i],surface->rotation_matrix,surface->position,g_options.fov);
     
     for(int i = n_vertex;i--;){
-        polygon_2d[i] = (Vec3){fixedDivR(transformed[i].x,transformed[i].z),fixedDivR(-transformed[i].y,transformed[i].z),transformed[i].z};
+        polygon_2d[i] = (Vec3){realDivR(transformed[i].x,transformed[i].z),realDivR(-transformed[i].y,transformed[i].z),transformed[i].z};
         polygon_2d[i].x = tClamp(polygon_2d[i].x,-FIXED_ONE * 0x10,FIXED_ONE * 0x10);
         polygon_2d[i].y = tClamp(polygon_2d[i].y,-FIXED_ONE * 0x10,FIXED_ONE * 0x10);
     }
@@ -781,6 +749,8 @@ static int polygonClipProject(DrawSurface* surface,Vec3* polygon,Vec3* polygon_2
         polygon_2d[i].y = transformDraw(surface->width,polygon_2d[i].y);
     }
     return n_vertex;
+#endif
+    return 0;
 }
 
 void spanQuad3dAdd(DrawSurface* surface,Vec3* coordinats,Vec3 color){
@@ -874,8 +844,8 @@ void spanQuad3dLightingAdd(DrawSurface* surface,Vec3* coordinats,Vec3* color,Lig
         int begin_clip = length - b_length_clip;
         int end_clip = length - e_length_clip;
 
-        int interpolate_begin = ((FIXED_ONE << 8) / tMax(length,1)) * begin_clip >> 8;
-        int interpolate_end = FIXED_ONE - (((FIXED_ONE << 8) / tMax(length,1)) * end_clip >> 8);
+        int interpolate_begin = ((FIXED_ONE * 256) / tMax(length,1)) * begin_clip / 256;
+        int interpolate_end = FIXED_ONE - (((FIXED_ONE * 256) / tMax(length,1)) * end_clip / 256);
 
         Span* span = spanListAdd(surface,x);
         
@@ -1023,8 +993,8 @@ void spanQuad3dTextureAdd(DrawSurface* surface,Texture* texture,Vec2* texture_co
         int begin_clip = length - b_length_clip;
         int end_clip = length - e_length_clip;
 
-        int interpolate_begin = ((FIXED_ONE << 8) / tMax(length,1)) * begin_clip >> 8;
-        int interpolate_end = FIXED_ONE - (((FIXED_ONE << 8) / tMax(length,1)) * end_clip >> 8);
+        int interpolate_begin = ((FIXED_ONE * 256) / tMax(length,1)) * begin_clip / 256;
+        int interpolate_end = FIXED_ONE - (((FIXED_ONE * 256) / tMax(length,1)) * end_clip / 256);
 
         Span* span = spanListAdd(surface,x);
         
@@ -1045,7 +1015,7 @@ void spanQuad3dTextureAdd(DrawSurface* surface,Texture* texture,Vec2* texture_co
 
 void spanQuad3dLightingTextureAdd(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap,int n_vertex){
     if(!lightmap){
-        spanQuad3dTextureAdd(surface,texture,texture_coordinats,coordinats,vec3Single(FIXED_ONE << 4),4);
+        spanQuad3dTextureAdd(surface,texture,texture_coordinats,coordinats,vec3Single(FIXED_ONE * 16),4);
         return;
     }
     Vec3 coords_2d[5];
@@ -1109,8 +1079,8 @@ void spanQuad3dLightingTextureAdd(DrawSurface* surface,Texture* texture,Vec2* te
         int begin_clip = length - b_length_clip;
         int end_clip = length - e_length_clip;
 
-        int interpolate_begin = ((FIXED_ONE << 8) / tMax(length,1)) * begin_clip >> 8;
-        int interpolate_end = FIXED_ONE - (((FIXED_ONE << 8) / tMax(length,1)) * end_clip >> 8);
+        int interpolate_begin = ((FIXED_ONE * 256) / tMax(length,1)) * begin_clip / 256;
+        int interpolate_end = FIXED_ONE - (((FIXED_ONE * 2256) / tMax(length,1)) * end_clip / 256);
 
         Span* span = spanListAdd(surface,x);
         

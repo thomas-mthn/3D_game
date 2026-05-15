@@ -1,8 +1,9 @@
 #include "opencl.h"
-#include "library.h"
 #include "memory.h"
-#include "main.h"
 #include "console.h"
+
+#include "platform/library.h"
+#include "platform/storage.h"
 
 #define CL_PROGRAM_BUILD_LOG 0x1183
 
@@ -114,6 +115,7 @@ static void* g_cl_command_queue;
 void* g_opencl_lib;
 
 void openclInit(void){
+    return;
 #ifdef _MSC_VER
     g_opencl_lib  = libraryLoad("OpenCL.dll");
 #elif defined(__linux__)
@@ -154,7 +156,7 @@ void openclInit(void){
         }
     }
 
-    FileContent file = fileRead("opencl/markov_texture.cl");
+    FileContent file = storageFileRead(&g_arena_frame,"opencl/markov_texture.cl");
 
     void* platforms[20];
     void* devices[20];
@@ -166,7 +168,7 @@ void openclInit(void){
     g_cl_context = clCreateContext(0,1,(const void**)&devices[0],0,0,0);
     g_cl_command_queue = clCreateCommandQueueWithProperties(g_cl_context,devices[0],0,0);
 
-    String source_file = stringConcat((String){.data = file.content,.size = file.size},(String)STRING_LITERAL("\0"));
+    String source_file = stringConcat(&g_arena_frame,(String){.data = file.content,.size = file.size},(String)STRING_LITERAL("\0"));
     
     void* g_cl_program = clCreateProgramWithSource(g_cl_context,1,(const char**)&source_file.data,0,0);
     int build_error = clBuildProgram(g_cl_program,0,0,"-Werror",0,0);

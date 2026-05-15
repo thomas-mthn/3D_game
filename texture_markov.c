@@ -1,10 +1,10 @@
 #include "texture_markov.h"
-#include "fixed.h"
 #include "texture.h"
 #include "memory.h"
 #include "main.h"
-#include "thread.h"
 #include "opencl.h"
+
+#include "platform/thread.h"
 
 #if !defined(__wasm__) && !defined(__linux__)
 #include "win32/w_kernel.h"
@@ -285,7 +285,7 @@ static void connectToGraph(Graph* graph,GraphNode* node,uint8* position){
             if(node->neighbours[j] == -1)
                 continue;
 
-            int neighbour_distance = fixedMulR(getProbabilityProbabilityDistance(graph,candidate_list[i].node,graph->entry + node->neighbours[j]),FIXED_ONE + FIXED_ONE / 32 * 12);
+            int neighbour_distance = realMulR(getProbabilityProbabilityDistance(graph,candidate_list[i].node,graph->entry + node->neighbours[j]),FIXED_ONE + FIXED_ONE / 32 * 12);
 
             if(neighbour_distance < candidate_list[i].distance){
                 reject = true;
@@ -460,7 +460,7 @@ static void generateColorThread(void* arg){
             }
             else{
                 for(int c = 0;c < 3;c++)
-                    graph_color[info->mipmap].weights_inverse[k * 3 + c] = fixedDivR(FIXED_ONE,weights[k]) >> 4;
+                    graph_color[info->mipmap].weights_inverse[k * 3 + c] = realShr(realDivR(FIXED_ONE,weights[k]),4);
             }
             for(int c = 0;c < 3;c++)
                 position[k * 3 + c] = (color >> c * 8 & 0xFF);
@@ -663,7 +663,7 @@ void markovTextureTrain(Texture texture){
     for(int i = 0;i < 0x10;i++){
         for(int j = 0;j < countof(weights);j++){
             for(int c = 0;c < 3;c++)
-                graph_color[i].weights_inverse[j * 3 + c] = fixedDivR(FIXED_ONE,weights[j]) >> 4;
+                graph_color[i].weights_inverse[j * 3 + c] = realShr(realDivR(FIXED_ONE,weights[j]),4);
         }
         graph_color[i].n_candidates_inference = 0x10;
         graph_color[i].n_search_inference = 0x10;

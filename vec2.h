@@ -2,11 +2,11 @@
 #define VEC2_H
 
 #include "tmath.h"
-#include "fixed.h"
+#include "real.h"
 
 structure(Vec2){
-    int x;
-    int y;
+    real x;
+    real y;
 };
 
 enum{
@@ -14,7 +14,7 @@ enum{
     VEC2_Y,
 };
 
-static Vec2 vec2Single(int value){
+static Vec2 vec2Single(real value){
     return (Vec2){value,value};
 }
 
@@ -27,11 +27,11 @@ static Vec2 vec2Sub(Vec2 v,Vec2 a){
 }
 
 static Vec2 vec2Mul(Vec2 v,Vec2 a){
-    return (Vec2){fixedMulR(v.x,a.x),fixedMulR(v.y,a.y)};
+    return (Vec2){realMulR(v.x,a.x),realMulR(v.y,a.y)};
 }
 
 static Vec2 vec2Div(Vec2 v,Vec2 a){
-    return (Vec2){fixedDivR(v.x,a.x),fixedDivR(v.y,a.y)};
+    return (Vec2){realDivR(v.x,a.x),realDivR(v.y,a.y)};
 }
 
 static Vec2 vec2AddS(Vec2 v,int a){
@@ -46,45 +46,49 @@ static Vec2 vec2SubS(Vec2 v,int a){
     return v;
 }
 
-static Vec2 vec2MulS(Vec2 v,int a){
-    v.x = fixedMulR(v.x,a);
-    v.y = fixedMulR(v.y,a);
+static Vec2 vec2MulS(Vec2 v,real a){
+    v.x = realMulR(v.x,a);
+    v.y = realMulR(v.y,a);
     return v;
 }
 
-static Vec2 vec2DivS(Vec2 v,int a){
-    fixedDiv(&v.x,a);
-    fixedDiv(&v.y,a);
+static Vec2 vec2DivS(Vec2 v,real a){
+    realDiv(&v.x,a);
+    realDiv(&v.y,a);
     return v;
 }
 
 static Vec2 vec2Shr(Vec2 v,int a){
-    return (Vec2){v.x >> a,v.y >> a};
+    if(IS_FLOAT(real))
+        return vec2DivS(v,1 << a);
+    return (Vec2){(int)v.x >> a,(int)v.y >> a};
 }
 
 static Vec2 vec2Shl(Vec2 v,int a){
-    return (Vec2){v.x << a,v.y << a};
+    if(IS_FLOAT(real))
+        return vec2MulS(v,1 << a);
+    return (Vec2){(int)v.x << a,(int)v.y << a};
 }
 
-static int vec2Length(Vec2 v){
-    return tSqrt((fixedMulR(v.x,v.x) + fixedMulR(v.y,v.y)));
+static real vec2Length(Vec2 v){
+    return tSqrt((realMulR(v.x,v.x) + realMulR(v.y,v.y)));
 }
 
 static Vec2 vec2Normalize(Vec2 v){
-    int length = tInverseSqrt(fixedMulR(v.x,v.x) + fixedMulR(v.y,v.y));
+    real length = tInverseSqrt(realMulR(v.x,v.x) + realMulR(v.y,v.y));
     if(!length)
         return (Vec2){0};
     v = vec2MulS(v,length);
     return v;
 }
 
-static int vec2Distance(Vec2 v1,Vec2 v2){
+static real vec2Distance(Vec2 v1,Vec2 v2){
     Vec2 relative = {v1.x - v2.x,v1.y - v2.y};
     return vec2Length(relative);
 }
 
-static int vec2Dot(Vec2 v1,Vec2 v2){
-    return fixedMulR(v1.x,v2.x) + fixedMulR(v1.y,v2.y);
+static real vec2Dot(Vec2 v1,Vec2 v2){
+    return realMulR(v1.x,v2.x) + realMulR(v1.y,v2.y);
 }
 
 static Vec2 vec2Direction(Vec2 from,Vec2 to){
@@ -95,19 +99,19 @@ static Vec2 vec2Perpendicular(Vec2 v){
     return (Vec2){-v.y,v.x};
 }
 
-static Vec2 vec2Rotate(Vec2 v,int theta){
+static Vec2 vec2Rotate(Vec2 v,real theta){
 	Vec2 r;
-	r.x = fixedMulR(v.x,tCos(theta)) - fixedMulR(v.y,tSin(theta));
-	r.y = fixedMulR(v.x,tSin(theta)) + fixedMulR(v.y,tCos(theta));
+	r.x = realMulR(v.x,tCos(theta)) - realMulR(v.y,tSin(theta));
+	r.y = realMulR(v.x,tSin(theta)) + realMulR(v.y,tCos(theta));
 	return r;
 }
 
-static Vec2 vec2Mix(Vec2 v1,Vec2 v2,int mix){
+static Vec2 vec2Mix(Vec2 v1,Vec2 v2,real mix){
     return (Vec2){tMix(v1.x,v2.x,mix),tMix(v1.y,v2.y,mix)};
 }
 
 static Vec2 vec2Rnd(void){
-    int angle = tRnd() & (FIXED_ONE - 1);
+    real angle = tRnd() & ((int)FIXED_ONE - 1);
     return (Vec2){tCos(angle),tSin(angle)};
 }
 

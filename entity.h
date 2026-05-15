@@ -22,6 +22,7 @@ typedef enum{
 	ENTITY_STAFF,
 	ENTITY_BOSS,
     ENTITY_WEAPON,
+    ENTITY_PLAYER,
 } EntityType;
 
 structure(ModelEllipsoid){
@@ -65,7 +66,7 @@ structure(Entity){
     bool non_interactive : 1;
 
     Vec3 hitbox;
-	int size;
+	real size;
 	int health;
 	Texture texture_dynamic;
 	Texture* texture;
@@ -92,10 +93,10 @@ structure(Entity){
     
 	Staff staff;
 	SpellType pickup_type;
-	int physics_friction_ground;
-	int physics_friction_air;
+	real physics_friction_ground;
+	real physics_friction_air;
 	Vec3 windy;
-	int attack_cooldown;
+	real attack_cooldown;
 	String particle_string;
 
     int  n_model_sphere;    
@@ -116,7 +117,7 @@ void entityDraw(Entity* entity);
 void entityDrawHitbox(void);
 
 void entityInit(void);
-int entitySpriteSize(Vec3 position,int size);
+real entitySpriteSize(Vec3 position,real size);
 void entityTick(void);
 void entityVoxelInsertSimulation(void);
 void entityVoxelInsertRender(void);

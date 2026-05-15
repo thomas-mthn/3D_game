@@ -83,14 +83,37 @@ bool stringCompareSizeCaseInsensitive(String string,String compare){
     return true;
 }
 
-String stringConcat(String string,String append){
+String stringConcat(MemoryArena* arena,String string,String append){
+    int alloc_size = string.size + append.size;
     String string_new = {
-        .data = tMalloc(string.size + append.size),
-        .size = string.size + append.size,
-        .flags = STRING_MALLOC
+        .data = arena ? memoryArenaAllocate(arena,alloc_size) : tMalloc(alloc_size),
+        .size = alloc_size,
     };
     tMemcpy(string_new.data,string.data,string.size);
     tMemcpy(string_new.data + string.size,append.data,append.size);
+    return string_new;
+}
+
+String stringConcatChar(MemoryArena* arena,String string,char append){
+    int alloc_size = string.size + 1;
+    String string_new = {
+        .data = arena ? memoryArenaAllocate(arena,alloc_size) : tMalloc(alloc_size),
+        .size = alloc_size,
+    };
+    tMemcpy(string_new.data,string.data,string.size);
+    string_new.data[string.size] = append;
+    return string_new;
+}
+
+String stringInsertChar(MemoryArena* arena,String string,char c,int index){
+    int alloc_size = string.size + 1;
+    String string_new = {
+        .data = arena ? memoryArenaAllocate(arena,alloc_size) : tMalloc(alloc_size),
+        .size = alloc_size,
+    };
+    tMemcpy(string_new.data,string.data,index);
+    string_new.data[index] = c;
+    tMemcpy(string_new.data + index + 1,string.data + index,string.size - index);
     return string_new;
 }
 
@@ -123,7 +146,7 @@ String numberToString(char* buffer,int number){
     }
 	number_copy = number;
 	length_copy = length;
-
+ 
     while(length--){
         buffer[length] = number % 10 + '0';
         number /= 10;
@@ -132,4 +155,13 @@ String numberToString(char* buffer,int number){
         buffer[0] = '-';
     buffer[length_copy] = 0;
     return (String){.data = buffer,.size = length_copy};
+}
+
+String stringCopy(MemoryArena* arena,String string){
+    String string_new = {
+        .data = arena ? memoryArenaAllocate(arena,string.size) : tMalloc(string.size),
+        .size = string.size,
+    };
+    tMemcpy(string_new.data,string.data,string.size);
+    return string_new;
 }

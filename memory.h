@@ -16,6 +16,7 @@ structure(AllocatorFreeList){
     MemoryArena arena;
     MemoryBlock* block_list;
     MemoryBlock* free_list;
+    MemoryBlock* tail;
 };
 
 void* virtualAllocate(size_t size);

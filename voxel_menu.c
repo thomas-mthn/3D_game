@@ -6,6 +6,7 @@
 #include "staff.h"
 #include "draw.h"
 #include "opengl.h"
+#include "entity.h"
 
 Texture g_spinning_staff = {.size = 0x100};
 
@@ -116,7 +117,7 @@ void spinningStaffSpin(void){
 		surfaceInit(&surface_model);
 		tFree(surface_model.data);
 		surface_model.data = g_spinning_staff.pixel_data;
-		int camera_distance = FIXED_ONE * 2;
+		real camera_distance = FIXED_ONE * 2;
 		Vec3 direction = vec3Normalize(getLookDirection(angle));
 		Vec3 camera_position = vec3AddS(vec3MulS((Vec3){-direction.x,-direction.y,-direction.z},camera_distance * 2),FIXED_ONE);
 		Vec3 luminance[] = {

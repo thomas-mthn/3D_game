@@ -1,9 +1,25 @@
 #ifndef MAIN_H
 #define MAIN_H
 
-#define KEYTRANSLATE_BACK 1
-
 #ifdef __linux__
+
+typedef enum{
+    SIDE_YZ_UP,
+    SIDE_YZ_DOWN,
+    SIDE_XZ_UP,
+    SIDE_XZ_DOWN,
+    SIDE_XY_UP,
+    SIDE_XY_DOWN,
+    SIDE_COUNT,
+} Side;
+
+typedef enum{
+    KEY_TRANSLATE_BACK = 1,
+    KEY_TRANSLATE_UP,
+    KEY_TRANSLATE_DOWN,
+    KEY_TRANSLATE_LEFT,
+    KEY_TRANSLATE_RIGHT,
+} KeyTranslate;
 
 typedef enum{
     KEY_ESCAPE = 9,
@@ -17,14 +33,16 @@ typedef enum{
     KEY_OEM_COMMA,KEY_OEM_PERIOD,KEY_OEM_MINUS,KEY_RSHIFT,KEY_MULTIPLY,
     KEY_LMENU,KEY_SPACE,KEY_CAPITAL,
     KEY_F1,KEY_F2,KEY_F3,KEY_F4,KEY_F5,KEY_F6,KEY_F7,KEY_F8,KEY_F9,KEY_F10,
-    KEY_NUMLOCK,KEY_SCROLL,KEY_HOME,KEY_UP,KEY_PRIOR,KEY_SUBTRACT,
-    KEY_LEFT_OLD,KEY_CLEAR,KEY_RIGHT_OLD,KEY_ADD,KEY_END,KEY_DOWN,KEY_NEXT,
+    KEY_NUMLOCK,KEY_SCROLL,KEY_HOME,KEY_UP_OLD,KEY_PRIOR,KEY_SUBTRACT,
+    KEY_LEFT_OLD,KEY_CLEAR,KEY_RIGHT_OLD,KEY_ADD,KEY_END,KEY_DOWN_OLD,KEY_NEXT,
     KEY_INSERT,KEY_DELETE,KEY_SNAPSHOT,
     KEY_OEM_10 = (0x56 + 8),KEY_F11,KEY_F12,
-} KeyType;
+} Key;
 
-#define KEY_LEFT 113
+#define KEY_UP    111
+#define KEY_LEFT  113
 #define KEY_RIGHT 114
+#define KEY_DOWN  116
 
 #define KEY_LBUTTON 191
 #define KEY_RBUTTON 192
@@ -48,7 +66,7 @@ typedef enum{
     KEY_LEFT_OLD,KEY_CLEAR,KEY_RIGHT_OLD,KEY_ADD,KEY_END,KEY_DOWN,KEY_NEXT,
     KEY_INSERT,KEY_DELETE,KEY_SNAPSHOT,
     KEY_OEM_10 = (0x56 + 8),KEY_F11,KEY_F12,
-} KeyType;
+} Key;
 
 #define KEY_LEFT 75
 #define KEY_RIGHT 77
@@ -122,11 +140,11 @@ enum{
 
 #define ICON_SIZE 64
 
-#define MAX_TICK_LENGTH 0x10000
+#define MAX_TICK_LENGTH 0x4000
 
-#define RENDER_DISTANCE (FIXED_ONE * 8)
+#define RENDER_DISTANCE (FIXED_ONE * 32)
 
-#define PLAYER_SPAWN_POSITION {0x0F10000,0x1060000,0x1020000}
+#define PLAYER_SPAWN_POSITION {FIXED_ONE * 0xF1,FIXED_ONE * 0x106,FIXED_ONE * 0x102}
 #define PLAYER_SPAWN_ANGLE {FIXED_ONE / 2,FIXED_ONE / 2}
 
 #include "vec3.h"
@@ -134,11 +152,9 @@ enum{
 #include "geometry.h"
 #include "staff.h"
 #include "draw.h"
+#include "octree.h"
 
-structure(FileContent){
-    size_t size;
-    char* content;
-};
+structure(Entity);
 
 structure(VoxelPointed){
 	Voxel* voxel;
@@ -149,7 +165,7 @@ structure(VoxelPointed){
 structure(GameOptions){
 	bool editor;
 	bool fast_startup;
-	Vec2 fov;
+    real rd_fov;
 	RenderBackend render_backend;
     int multi_sample;
     bool multi_thread;
@@ -161,38 +177,43 @@ structure(GameOptions){
     bool rd_occlusion;
     bool audio;
     bool ray_test;
+    bool rd_entity_hitbox;
+    bool gl_qlightmap;
+    bool rd_dshadow;
+    real ms_sensitivity;
 };
 
 structure(Player){
-    Entity entity;
+    Entity* entity;
+    Entity* weapon;
     VoxelType voxel_select;
     int edit_depth;
     bool movement_fly;
-    Entity* weapon;
 };
 
 structure(GameTime){
-    int delta;
+    real delta;
     unsigned time;
     int tick;
+    int frame_tick;
 };
 
 int* iconGenerate(void);
 
 void applicationExit(void);
 
-int bilinearScalar(Vec2 position,int* values);
+real bilinearScalar(Vec2 position,real* values);
 
-bool blockOutlinePositionGet(Vec3* position);
+bool blockOutlinePositionGet(Vec3i* position);
 
 bool pointInScreenSpace(Vec3 point);
 bool squareInScreenSpace(Vec3* point);
 bool cubeInScreenSpace(Vec3* point);
 
-Vec3 screenRayDirection(int* tri,int x,int y,int fov_x,int fov_y);
+Vec3 screenRayDirection(real* tri,real x,real y,real fov_x,real fov_y);
 Plane getPlane(Voxel* voxel,Vec3 dir,unsigned side);
 Vec3 pointToScreen(Vec3 point);
-Vec3 pointToScreenRenderer(Vec3 point,int* tri,Vec3 renderer_position,Vec2 fov);
+Vec3 pointToScreenRenderer(Vec3 point,real* tri,Vec3 renderer_position,Vec2 fov);
 bool keyDown(int key);
 int treeRayTraceDistance(Voxel* voxel,Vec3 position,Vec3 dir,int side);
 
@@ -203,16 +224,14 @@ Vec3 getLookDirection(Vec2 direction);
 
 int bitScanReverse(unsigned value);
 
-void configSave(void);
-
-FileContent fileRead(char* path);
-
-void keyPress(int key);
+void keyPress(Key key);
 void lButtonUp(void);
 void lButtonDown(void);
 void rButtonDown(void);
 void mButtonDown(void);
 void mouseMove(int delta_x,int delta_y);
+
+Vec2 aspectRatioTransform(Vec2 v);
 
 void mainInit(void);
 void frameRender(void);
@@ -230,20 +249,27 @@ bool inventoryFull(void);
 
 Vec3 fibonnaciSphereSample(int i,int n);
 
+void configSave(void);
+
 static int colorToPixelColor(Vec3 color){
-	return tClamp(color.x >> 12,0,0xFF) | tClamp(color.y >> 12,0,0xFF) << 8 | tClamp(color.z >> 12,0,0xFF) << 16;
+    Vec3i color_i = {realToInt(color.x / 16),realToInt(color.y / 16),realToInt(color.z / 16)};
+	return (int)tClamp(color_i.x,0,0xFF) | (int)tClamp(color_i.y,0,0xFF) << 8 | (int)tClamp(color_i.z,0,0xFF) << 16;
 }
 
 static Vec3 pixelColorToColor(int color){
-	return (Vec3){(color >> 0 & 0xFF) << 12,(color >> 8 & 0xFF) << 12,(color >> 16 & 0xFF) << 12};
+	return (Vec3){
+        intToReal(color >> 0 & 0xFF) * 16,
+        intToReal(color >> 8 & 0xFF) * 16,
+        intToReal(color >> 16 & 0xFF) * 16
+    };
 }
 
-#define COLOR_WHITE (Vec3){1 << 20,1 << 20,1 << 20}
+#define COLOR_WHITE (Vec3){FIXED_ONE * 16,FIXED_ONE * 16,FIXED_ONE * 16}
 
 extern char g_voxel_lighting_tree[];
 
 extern bool g_test_bool;
-extern int g_exposure;
+extern real g_exposure;
 extern bool g_luminance_overlay;
 extern uint8 g_key[];
 extern Vec2 g_cursor;

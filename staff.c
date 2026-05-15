@@ -2,7 +2,9 @@
 #include "octree.h"
 #include "memory.h"
 #include "main.h"
-#include "audio.h"
+#include "entity.h"
+
+#include "platform/audio.h"
 
 String g_spell_names[] = {
 #define X(name) STRING_LITERAL(#name),
@@ -39,42 +41,42 @@ SpellStatic g_spell_static[] = {
 };
 
 void staffGenerate(Vec3 position){
-	Voxel* staff_model = tMallocZero(sizeof(Voxel));
+	Voxel* staff_model = tMallocZero(sizeof *staff_model);
 	int depth = 3;
-	int size = 1 << depth;
+	real size = 1 << depth;
 
 	for(int i = 0;i < size;i++){
-		voxelSet(staff_model,(Vec3){size / 2,size / 2,i},depth,VOXEL_BLOCK);
-		voxelSet(staff_model,(Vec3){size / 2,size / 2 + 1,i},depth,VOXEL_BLOCK);
-		voxelSet(staff_model,(Vec3){size / 2 + 1,size / 2,i},depth,VOXEL_BLOCK);
-		voxelSet(staff_model,(Vec3){size / 2 + 1,size / 2 + 1,i},depth,VOXEL_BLOCK);
+		voxelSet(staff_model,(Vec3i){size / 2,size / 2,i},depth,VOXEL_BLOCK);
+		voxelSet(staff_model,(Vec3i){size / 2,size / 2 + 1,i},depth,VOXEL_BLOCK);
+		voxelSet(staff_model,(Vec3i){size / 2 + 1,size / 2,i},depth,VOXEL_BLOCK);
+		voxelSet(staff_model,(Vec3i){size / 2 + 1,size / 2 + 1,i},depth,VOXEL_BLOCK);
 	}
 
 	size = 1 << depth + 1; 
 
-	voxelSet(staff_model,(Vec3){size / 2,size / 2,size - 2},depth + 1,VOXEL_BLOCK_BLUE);
-	voxelSet(staff_model,(Vec3){size / 2,size / 2 + 1,size - 2},depth + 1,VOXEL_BLOCK_BLUE);
-	voxelSet(staff_model,(Vec3){size / 2 + 1,size / 2,size - 2},depth + 1,VOXEL_BLOCK_BLUE);
-	voxelSet(staff_model,(Vec3){size / 2 + 1,size / 2 + 1,size - 2},depth + 1,VOXEL_BLOCK_BLUE);
+	voxelSet(staff_model,(Vec3i){size / 2,size / 2,size - 2},depth + 1,VOXEL_BLOCK_BLUE);
+	voxelSet(staff_model,(Vec3i){size / 2,size / 2 + 1,size - 2},depth + 1,VOXEL_BLOCK_BLUE);
+	voxelSet(staff_model,(Vec3i){size / 2 + 1,size / 2,size - 2},depth + 1,VOXEL_BLOCK_BLUE);
+	voxelSet(staff_model,(Vec3i){size / 2 + 1,size / 2 + 1,size - 2},depth + 1,VOXEL_BLOCK_BLUE);
 
-	voxelSet(staff_model,(Vec3){size / 2,size / 2,size - 1},depth + 1,VOXEL_BLOCK_BLUE);
-	voxelSet(staff_model,(Vec3){size / 2,size / 2 + 1,size - 1},depth + 1,VOXEL_BLOCK_BLUE);
-	voxelSet(staff_model,(Vec3){size / 2 + 1,size / 2,size - 1},depth + 1,VOXEL_BLOCK_BLUE);
-	voxelSet(staff_model,(Vec3){size / 2 + 1,size / 2 + 1,size - 1},depth + 1,VOXEL_BLOCK_BLUE);
+	voxelSet(staff_model,(Vec3i){size / 2,size / 2,size - 1},depth + 1,VOXEL_BLOCK_BLUE);
+	voxelSet(staff_model,(Vec3i){size / 2,size / 2 + 1,size - 1},depth + 1,VOXEL_BLOCK_BLUE);
+	voxelSet(staff_model,(Vec3i){size / 2 + 1,size / 2,size - 1},depth + 1,VOXEL_BLOCK_BLUE);
+	voxelSet(staff_model,(Vec3i){size / 2 + 1,size / 2 + 1,size - 1},depth + 1,VOXEL_BLOCK_BLUE);
 
 	Entity* staff = entityCreate(position,ENTITY_STAFF);
-	staff->velocity.x += tRnd() % (FIXED_ONE / 8) - FIXED_ONE / 16;
-	staff->velocity.y += tRnd() % (FIXED_ONE / 8) - FIXED_ONE / 16;
-	staff->velocity.z += tRnd() % (FIXED_ONE / 8) + FIXED_ONE / 8;
-	staff->color_emit = (Vec3){tRnd() % FIXED_ONE,tRnd() % FIXED_ONE,tRnd() % FIXED_ONE};
+	staff->velocity.x += realRandom(FIXED_ONE / 8) - FIXED_ONE / 16;
+	staff->velocity.y += realRandom(FIXED_ONE / 8) - FIXED_ONE / 16;
+	staff->velocity.z +=  realRandom(FIXED_ONE / 8)+ FIXED_ONE / 8;
+	staff->color_emit = (Vec3){realRandom(FIXED_ONE),realRandom(FIXED_ONE),realRandom(FIXED_ONE)};
 
 	staff->staff = (Staff){
 		.capacity = tRnd() % 4 + 1,
 		.mana_generation = tRnd() % 0x100 + 10,
 		.mana_max = tRnd() % 0x40000 + 4000,
-		.delay = tRnd() % (FIXED_ONE / 256) + FIXED_ONE / 1024,
-		.reload = tRnd() % FIXED_ONE + FIXED_ONE / 2,
-        .recoil = tRnd() % FIXED_ONE,
+		.delay = realRandom(FIXED_ONE / 256) + FIXED_ONE / 1024,
+		.reload = realRandom(FIXED_ONE) + FIXED_ONE / 2,
+        .recoil = realRandom(FIXED_ONE),
 		.model = staff_model,
 	};
 	staff->staff.spell_array[0].spell_type = tRnd() % SPELL_ECOUNT;

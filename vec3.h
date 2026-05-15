@@ -2,7 +2,7 @@
 #define VEC3_H
 
 #include "tmath.h"
-#include "fixed.h"
+#include "real.h"
 
 typedef enum{
     VEC3_X,
@@ -11,11 +11,15 @@ typedef enum{
 } Vec3Axis;
 
 typedef union{
-    struct{int x,y,z;};
-    int a[3];
+    struct{real x,y,z;};
+    real a[3];
 } Vec3;
 
-static Vec3 vec3Single(int value){
+static Vec3i vec3ToVec3i(Vec3 v){
+    return (Vec3i){intToReal(v.x),intToReal(v.y),intToReal(v.z)};
+}
+
+static Vec3 vec3Single(real value){
     return (Vec3){value,value,value};
 }
 
@@ -28,82 +32,92 @@ static Vec3 vec3Sub(Vec3 v,Vec3 a){
 }
 
 static Vec3 vec3Mul(Vec3 v,Vec3 a){
-    return (Vec3){fixedMulR(v.x,a.x),fixedMulR(v.y,a.y),fixedMulR(v.z,a.z)};
+    return (Vec3){realMulR(v.x,a.x),realMulR(v.y,a.y),realMulR(v.z,a.z)};
 }
 
 static Vec3 vec3Div(Vec3 v,Vec3 a){
-    return (Vec3){fixedDivR(v.x,a.x),fixedDivR(v.y,a.y),fixedDivR(v.z,a.z)};
+    return (Vec3){realDivR(v.x,a.x),realDivR(v.y,a.y),realDivR(v.z,a.z)};
 }
 
-static Vec3 vec3Shr(Vec3 v,int a){
-    return (Vec3){v.x >> a,v.y >> a,v.z >> a};
-}
-
-static Vec3 vec3Shl(Vec3 v,int a){
-    return (Vec3){v.x << a,v.y << a,v.z << a};
-}
-
-static Vec3 vec3AddS(Vec3 v,int a){
+static Vec3 vec3AddS(Vec3 v,real a){
     v.x += a;
     v.y += a;
     v.z += a;
     return v;
 }
 
-static Vec3 vec3SubS(Vec3 v,int a){
+static Vec3 vec3SubS(Vec3 v,real a){
     v.x -= a;
     v.y -= a;
     v.z -= a;
     return v;
 }
 
-static Vec3 vec3MulS(Vec3 v,int a){
-    v.x = fixedMulR(v.x,a);
-    v.y = fixedMulR(v.y,a);
-    v.z = fixedMulR(v.z,a);
+static Vec3 vec3MulS(Vec3 v,real a){
+    v.x = realMulR(v.x,a);
+    v.y = realMulR(v.y,a);
+    v.z = realMulR(v.z,a);
     return v;
 }
 
-static Vec3 vec3DivS(Vec3 v,int a){
-    fixedDiv(&v.x,a);
-    fixedDiv(&v.y,a);
-    fixedDiv(&v.z,a);
+static Vec3 vec3DivS(Vec3 v,real a){
+    realDiv(&v.x,a);
+    realDiv(&v.y,a);
+    realDiv(&v.z,a);
     return v;
 }
 
-static int vec3LengthSquare(Vec3 v){
-    return fixedMulR(v.x,v.x) + fixedMulR(v.y,v.y) + fixedMulR(v.z,v.z);
+static Vec3 vec3Shr(Vec3 v,int a){
+    if(IS_FLOAT(real))
+        return vec3DivS(v,1 << a);
+    
+    return (Vec3){(int)v.x >> a,(int)v.y >> a,(int)v.z >> a};
 }
 
-static int vec3Length(Vec3 v){
+static Vec3 vec3Shl(Vec3 v,int a){
+    if(IS_FLOAT(real))
+        return vec3MulS(v,1 << a);
+    
+    return (Vec3){(int)v.x << a,(int)v.y << a,(int)v.z << a};
+}
+
+static real vec3LengthSquare(Vec3 v){
+    return realMulR(v.x,v.x) + realMulR(v.y,v.y) + realMulR(v.z,v.z);
+}
+
+static real vec3Length(Vec3 v){
     return tSqrt(vec3LengthSquare(v));
 }
 
 static Vec3 vec3Normalize(Vec3 v){
-    int length = tInverseSqrt(vec3LengthSquare(v));
+    real length = tInverseSqrt(vec3LengthSquare(v));
     if(!length)
         return v;
     v = vec3MulS(v,length);
     return v;
 }
 
-static int vec3Distance(Vec3 v1,Vec3 v2){
+static real vec3Distance(Vec3 v1,Vec3 v2){
     return vec3Length(vec3Sub(v1,v2));
 }
 
-static int vec3DistanceSquare(Vec3 v1,Vec3 v2){
+static real vec3DistanceSquare(Vec3 v1,Vec3 v2){
     return vec3LengthSquare(vec3Sub(v1,v2));
 }
 
-static int vec3Dot(Vec3 v1,Vec3 v2){
-    return fixedMulR(v1.x,v2.x) + fixedMulR(v1.y,v2.y) + fixedMulR(v1.z,v2.z);
+static real vec3Dot(Vec3 v1,Vec3 v2){
+#if 0
+    if(IS_FLOAT(real))
+        return _mm_cvtss_f32(_mm_dp_ps(_mm_loadu_ps(&v1.x),_mm_loadu_ps(&v2.x),0x71));
+#endif
+    return realMulR(v1.x,v2.x) + realMulR(v1.y,v2.y) + realMulR(v1.z,v2.z);
 }
 
 static Vec3 vec3Cross(Vec3 v1,Vec3 v2){
     return (Vec3){
-        fixedMulR(v1.y,v2.z) - fixedMulR(v2.y,v1.z),
-        fixedMulR(v1.z,v2.x) - fixedMulR(v2.z,v1.x),
-        fixedMulR(v1.x,v2.y) - fixedMulR(v2.x,v1.y)
+        realMulR(v1.y,v2.z) - realMulR(v2.y,v1.z),
+        realMulR(v1.z,v2.x) - realMulR(v2.z,v1.x),
+        realMulR(v1.x,v2.y) - realMulR(v2.x,v1.y)
     };
 }
 
@@ -112,18 +126,18 @@ static Vec3 vec3Direction(Vec3 from,Vec3 to){
 }
 
 static Vec3 vec3Reflect(Vec3 v,Vec3 n){
-	return vec3Sub(v,vec3Mul(vec3Single(fixedMulR(FIXED_ONE * 2,vec3Dot(n,v))),n));
+	return vec3Sub(v,vec3Mul(vec3Single(realMulR(FIXED_ONE * 2,vec3Dot(n,v))),n));
 }
 
-static Vec3 vec3Refract(Vec3 v,Vec3 n,int eta){
-    int k = FIXED_ONE - fixedMulR(fixedMulR(eta,eta),(FIXED_ONE - fixedMulR(vec3Dot(n,v),vec3Dot(n,v))));
+static Vec3 vec3Refract(Vec3 v,Vec3 n,real eta){
+    real k = FIXED_ONE - realMulR(realMulR(eta,eta),(FIXED_ONE - realMulR(vec3Dot(n,v),vec3Dot(n,v))));
     if (k < 0)
         return (Vec3){0};
     else
-        return vec3Sub(vec3MulS(v,eta),vec3MulS(n,(fixedMulR(eta,vec3Dot(n,v)) + tSqrt(k))));
+        return vec3Sub(vec3MulS(v,eta),vec3MulS(n,(realMulR(eta,vec3Dot(n,v)) + tSqrt(k))));
 }
 
-static Vec3 vec3Mix(Vec3 v1,Vec3 v2,int mix){
+static Vec3 vec3Mix(Vec3 v1,Vec3 v2,real mix){
     return (Vec3){tMix(v1.x,v2.x,mix),tMix(v1.y,v2.y,mix),tMix(v1.z,v2.z,mix)};
 }
 
@@ -131,9 +145,9 @@ static Vec3 vec3Rnd(void){
     Vec3 random;
     do{
         random = (Vec3){
-            tRnd() % (FIXED_ONE * 2) - FIXED_ONE,
-            tRnd() % (FIXED_ONE * 2) - FIXED_ONE,
-            tRnd() % (FIXED_ONE * 2) - FIXED_ONE,
+            realRandom(FIXED_ONE * 2) - FIXED_ONE,
+            realRandom(FIXED_ONE * 2) - FIXED_ONE,
+            realRandom(FIXED_ONE * 2) - FIXED_ONE,
         };
     } while(vec3Dot(random,random) > FIXED_ONE);
 

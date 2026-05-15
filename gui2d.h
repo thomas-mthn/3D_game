@@ -3,6 +3,7 @@
 
 #include "langext.h"
 #include "string.h"
+#include "vec2.h"
 
 structure(Gui2dFlags){
     bool invert_x : 1;
@@ -11,10 +12,10 @@ structure(Gui2dFlags){
     bool middle_y : 1;
 };
 
-void gui2dRectangleDraw(int x,int y,int size_x,int size_y,int color,Gui2dFlags flags);
-void gui2dFrameDraw(int x,int y,int size_x,int size_y,int color,int thickness,Gui2dFlags flags);
-void gui2dStringDraw(int x,int y,String string,int scale,int color,int thickness,Gui2dFlags flags);
-void gui2dNumberDraw(int x,int y,int number,int scale,Gui2dFlags flags);
-void gui2dEllipsesDraw(int x,int y,int size_x,int size_y,int color,Gui2dFlags flags);
+void gui2dRectangleDraw(Vec2 position,Vec2 size,int color,Gui2dFlags flags);
+void gui2dFrameDraw(real x,real y,real size_x,real size_y,int color,int thickness,Gui2dFlags flags);
+void gui2dStringDraw(real x,real y,String string,real scale,int color,real thickness,Gui2dFlags flags);
+void gui2dNumberDraw(real x,real y,int number,real scale,Gui2dFlags flags);
+void gui2dEllipsesDraw(Vec2 position,Vec2 size,int color,Gui2dFlags flags);
 
 #endif

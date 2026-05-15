@@ -1,8 +1,8 @@
 #include "equib_model.h"
 #include "octree.h"
 #include "main.h"
-#include "lighting.h"
 #include "draw.h"
+#include "texture.h"
 
 static struct{
 	Vec3 position;
@@ -18,15 +18,15 @@ static Vec3 modelPointToScreen(Vec3 point){
 	if(pos.x <= 0)	
 		return vec3Single(0);
 
-	screen_point.x = fixedDivR(fixedMulR(pos.z,g_options.fov.x),pos.x);
-	screen_point.y = fixedDivR(fixedMulR(pos.y,g_options.fov.y),pos.x);
+	screen_point.x = realDivR(realMulR(pos.z,g_surface.fov.x),pos.x);
+	screen_point.y = realDivR(realMulR(pos.y,g_surface.fov.y),pos.x);
 	if(screen_point.x > FIXED_ONE * 16 || screen_point.x < -FIXED_ONE * 16 || screen_point.y > FIXED_ONE * 16 || screen_point.y < -FIXED_ONE * 16)
 		return vec3Single(0);
 	screen_point.z = pos.x;
 	return screen_point;
 }
 
-static void drawBlock(Voxel* voxel,Vec3 octree_position,Vec3* luminance,int block_size,Vec3 color){
+static void drawBlock(Voxel* voxel,Vec3 octree_position,Vec3* luminance,real block_size,Vec3 color){
 	Vec3 local_position = vec3Shr(vec3Shl((Vec3){voxel->position_x,voxel->position_y,voxel->position_z},16),voxel->depth);
 	octree_position = vec3Add(octree_position,(Vec3){local_position.x,local_position.y,local_position.z});
 
@@ -38,9 +38,9 @@ static void drawBlock(Voxel* voxel,Vec3 octree_position,Vec3* luminance,int bloc
 
 	Vec3 vertices[8];
 	for(int i = 0;i < countof(vertices);i++){
-		int x = i & 1 ? block_size >> 9 : 0;
-		int y = i & 2 ? block_size >> 9 : 0;
-		int z = i & 4 ? block_size >> 9 : 0;
+		int x = i & 1 ? realShr(block_size,9) : 0;
+		int y = i & 2 ? realShr(block_size,9) : 0;
+		int z = i & 4 ? realShr(block_size,9) : 0;
 		Vec3 verticle_pos = vec3Add(pos,(Vec3){x,y,z});
 
 		vertices[i] = modelPointToScreen(verticle_pos);
@@ -65,7 +65,7 @@ static void drawBlock(Voxel* voxel,Vec3 octree_position,Vec3* luminance,int bloc
 }
 
 static void guiOctreeDrawRecursive(Voxel* voxel,Vec3 octree_position,Vec3* luminance,int view){
-	int block_size = depthToSize(voxel->depth);
+	real block_size = depthToSize(voxel->depth);
 	Vec3 position = voxelWorldPos(voxel);
 	if(voxel->type == VOXEL_PARENT){
 		Vec3 point[] = {
@@ -198,8 +198,8 @@ static void voxelTemplateDraw(intptr_t base,VoxelSerialized* voxel,Vec3 position
             voxelTemplateDraw(base,(void*)(base + (intptr_t)parent->child_s[i]),vec3Add(position_child,(Vec3){i >> 0 & 1,i >> 1 & 1,i >> 2 & 1}),depth + 1);
         return;
     }
-    int size = FIXED_ONE >> depth;
-    Vec3 luminance[] = {{FIXED_ONE << 4,FIXED_ONE << 4,FIXED_ONE << 4},{FIXED_ONE << 4,FIXED_ONE << 4,FIXED_ONE << 4},{FIXED_ONE << 4,FIXED_ONE << 4,FIXED_ONE << 4}};
+    real size = realShr(FIXED_ONE,depth);
+    Vec3 luminance[] = {{FIXED_ONE / 16,FIXED_ONE / 16,FIXED_ONE / 16},{FIXED_ONE / 16,FIXED_ONE / 16,FIXED_ONE / 16},{FIXED_ONE / 16,FIXED_ONE / 16,FIXED_ONE / 16}};
     drawBlockSelect(vec3MulS(vec3Shl(position,16),size),luminance,size,voxel->type);
 }
 
@@ -211,9 +211,9 @@ void genBlockSelect(void){
 	g_holdable.direction = vec2Add(vec2MulS(g_holdable.direction,FIXED_ONE / 2),vec2MulS(g_surface.angle,FIXED_ONE / 2));
 
 	static Vec3 luminance[3] = {
-        {FIXED_ONE << 4,FIXED_ONE << 4,FIXED_ONE << 4},
-        {FIXED_ONE << 4,FIXED_ONE << 4,FIXED_ONE << 4},
-        {FIXED_ONE << 4,FIXED_ONE << 4,FIXED_ONE << 4},
+        {FIXED_ONE / 16,FIXED_ONE / 16,FIXED_ONE / 16},
+        {FIXED_ONE / 16,FIXED_ONE / 16,FIXED_ONE / 16},
+        {FIXED_ONE / 16,FIXED_ONE / 16,FIXED_ONE / 16},
     };
 
 	Vec3 normals[] = {

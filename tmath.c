@@ -1,7 +1,6 @@
 #include "tmath.h"
-#include "fixed.h"
 
-static int16 g_asin_table[] = {
+static int16 asin_table[] = {
     -32768,-30158,-29075,-28242,-27539,-26918,-26355,-25837,
     -25353,-24898,-24467,-24056,-23662,-23284,-22920,-22567,
     -22225,-21893,-21570,-21256,-20949,-20648,-20354,-20067,
@@ -36,7 +35,7 @@ static int16 g_asin_table[] = {
     25353,25837,26355,26918,27539,28242,29075,30158,32767,
 };
 
-static int16 g_cos_table[] = {
+static int16 cos_table[] = {
     32767,  32757,  32728,  32678,  32609,  32521,  32412,  32285,
     32137,  31971,  31785,  31580,  31356,  31113,  30852,  30571,
     30273,  29956,  29621,  29268,  28898,  28510,  28105,  27683,
@@ -71,40 +70,34 @@ static int16 g_cos_table[] = {
     32137,  32285,  32412,  32521,  32609,  32678,  32728,  32757,
 };
 
-int tCos(int angle){
-    int v1 = g_cos_table[fixedFract(angle) >> 8] << 1;
-    int v2 = g_cos_table[((fixedFract(angle) >> 8) + 1) & 0xFF] << 1;
-    return tMix(v1,v2,angle % 0x100 << 8);
-}
-
-int tArcSin(int angle){
-    angle >>= 1;
-    angle += FIXED_ONE / 2;
-    int index = fixedFract(angle) >> 8;
-    int v1 = g_asin_table[fixedFract(angle) >> 8];
-    int v2 = g_asin_table[(fixedFract(angle) >> 8) + 1];
-    return tMix(v1,v2,angle % 0x100 << 8) / 2;
-}
-
-/*
-int tArcTan2(int y,int x){
-    int abs_y = tAbs(y);
-    int abs_x = tAbs(x);
-    int angle;
-    if (abs_y < abs_x) {
-        int t = fixedDivR(abs_y,abs_x);
-        angle = t - fixedDivR(fixedMulR(fixedMulR(t,t),t),FIXED_ONE * 3);
-    } else {
-        int t = fixedDivR(abs_x,abs_y);
-        angle = (M_PI / 2) - (t - fixedDivR(fixedMulR(fixedMulR(t,t),t),FIXED_ONE * 3));
+real tCos(real angle){
+    int angle_i = angle;
+    if(IS_FLOAT(real))
+        angle_i = angle * 0x10000;
+    int v1 = cos_table[(angle_i & 0xFFFF) >> 8] << 1;
+    int v2 = cos_table[((angle_i & 0xFFFF) >> 8) + 1 & 0xFF] << 1;
+    if(IS_FLOAT(real)){
+        real result = tMix((real)v1 / 0x10000,(real)v2 / 0x10000,(real)(angle_i % 0x100) / 0x100);
+        return result;
     }
-    if(x < 0) 
-        angle = (y >= 0) ? M_PI - angle : angle - M_PI;
-    if(y < 0 && x >= 0) 
-        angle = -angle;
-    return fixedDivR(angle,M_PI * 2);
+    int result = tMix(v1,v2,angle_i % 0x100 << 8);
+    return result;
 }
-*/
+
+real tArcSin(real angle){
+    int angle_i = angle;
+    if(IS_FLOAT(real))
+        angle_i = angle * 0x10000;
+    angle_i >>= 1;
+    angle_i += 0x10000 / 2;
+    int v1 = asin_table[(angle_i & 0xFFFF) >> 8];
+    int v2 = asin_table[((angle_i & 0xFFFF) >> 8) + 1 & 0xFF];
+    if(IS_FLOAT(real)){
+        real result = tMix((real)v1 / 0x10000,(real)v2 / 0x10000,(real)(angle_i % 0x100) / 0x100) / 2;
+        return result;
+    }
+    return tMix(v1,v2,angle_i % 0x100 << 8) / 2;
+}
 
 static int q15_mul(int j,int k){
     int intermediate = j * k;
@@ -115,35 +108,29 @@ static int q15_div(int numer,int denom){
     return (numer << 15) / denom;
 }
 
-int tArcTan2(int y,int x){
+real tArcTan2(real y,real x){
+    int x_i = IS_FLOAT(real) ? x * 0x10000 : x;
+    int y_i = IS_FLOAT(real) ? y * 0x10000 : y;
     int k1 = 2847;
     int k2 = 11039;
-    if(x == y){
-        if(y > 0)
-            return 8192;
-        else if(y < 0)
-            return 40960;
-        else
-            return 0;
-    }
-    int abs_y = tAbs(y); 
-    int abs_x = tAbs(x);
+    int abs_y = tAbs(y_i); 
+    int abs_x = tAbs(x_i);
     if(abs_x > abs_y){
-        int y_over_x = q15_div(y,x);
+        int y_over_x = q15_div(y_i,x_i);
         int correction = q15_mul(k1,tAbs(y_over_x));
-        int unrotated = q15_mul(k2 - correction, y_over_x);
-        if(x > 0)
-            return unrotated;
+        int unrotated = q15_mul(k2 - correction,y_over_x);
+        if(x_i > 0)
+            return IS_FLOAT(real) ? (real)unrotated / 0x10000 : unrotated;
         else 
-            return 32768 + unrotated;
+            return IS_FLOAT(real) ? (real)(32768 + unrotated) / 0x10000 : 32768 + unrotated;
     } 
     else{
-        int x_over_y = q15_div(x,y);
+        int x_over_y = q15_div(x_i,y_i);
         int correction = q15_mul(k1,tAbs(x_over_y));
         int unrotated = q15_mul(k2 - correction,x_over_y);
-        if(y > 0)
-            return 16384 - unrotated;
+        if(y_i > 0)
+            return IS_FLOAT(real) ? (real)(16384 - unrotated) / 0x10000 : 16384 - unrotated;
         else
-            return 49152 - unrotated;
+            return IS_FLOAT(real) ? (real)(49152 - unrotated) / 0x10000 : 49152 - unrotated;
     }
 }

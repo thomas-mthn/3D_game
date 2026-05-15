@@ -16,6 +16,7 @@ structure(DrawPrimitive){
     bool has_lighting : 1;
     bool is_sprite : 1;
     bool smooth_lighting : 1;
+    bool gpu_lightmap : 1;
 
     enum{
         PRIMITIVE_QUAD,
@@ -37,11 +38,13 @@ structure(DrawPrimitive){
     LightmapTree* lightmap;
     Vec3 luminance;
     int thickness;
+    int lightmap_index;
+    int side;
 };
 
 DrawPrimitive* primitiveToDraw(void);
 void octreeDrawList(void);
 void octreeDraw(Voxel* voxel);
-void voxelModelRasterize(DrawSurface* surface,Vec2 model_angle,Vec3* luminance,Voxel* voxel,Vec3 camera_position,int camera_distance);
+void voxelModelRasterize(DrawSurface* surface,Vec2 model_angle,Vec3* luminance,Voxel* voxel,Vec3 camera_position,real camera_distance);
 
 #endif

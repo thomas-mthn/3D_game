@@ -8,7 +8,7 @@ structure(Voxel);
 
 structure(Plane){
 	Vec3 normal;
-	int distance;
+	real distance;
 };
 
 typedef enum{
@@ -19,22 +19,24 @@ typedef enum{
 
 //collision
 bool intersectBoxPoint(Vec3 point,Vec3 box_position,Vec3 box_size);
-bool intersectCubePoint(Vec3 point,Vec3 cube_position,int cube_size);
+bool intersectCubePoint(Vec3 point,Vec3 cube_position,real cube_size);
 bool intersectBoxBox(Vec3 box_pos,Vec3 box_size,Vec3 cube_pos,Vec3 cube_size);
-bool intersectBoxCube(Vec3 box_pos,Vec3 box_size,Vec3 cube_pos,int cube_size);
+bool intersectBoxCube(Vec3 box_pos,Vec3 box_size,Vec3 cube_pos,real cube_size);
 PlaneCollision intersectBoxPlane(Vec3 box_position,Vec3 box_size,Plane plane);
 
 //SDF
-int sdSegment(Vec2 p,Vec2 a,Vec2 b);
-int sdSquare(Vec3 p,Vec3 square_pos,int square_size,unsigned side);
-int sdPlane(Vec3 p,Vec3 n,int h);
-int sdVoxel(Vec3 point,Vec3 voxel_position,int voxel_size);
+real sdSegment(Vec2 p,Vec2 a,Vec2 b);
+real sdSquare(Vec3 p,Vec3 square_pos,real square_size,int side);
+real sdPlane(Vec3 p,Vec3 n,real h);
+real sdVoxel(Vec3 point,Vec3 voxel_position,real voxel_size);
+real sdVoxelSquare(Vec3 point,Vec3 voxel_position,real voxel_size);
+real sdSquareSquare(Vec3 p,Vec3 square_pos,real square_size,int side);
 
 //ray tracing
-int rayVoxelIntersection(Voxel* voxel,Vec3 ro,Vec3 rd,Vec3* normal);
-int rayBoxIntersection(Vec3 box_position,Vec3 box_size,Vec3 ro,Vec3 rd);
-int rayPlaneIntersection(Vec3 pos,Vec3 dir,Plane plane);
-int rayEllipsoidIntersection(Vec3 ray_position,Vec3 ray_direction,Vec3 ellipsoid_position,Vec3 ra);
-int raySphereIntersection(Vec3 ray_position,Vec3 ray_direction,Vec3 sphere_position,int radius);
+real rayVoxelIntersection(Voxel* voxel,Vec3 ro,Vec3 rd,Vec3* normal);
+real rayBoxIntersection(Vec3 box_position,Vec3 box_size,Vec3 ro,Vec3 rd);
+real rayPlaneIntersection(Vec3 pos,Vec3 dir,Plane plane);
+real rayEllipsoidIntersection(Vec3 ray_position,Vec3 ray_direction,Vec3 ellipsoid_position,Vec3 ra);
+real raySphereIntersection(Vec3 ray_position,Vec3 ray_direction,Vec3 sphere_position,real radius);
 
 #endif

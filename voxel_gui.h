@@ -31,18 +31,18 @@ structure(VoxelGuiElement){
             void (*on_click)(VoxelGuiElement* self);
         } checkbox;
         struct{
-            int size;
+            real size;
             void (*on_click)(VoxelGuiElement* self);
             void* self_data;
             Voxel* voxel;
         } button;
         struct{
             String string;
-            int size;
+            real size;
         } string;
         struct{
             int* number;
-            int size;
+            real size;
         } number;
         struct{
             Texture* image;
@@ -57,11 +57,11 @@ structure(VoxelGuiElement){
     };
 };
 
-void drawGuiChar(Voxel* voxel,int side,Vec2 uv,char string_char,int scale,int thickness);
-void drawGuiString(Voxel* voxel,int side,Vec2 uv,String string,int scale,int thickness);
-void drawGuiCircle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,int size,int color,int side);
-void drawGuiRectangle(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,int side);
-void drawGuiFrame(Voxel* voxel,Vec2 axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,int thickness,int side);
+void drawGuiChar(Voxel* voxel,int side,Vec2 uv,char string_char,real scale,real thickness,int color);
+void drawGuiString(Voxel* voxel,int side,Vec2 uv,String string,real scale,real thickness,int color);
+void drawGuiCircle(Voxel* voxel,Vec2i axis,Vec3 block_pos,Vec2 uv,real size,int color,int side);
+void drawGuiRectangle(Voxel* voxel,Vec2i axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,int side);
+void drawGuiFrame(Voxel* voxel,Vec2i axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,real thickness,int side);
 
 void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side);
 bool voxelGuiOnClick(Voxel* voxel,int side);

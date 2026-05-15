@@ -1,7 +1,6 @@
 #include "draw.h"
 #include "draw_soft.h"
 #include "font.h"
-#include "fixed.h"
 #include "main.h"
 #include "langext.h"
 #include "span.h"
@@ -52,6 +51,8 @@ void surfaceInit(DrawSurface* surface){
     surface->rotation_matrix[1] = tSin(surface->angle.x);
     surface->rotation_matrix[2] = tCos(surface->angle.y);
     surface->rotation_matrix[3] = tSin(surface->angle.y);
+
+    surface->fov = (Vec2){FIXED_ONE,FIXED_ONE};
     
 	if(!createSurface[surface->backend])
 	    return;
@@ -80,6 +81,7 @@ void surfaceClear(DrawSurface* surface){
 void surfaceChangeSize(DrawSurface* surface,int width,int height){
     surface->window_width = width;
     surface->window_height = height;
+    surface->fov = aspectRatioTransform(vec2Single(g_options.rd_fov));
     void (*vtable[])(DrawSurface*,int,int) = {
         [RENDER_BACKEND_SOFTWARE] = softSurfaceSizeChange,
         [RENDER_BACKEND_GL] = changeSurfaceSizeGL,
@@ -113,8 +115,8 @@ void surfaceBlit(DrawSurface* surface){
     blit[surface->backend](surface);
 }
 
-void drawLine(DrawSurface* surface,int x1,int y1,int x2,int y2,Vec3 color){
-	void (*vtable[])(DrawSurface*,int,int,int,int,Vec3) = {
+void drawLine(DrawSurface* surface,real x1,real y1,real x2,real y2,Vec3 color){
+	void (*vtable[])(DrawSurface*,real,real,real,real,Vec3) = {
 		[RENDER_BACKEND_SOFTWARE] = drawLineSoft,
         [RENDER_BACKEND_GL] = drawLineGL,
 #if !defined(__wasm__) && !defined(__linux__)
@@ -130,7 +132,7 @@ void drawLine3d(DrawSurface* surface,Vec3 position_1,Vec3 position_2,int color){
     Vec3 p1 = pointToScreen(position_1);
     Vec3 p2 = pointToScreen(position_2);
 
-    int z_offset = 0x2000;
+    real z_offset = FIXED_ONE / 8;
 #if 0
     if(p1.z <= z_offset && p2.z <= z_offset)
         return;
@@ -143,13 +145,13 @@ void drawLine3d(DrawSurface* surface,Vec3 position_1,Vec3 position_2,int color){
 
     if(p1.z <= z_offset){
         Vec3 direction = vec3Direction(position_1,position_2);
-        int distance = rayPlaneIntersection(vec3Sub(position_1,g_surface.position),direction,plane);
+        real distance = rayPlaneIntersection(vec3Sub(position_1,g_surface.position),direction,plane);
         position_1 = vec3Add(position_1,vec3MulS(direction,distance));
         p1 = pointToScreen(position_1);
     }
     else if(p2.z <= z_offset){
         Vec3 direction = vec3Direction(position_2,position_1);
-        int distance = rayPlaneIntersection(vec3Sub(position_2,g_surface.position),direction,plane);
+        real distance = rayPlaneIntersection(vec3Sub(position_2,g_surface.position),direction,plane);
         position_2 = vec3Add(position_2,vec3MulS(direction,distance));
         p2 = pointToScreen(position_2);
     }
@@ -157,8 +159,8 @@ void drawLine3d(DrawSurface* surface,Vec3 position_1,Vec3 position_2,int color){
     drawLine(&g_surface,p1.x,p1.y,p2.x,p2.y,pixelColorToColor(color));
 }
 
-void drawSegment(DrawSurface* surface,int x1,int y1,int x2,int y2,int thickness,Vec3 color){
-	void (*vtable[])(DrawSurface*,int,int,int,int,int,Vec3) = {
+void drawSegment(DrawSurface* surface,real x1,real y1,real x2,real y2,real thickness,Vec3 color){
+	void (*vtable[])(DrawSurface*,real,real,real,real,real,Vec3) = {
 		[RENDER_BACKEND_SOFTWARE] = drawSegmentSoft,
         [RENDER_BACKEND_GL] = drawSegmentGL,
 #if !defined(__wasm__) && !defined(__linux__)
@@ -280,8 +282,8 @@ void drawSkyboxPolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coo
 	vtable[surface->backend](surface,texture,texture_coordinats,coordinats,color,lightmap);
 }
 
-void drawEllipses(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color){
-	void (*vtable[])(DrawSurface*,int,int,int,int,Vec3) = {
+void drawEllipses(DrawSurface* surface,real x,real y,real size_x,real size_y,Vec3 color){
+	void (*vtable[])(DrawSurface*,real,real,real,real,Vec3) = {
 		[RENDER_BACKEND_SOFTWARE] = drawEllipsesSoft,
         [RENDER_BACKEND_GL] = drawEllipsesGL,
 #if !defined(__wasm__) && !defined(__linux__)
@@ -293,7 +295,7 @@ void drawEllipses(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 co
 	vtable[surface->backend](surface,x,y,size_x,size_y,color);
 }
 
-void drawCircle(DrawSurface* surface,int x,int y,int radius,Vec3 color){
+void drawCircle(DrawSurface* surface,real x,real y,real radius,Vec3 color){
     drawEllipses(surface,x,y,radius,radius,color);
 }
 
@@ -306,8 +308,8 @@ void drawCircle3d(DrawSurface* surface,Vec3* coordinates,Vec3 color){
 	vtable[surface->backend](surface,coordinates,color);
 }
 
-void drawRing(DrawSurface* surface,int x,int y,int radius,int thickness,Vec3 color){
-	void (*vtable[])(DrawSurface*,int,int,int,int,Vec3) = {
+void drawRing(DrawSurface* surface,real x,real y,real radius,int thickness,Vec3 color){
+	void (*vtable[])(DrawSurface*,real,real,real,int,Vec3) = {
 		[RENDER_BACKEND_SOFTWARE] = drawRingSoft,
 	};
     if(surface->backend >= countof(vtable) || !vtable[surface->backend])
@@ -315,8 +317,8 @@ void drawRing(DrawSurface* surface,int x,int y,int radius,int thickness,Vec3 col
 	vtable[surface->backend](surface,x,y,radius,thickness,color);
 }
 
-void drawRectangle(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color){
-	void (*vtable[])(DrawSurface*,int,int,int,int,Vec3) = {
+void drawRectangle(DrawSurface* surface,real x,real y,real size_x,real size_y,Vec3 color){
+	void (*vtable[])(DrawSurface*,real,real,real,real,Vec3) = {
 		[RENDER_BACKEND_SOFTWARE] = drawRectangleSoft,
         [RENDER_BACKEND_GL] = drawRectangleGL,
 #if !defined(__wasm__) && !defined(__linux__)
@@ -328,7 +330,7 @@ void drawRectangle(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 c
 	vtable[surface->backend](surface,x,y,size_x,size_y,color);
 }
 
-void drawStringEx(DrawSurface* surface,int x,int y,String string,int scale,Vec3 color,int thickness){
+void drawStringEx(DrawSurface* surface,real x,real y,String string,real scale,Vec3 color,int thickness){
     int down_offset = 0;
     int offset = 0;
     for(int j = 0;j < string.size;j++){
@@ -340,20 +342,20 @@ void drawStringEx(DrawSurface* surface,int x,int y,String string,int scale,Vec3 
         else{
             for(int i = 0;g_vector_font[string_char].position[i][0];i++){
                 uint8* coords = &g_vector_font[string_char].position[i][0];
-                int offset_transform = fixedMulR(offset,scale);
-                int offset_transform_x = fixedMulR(down_offset,scale);
-                int coord_transform[] = {
-                    (coords[0] * scale >> 8) + x + offset_transform_x,(-coords[1] * scale >> 8) + y + offset_transform,
-                    (coords[2] * scale >> 8) + x + offset_transform_x,(-coords[3] * scale >> 8) + y + offset_transform
+                real offset_transform = realMulR(offset,scale);
+                real offset_transform_x = realMulR(down_offset,scale);
+                real coord_transform[] = {
+                    realMulR(coords[0],scale) + x + offset_transform_x,realMulR(-coords[1],scale) + y + offset_transform,
+                    realMulR(coords[2],scale) + x + offset_transform_x,realMulR(-coords[3],scale) + y + offset_transform
                 };
-                drawSegment(surface,coord_transform[0],coord_transform[1],coord_transform[2],coord_transform[3],fixedMulR(thickness,scale),color);
+                drawSegment(surface,coord_transform[0],coord_transform[1],coord_transform[2],coord_transform[3],realMulR(thickness,scale),color);
             }
         }
         offset -= g_vector_font[string_char].width;
     }
 }
 
-void drawNumber(DrawSurface* surface,int x,int y,int number,int scale){
+void drawNumber(DrawSurface* surface,real x,real y,int number,real scale){
 	char buffer[0x10];
     String string = numberToString(buffer,number);
     drawStringEx(surface,x,y,string,scale,pixelColorToColor(0xFFFFFF),0x2000);
@@ -368,8 +370,8 @@ void setScanline(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size){
     
     int p_begin = pos_1.x;
     int p_end = pos_2.x;
-    int delta = (pos_2.y - pos_1.y << FIXED_PRECISION) / (pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
-    int delta_pos = (pos_1.y << FIXED_PRECISION) + FIXED_ONE / 2;
+    real delta = realDivR((pos_2.y - pos_1.y),(pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1));
+    real delta_pos = realShl((pos_1.y) + FIXED_ONE / 2,FIXED_PRECISION);
 
     if(p_end < 0)
 		return;
@@ -384,8 +386,8 @@ void setScanline(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size){
 	}
 
     while(p_begin < p_end){
-        scanline.begin[p_begin] = tMin(scanline.begin[p_begin],delta_pos >> FIXED_PRECISION);
-        scanline.end[p_begin] = tMax(scanline.end[p_begin],delta_pos >> FIXED_PRECISION);
+        scanline.begin[p_begin] = tMin(scanline.begin[p_begin],realToInt(delta_pos));
+        scanline.end[p_begin] = tMax(scanline.end[p_begin],realToInt(delta_pos));
         delta_pos += delta;
         p_begin += 1;
     }
@@ -400,8 +402,8 @@ void setScanlineDDA(Scanline scanline,Vec2 pos_1,Vec2 pos_2,int size){
     
     int p_begin = pos_1.x;
     int p_end = pos_2.x;
-    int delta = (pos_2.y - pos_1.y << FIXED_PRECISION) / (pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
-    int delta_pos = (pos_1.y << FIXED_PRECISION) + FIXED_ONE / 2;
+    real delta = realDivR(pos_2.y - pos_1.y,pos_2.x - pos_1.x ? pos_2.x - pos_1.x : 1);
+    real delta_pos = realShl(pos_1.y,FIXED_PRECISION) + FIXED_ONE / 2;
 
     if(p_end < 0)
 		return;
@@ -430,14 +432,14 @@ void occlusionBufferFill(DrawSurface* surface,Vec3* coordinats){
     int offset = 0x2000;
     Vec3 coordinats_copy[4];
     for(int i = 4;i--;)
-        coordinats_copy[i] = pointToScreenRenderer(coordinats[i],surface->rotation_matrix,surface->position,g_options.fov);
+        coordinats_copy[i] = pointToScreenRenderer(coordinats[i],surface->rotation_matrix,surface->position,surface->fov);
     if(coordinats_copy[0].z <= offset || coordinats_copy[1].z <= offset || coordinats_copy[2].z <= offset || coordinats_copy[3].z <= offset)
         return;
     Vec2 coords_2d[] = {
-        {fixedDivR(coordinats_copy[0].x,coordinats_copy[0].z),fixedDivR(-coordinats_copy[0].y,coordinats_copy[0].z)},
-        {fixedDivR(coordinats_copy[1].x,coordinats_copy[1].z),fixedDivR(-coordinats_copy[1].y,coordinats_copy[1].z)},
-        {fixedDivR(coordinats_copy[3].x,coordinats_copy[3].z),fixedDivR(-coordinats_copy[3].y,coordinats_copy[3].z)},
-        {fixedDivR(coordinats_copy[2].x,coordinats_copy[2].z),fixedDivR(-coordinats_copy[2].y,coordinats_copy[2].z)},
+        {realDivR(coordinats_copy[0].x,coordinats_copy[0].z),realDivR(-coordinats_copy[0].y,coordinats_copy[0].z)},
+        {realDivR(coordinats_copy[1].x,coordinats_copy[1].z),realDivR(-coordinats_copy[1].y,coordinats_copy[1].z)},
+        {realDivR(coordinats_copy[3].x,coordinats_copy[3].z),realDivR(-coordinats_copy[3].y,coordinats_copy[3].z)},
+        {realDivR(coordinats_copy[2].x,coordinats_copy[2].z),realDivR(-coordinats_copy[2].y,coordinats_copy[2].z)},
     };
 
     for(int i = 4;i--;){
@@ -519,14 +521,14 @@ bool occlusionBufferHidden(DrawSurface* surface,Vec3* coordinats){
     int offset = 0x2000;
     Vec3 coordinats_copy[4];
     for(int i = 4;i--;)
-        coordinats_copy[i] = pointToScreenRenderer(coordinats[i],surface->rotation_matrix,surface->position,g_options.fov);
+        coordinats_copy[i] = pointToScreenRenderer(coordinats[i],surface->rotation_matrix,surface->position,surface->fov);
     if(coordinats_copy[0].z <= offset || coordinats_copy[1].z <= offset || coordinats_copy[2].z <= offset || coordinats_copy[3].z <= offset)
         return false;
     Vec2 coords_2d[] = {
-        {fixedDivR(coordinats_copy[0].x,coordinats_copy[0].z),fixedDivR(-coordinats_copy[0].y,coordinats_copy[0].z)},
-        {fixedDivR(coordinats_copy[1].x,coordinats_copy[1].z),fixedDivR(-coordinats_copy[1].y,coordinats_copy[1].z)},
-        {fixedDivR(coordinats_copy[3].x,coordinats_copy[3].z),fixedDivR(-coordinats_copy[3].y,coordinats_copy[3].z)},
-        {fixedDivR(coordinats_copy[2].x,coordinats_copy[2].z),fixedDivR(-coordinats_copy[2].y,coordinats_copy[2].z)},
+        {realDivR(coordinats_copy[0].x,coordinats_copy[0].z),realDivR(-coordinats_copy[0].y,coordinats_copy[0].z)},
+        {realDivR(coordinats_copy[1].x,coordinats_copy[1].z),realDivR(-coordinats_copy[1].y,coordinats_copy[1].z)},
+        {realDivR(coordinats_copy[3].x,coordinats_copy[3].z),realDivR(-coordinats_copy[3].y,coordinats_copy[3].z)},
+        {realDivR(coordinats_copy[2].x,coordinats_copy[2].z),realDivR(-coordinats_copy[2].y,coordinats_copy[2].z)},
     };
     
     for(int i = 0;i < 4;i++){

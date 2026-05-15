@@ -1,170 +1,16 @@
-#include "langext.h"
-#include "main.h"
-#include "library.h"
 #include "opengl.h"
+#include "opengl_def.h"
+#include "main.h"
 #include "memory.h"
 #include "console.h"
+#include "lighting.h"
+
+#include "platform/library.h"
 
 #ifdef __linux__
 #include <X11/Xlib.h>
 #include "linux/l_main.h"
 #endif
-
-#define GL_VIEWPORT 0x0BA2
-
-#define GL_COLOR_BUFFER_BIT 16384
-#define GL_DEPTH_BUFFER_BIT 256
-
-#define GL_NEAREST 0x2600
-#define GL_LINEAR  0x2601
-
-#define GL_REPEAT 0x2901
-
-#define GL_BGRA 0x80E1
-#define GL_RGBA16F 0x881A
-
-#define GL_NEAREST_MIPMAP_NEAREST         0x2700
-#define GL_LINEAR_MIPMAP_NEAREST          0x2701
-#define GL_NEAREST_MIPMAP_LINEAR          0x2702
-#define GL_LINEAR_MIPMAP_LINEAR           0x2703
-
-#define GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT 0x84FF
-#define GL_TEXTURE_MAX_ANISOTROPY_EXT     0x84FE
-
-#define GL_ARRAY_BUFFER         0x8892
-#define GL_ELEMENT_ARRAY_BUFFER 0x8893
-#define GL_DYNAMIC_DRAW 0x88E8
-#define GL_FRAGMENT_SHADER 0x8B30
-#define GL_VERTEX_SHADER 0x8B31
-
-#define GL_ALPHA_TEST  0x0BC0
-#define GL_SAMPLES     0x80A9
-#define GL_MULTISAMPLE 0x809D
-
-#define GL_FRAMEBUFFER 0x8D40
-#define GL_COLOR_ATTACHMENT0 0x8CE0
-
-#define WGL_DRAW_TO_WINDOW_ARB       0x2001
-#define WGL_SUPPORT_OPENGL_ARB       0x2010
-#define WGL_DOUBLE_BUFFER_ARB        0x2011
-#define WGL_PIXEL_TYPE_ARB           0x2013
-#define WGL_TYPE_RGBA_ARB            0x202B
-#define WGL_TYPE_RGBA_FLOAT_ARB      0x21A0
-#define WGL_COLOR_BITS_ARB           0x2014
-#define WGL_DEPTH_BITS_ARB           0x2022
-#define WGL_STENCIL_BITS_ARB         0x2023
-#define WGL_SAMPLE_BUFFERS_ARB       0x2041
-#define WGL_SAMPLES_ARB              0x2042
-
-#define GL_READ_FRAMEBUFFER  0x8CA8
-#define GL_DRAW_FRAMEBUFFER  0x8CA9
-
-#define GL_TEXTURE0 0x84C0 
-
-#define WGL_CONTEXT_MAJOR_VERSION_ARB 0x2091
-#define WGL_CONTEXT_MINOR_VERSION_ARB 0x2092
-
-#define GL_NUM_EXTENSIONS 0x821D
-
-#if _WIN64
-typedef long long (stdcall *Proc)();
-#else
-typedef int (stdcall *Proc)();
-#endif
-
-typedef enum{
-	GL_POINTS,        
-	GL_LINES,      
-	GL_LINE_LOOP,     
-	GL_LINE_STRIP,    
-	GL_TRIANGLES,     
-	GL_TRIANGLE_STRIP,
-	GL_TRIANGLE_FAN,  
-	GL_QUADS,         
-	GL_QUAD_STRIP,
-	GL_POLYGON,    
-} DrawType;
-
-typedef enum{
-	GL_TEXTURE_1D = 0x0DE0,
-	GL_TEXTURE_2D,
-} GlTextureType;
-
-typedef enum{
-	GL_BYTE = 0x1400,
-	GL_UNSIGNED_BYTE,
-	GL_SHORT,
-	GL_UNSIGNED_SHORT,
-	GL_INT,
-	GL_UNSIGNED_INT,
-	GL_FLOAT,
-	GL_2_BYTES,
-	GL_3_BYTES,
-	GL_4_BYTES,
-	GL_DOUBLE,
-	GL_HALF_FLOAT,
-} DataType;
-
-typedef enum{
-	GL_TEXTURE_MAG_FILTER = 0x2800,
-	GL_TEXTURE_MIN_FILTER,
-	GL_TEXTURE_WRAP_S,
-	GL_TEXTURE_WRAP_T,
-} TextureParameterType;
-
-typedef enum{
-	GL_VENDOR = 0x1F00,
-	GL_RENDERER,
-	GL_VERSION,
-	GL_EXTENSIONS,
-} GetStringName;
-
-typedef enum{
-	GL_NEVER = 0x0200,
-	GL_LESS,
-	GL_EQUAL,
-	GL_LEQUAL,
-	GL_GREATER,
-	GL_NOTEQUAL,
-	GL_GEQUAL,
-	GL_ALWAYS,
-} AlphaTesting;
-
-typedef enum{
-	GL_COLOR_INDEX = 0x1900,
-	GL_STENCIL_INDEX,
-	GL_DEPTH_COMPONENT,
-	GL_RED,
-	GL_GREEN,
-	GL_BLUE,
-	GL_ALPHA,
-	GL_RGB,
-	GL_RGBA,
-	GL_LUMINANCE,
-	GL_LUMINANCE_ALPHA,
-} Format;
-
-typedef enum{
-	GL_POINT = 0x1B00,
-	GL_LINE,
-	GL_FILL
-} PolygonModeType;
-
-typedef enum{
-	GL_FRONT_LEFT = 0x0400,
-	GL_FRONT_RIGHT,
-	GL_BACK_LEFT,
-	GL_BACK_RIGHT,
-	GL_FRONT,
-	GL_BACK,
-	GL_LEFT,
-	GL_RIGHT,
-	GL_FRONT_AND_BACK,
-	GL_AUX0,
-	GL_AUX1,
-	GL_AUX2,
-	GL_AUX3
-} DrawBufferMode;
 
 #ifdef __linux__
 
@@ -231,240 +77,10 @@ static int (stdcall *wglChoosePixelFormatARB)(
 );
 static void* (stdcall *wglCreateContextAttribsARB)(void* hdc,void* share_context,const int* attribute_list);
 
-static void (stdcall *glClear)(unsigned mask);
-static void (stdcall *glClearColor)(float red,float green,float blue,float alpha);
-static void (stdcall *glEnable)(int cap);
-static void (stdcall *glDisable)(int cap);
-static void (stdcall *glAlphaFunc)(AlphaTesting func,float ref);
-static void (stdcall *glViewport)(int x,int y,int width,int height);
-static int  (stdcall *glGetError)(void);
-
-static void (stdcall *glReadPixels)(int x,int y,int width,int height,Format format,DataType type,void* pixels);
-
-static void (stdcall *glPolygonMode)(DrawBufferMode face,PolygonModeType mode);
-static void (stdcall *glBegin)(DrawType type);
-static void (stdcall *glEnd)(void);
-static void (stdcall *glVertex2f)(float x,float y);
-static void (stdcall *glVertex4f)(float x,float y,float z,float w);
-static void (stdcall *glColor3b)(int red,int green,int blue);
-static void (stdcall *glTexCoord2f)(float u,float v);
-static void (stdcall *glDrawArrays)(DrawType type,int first,int count);
-static void (stdcall *glDrawElements)(DrawType type,int count,DataType data_type,void* indices);
-static int  (stdcall *glGetUniformLocation)(unsigned program,const char* name);
-static void (stdcall *glUniform1i)(int loc,int v1);
-static void (stdcall *glUniform3f)(int loc,float v1,float v2,float v3);
-
-static void (stdcall *glGenTextures)(unsigned n,unsigned* textures);
-static void (stdcall *glDeleteTextures)(int n,unsigned* textures);
-static void (stdcall *glBindTexture)(GlTextureType target,unsigned texture);
-static void (stdcall *glTexImage2D)(
-	GlTextureType target,
-	int level,
-	int static_format,
-	int width,
-	int height,
-	int border,
-	int format,
-	DataType type,
-	void* pixels
-);
-static void (stdcall *glTexParameteri)(GlTextureType target,TextureParameterType pname,int param);
-static void (stdcall *glTexParameterf)(GlTextureType target,TextureParameterType pname,float param);
-static void (stdcall *glGetFloatv)(TextureParameterType pname,float* param);
-static void (stdcall *glGetIntegerv)(int pname,int* param);
-static void (stdcall *glActiveTexture)(int texture);
-static void (stdcall *glCreateBuffers)(unsigned n,unsigned *buffers);
-static void (stdcall *glGenBuffers)(unsigned n,unsigned* buffers);
-static void (stdcall *glDeleteBuffers)(int n,unsigned* buffers);
-static void (stdcall *glBindBuffer)(unsigned target,unsigned buffer);
-static void (stdcall *glEnableVertexAttribArray)(unsigned index);
-static void (stdcall *glVertexAttribPointer)(unsigned index,int size,unsigned type,unsigned char normalized,unsigned stride,const void *pointer);
-static void (stdcall *glShaderSource)(unsigned shader,int count,const char **string,int *length);
-static void (stdcall *glCompileShader)(unsigned shader);
-static void (stdcall *glAttachShader)(unsigned program,unsigned shader);
-static void (stdcall *glDeleteShader)(unsigned shader); 
-static void (stdcall *glLinkProgram)(unsigned program);
-static void (stdcall *glUseProgram)(unsigned program);
-static void (stdcall *glDeleteProgram)(unsigned program);
-
-static char* (stdcall *glGetString)(GetStringName name);
-static char* (stdcall *glGetStringi)(GetStringName name,unsigned index);
-
-static void (stdcall *glGenVertexArrays)(int n,unsigned* arrays);
-static void (stdcall *glDeleteVertexArrays)(int n,unsigned* arrays);
-static void (stdcall *glBindVertexArray)(unsigned array);
-
-static void (stdcall *glBufferData)(unsigned target,unsigned size,const void *data,unsigned usage);
-
-static unsigned (stdcall *glCreateProgram)();
-static unsigned (stdcall *glCreateShader)(unsigned shader);
-
-static void (stdcall *glGenFramebuffers)(int n,unsigned* ids);
-static void (stdcall *glBindFramebuffer)(int target,unsigned framebuffer);
-static void (stdcall *glFramebufferTexture2D)(int target,int attachment,int textarget,unsigned texture,int level);
-static void (stdcall *glGenRenderbuffers)(int n,unsigned* renderbuffers);
-static void (stdcall *glBlitFramebuffer)(int srcX0,int srcY0,int srcX1,int srcY1,int dstX0,int dstY0,int dstX1,int dstY1,unsigned mask,unsigned filter);
 
 static int convertColor(int color){
 	return tClamp((color >> 13),INT8_MIN,INT8_MAX);
 }
-
-static char *vertex_circle_source = ""
-"#version 330 core\n"
-"layout (location = 0) in vec3 verticles;"
-"layout (location = 1) in vec2 coordinates;"
-"layout (location = 2) in vec3 lighting;"
-
-"out vec2 coordinates_io;"
-"out vec3 lighting_io;"
-
-"void main(){"
-	"lighting_io = lighting;"
-	"coordinates_io = coordinates;"
-	"gl_Position = vec4(verticles.xy,0.0,verticles.z);"
-"}";
-
-static char* fragment_circle_source = ""
-"#version 330 core\n"
-"out vec4 FragColor;"
-
-"in vec2 coordinates_io;"
-"in vec3 lighting_io;"
-
-"void main(){"
-	"if(dot(coordinates_io,coordinates_io) > 1.0)"
-		"discard;"
-	"FragColor = vec4(lighting_io,1.0);"
-"}";
-
-static char *vertex_source = ""
-"#version 330 core\n"
-"layout (location = 0) in vec3 verticles;"
-
-"void main(){"
-	"gl_Position = vec4(verticles.xy,0.0,verticles.z);"
-"}";
-
-static char *fragment_source = ""
-"#version 330 core\n"
-"out vec4 FragColor;"
-
-"uniform sampler2D ourTexture;"
-"uniform vec3 color;"
-
-"void main(){"
-	"FragColor = vec4(color,1.0);"
-"}";
-
-static char *vertex_lighting_source = ""
-"#version 330 core\n"
-"layout (location = 0) in vec3 verticles;"
-"layout (location = 1) in vec3 lighting;"
-
-"out vec3 lighting_io;"
-
-"void main(){"
-	"lighting_io = lighting;"
-	"gl_Position = vec4(verticles.xy,0.0,verticles.z);"
-"}";
-
-static char *fragment_lighting_source = ""
-"#version 330 core\n"
-"out vec4 FragColor;"
-
-"in vec3 lighting_io;"
-
-"void main(){"
-	"FragColor = vec4(lighting_io,1.0f);"
-"}";
-
-static char *vertex_texture_lighting_source = ""
-"#version 330 core\n"
-"layout (location = 0) in vec3 verticles;"
-"layout (location = 1) in vec2 textcoords;"
-"layout (location = 2) in vec3 lighting;"
-
-"out vec3 lighting_io;"
-"out vec2 textcoords_io;"
-
-"void main(){"
-	"textcoords_io = textcoords;"
-	"lighting_io = lighting;"
-	"gl_Position = vec4(verticles.xy,0.0,verticles.z);"
-"}";
-
-static char *fragment_texture_lighting_skybox_source = ""
-"#version 330 core\n"
-"out vec4 FragColor;"
-"in vec2 textcoords_io;"
-"in vec3 lighting_io;"
-
-"uniform sampler2D ourTexture;"
-"void main(){"
-	"FragColor = vec4(lighting_io,1.0);"
-	"vec3 texture_color = texture(ourTexture,textcoords_io).rgb;"
-	"FragColor.rgb *= texture_color;"
-"}"; 
-
-static char *fragment_texture_lighting_source = ""
-"#version 330 core\n"
-"out vec4 FragColor;"
-"in vec2 textcoords_io;"
-"in vec3 lighting_io;"
-
-"uniform sampler2D ourTexture;"
-"vec3 CubicHermite (vec3 A, vec3 B, vec3 C, vec3 D, float t){"
-	"float t2 = t*t;"
-    "float t3 = t*t*t;"
-    "vec3 a = -A/2.0 + (3.0*B)/2.0 - (3.0*C)/2.0 + D/2.0;"
-    "vec3 b = A - (5.0*B)/2.0 + 2.0*C - D / 2.0;"
-    "vec3 c = -A/2.0 + C/2.0;"
-   	"vec3 d = B;"
-    "return a*t3 + b*t2 + c*t + d;"
-"}"
-"vec3 BicubicHermiteTextureSample(vec2 P){"
-	"float c_textureSize = float(textureSize(ourTexture,0).x);"
-	"float c_onePixel = (1.0 / c_textureSize);"
-	"float c_twoPixels = (2.0 / c_textureSize);"
-    "vec2 pixel = P * c_textureSize + 0.5;"
-    
-    "vec2 frac = fract(pixel);"
-    "pixel = floor(pixel) / c_textureSize - vec2(c_onePixel/2.0);"
-    
-    "vec3 C00 = texture(ourTexture, pixel + vec2(-c_onePixel ,-c_onePixel)).rgb;"
-    "vec3 C10 = texture(ourTexture, pixel + vec2( 0.0        ,-c_onePixel)).rgb;"
-    "vec3 C20 = texture(ourTexture, pixel + vec2( c_onePixel ,-c_onePixel)).rgb;"
-    "vec3 C30 = texture(ourTexture, pixel + vec2( c_twoPixels,-c_onePixel)).rgb;"
-    
-    "vec3 C01 = texture(ourTexture, pixel + vec2(-c_onePixel , 0.0)).rgb;"
-    "vec3 C11 = texture(ourTexture, pixel + vec2( 0.0        , 0.0)).rgb;"
-    "vec3 C21 = texture(ourTexture, pixel + vec2( c_onePixel , 0.0)).rgb;"
-    "vec3 C31 = texture(ourTexture, pixel + vec2( c_twoPixels, 0.0)).rgb;"    
-    
-    "vec3 C02 = texture(ourTexture, pixel + vec2(-c_onePixel , c_onePixel)).rgb;"
-    "vec3 C12 = texture(ourTexture, pixel + vec2( 0.0        , c_onePixel)).rgb;"
-    "vec3 C22 = texture(ourTexture, pixel + vec2( c_onePixel , c_onePixel)).rgb;"
-    "vec3 C32 = texture(ourTexture, pixel + vec2( c_twoPixels, c_onePixel)).rgb;"    
-    
-    "vec3 C03 = texture(ourTexture, pixel + vec2(-c_onePixel , c_twoPixels)).rgb;"
-    "vec3 C13 = texture(ourTexture, pixel + vec2( 0.0        , c_twoPixels)).rgb;"
-    "vec3 C23 = texture(ourTexture, pixel + vec2( c_onePixel , c_twoPixels)).rgb;"
-    "vec3 C33 = texture(ourTexture, pixel + vec2( c_twoPixels, c_twoPixels)).rgb;"    
-    
-    "vec3 CP0X = CubicHermite(C00, C10, C20, C30, frac.x);"
-    "vec3 CP1X = CubicHermite(C01, C11, C21, C31, frac.x);"
-    "vec3 CP2X = CubicHermite(C02, C12, C22, C32, frac.x);"
-    "vec3 CP3X = CubicHermite(C03, C13, C23, C33, frac.x);"
-    
-    "return CubicHermite(CP0X, CP1X, CP2X, CP3X, frac.y);"
-"}"
-"void main(){"
-	"FragColor = vec4(lighting_io,1.0);"
-	"vec3 texture_color = BicubicHermiteTextureSample(textcoords_io);"
-	"if(texture(ourTexture,textcoords_io).a > 0.5)"
-		"discard;"
-	"FragColor.rgb *= texture_color;"
-"}";   
 
 int g_smaa_max;
 
@@ -487,13 +103,34 @@ static ShaderProgram shader_lighting_program;
 static ShaderProgram shader_texture_lighting_program;
 static ShaderProgram shader_circle_program;
 static ShaderProgram shader_skybox_program;
+static ShaderProgram shader_lightmap_texture;
+static ShaderProgram shader_lightmap;
 
 static unsigned vao;
 static unsigned vao_lighting;
 static unsigned vao_lighting_texture;
 static unsigned vao_circle;
+static unsigned vao_lightmap_texture;
+static unsigned vao_lightmap;
 
 static unsigned ebo_quad;
+
+structure(VertexLightmapTexture){
+    float pos[3];
+    float texture_pos[2];
+    int lightmap_index;
+    float world_pos[3];
+    float u[3];
+    float v[3];
+};
+
+structure(VertexLightmap){
+    float pos[3];
+    int lightmap_index;
+    float world_pos[3];
+    float u[3];
+    float v[3];
+};
 
 structure(VertexLightingTexture){
 	float pos[3];
@@ -545,7 +182,7 @@ static void batchDraw(void){
 	if(!current_shaderprogram->vao)
 		return;
 	glBindVertexArray(*current_shaderprogram->vao);
-	if(*current_shaderprogram->vao == vao_lighting_texture)
+	if(*current_shaderprogram->vao == vao_lighting_texture || *current_shaderprogram->vao == vao_lightmap_texture)
 		glBindTexture(GL_TEXTURE_2D,current_texture);
 	else
 		glBindTexture(GL_TEXTURE_2D,0);
@@ -559,19 +196,13 @@ static void batchDraw(void){
 	vertex_buffer_ptr = 0;
 }
 
-void deleteTextureGL(unsigned texture){
-	if(!texture)
-		return;
-	glDeleteTextures(1,&texture);
-}
-
 void drawColoredPolygonGL(DrawSurface* surface,Vec2* coordinats,Vec3* color,int n_point){
     if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
         batchDraw();
         current_shaderprogram = &shader_lighting_program;
         buffer_drawtype = GL_TRIANGLES;
     }
-    float color_div = FIXED_ONE << 4;
+    float color_div = FIXED_ONE * 16;
     if(hdr)
         color_div *= 0.33f;
     VertexLighting* vertex = (VertexLighting*)(vertex_buffer + vertex_buffer_ptr);
@@ -596,10 +227,10 @@ void drawPolygonGL(DrawSurface* surface,Vec2* coordinats,int n_point,Vec3 color)
 
 void drawColoredPolygon3dGL(DrawSurface* surface,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
     Vec3 point_2[4];
-	point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_options.fov);
-	point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_options.fov);
-	point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_options.fov);
-	point_2[3] = pointToScreenRenderer(coordinats[3],surface->rotation_matrix,surface->position,g_options.fov);
+	point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[3] = pointToScreenRenderer(coordinats[3],surface->rotation_matrix,surface->position,g_surface.fov);
 
 	Vec3 d_point[] = {
 		{point_2[0].x,point_2[0].y,point_2[0].z},
@@ -612,7 +243,7 @@ void drawColoredPolygon3dGL(DrawSurface* surface,Vec3* coordinats,Vec3* color,Li
         current_shaderprogram = &shader_lighting_program;
         buffer_drawtype = GL_TRIANGLES;
     }
-    float color_div = FIXED_ONE << 4;
+    float color_div = FIXED_ONE * 16;
     if(hdr)
         color_div *= 0.33f;
     VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
@@ -638,6 +269,12 @@ void drawPolygon3dGL(DrawSurface* surface,Vec3* coordinats,Vec3 color){
 static bool anisotropic;
 static float anisotropic_max;
 
+void deleteTextureGL(unsigned texture){
+	if(!texture)
+		return;
+	glDeleteTextures(1,&texture);
+}
+
 static void textureUpdate(Texture* texture){
 	int size = texture->size;
 	int offset = 0;
@@ -653,6 +290,62 @@ void textureUpdateGL(Texture* texture){
 		return;
 	glBindTexture(GL_TEXTURE_2D,texture->gl_id);
 	textureUpdate(texture);
+}
+
+static unsigned lightmap_texture;
+//glTexSubImage2D(GL_TEXTURE_2D,0,0,0,tMin(size / 1024,1024),1024,GL_RED,GL_INT,data);
+
+void lightmapUploadGL(char* data,int size){
+    Vec3 camera_position = g_surface.position;
+        
+    if(IS_FLOAT(real))
+        camera_position = vec3MulS(camera_position,0x10000);
+    
+    glUseProgram(shader_lightmap.id);
+    glUniform3f(glGetUniformLocation(shader_lightmap.id,"camera_position"),camera_position.x,camera_position.y,camera_position.z);
+    glUseProgram(shader_lightmap_texture.id);
+    glUniform3f(glGetUniformLocation(shader_lightmap_texture.id,"camera_position"),camera_position.x,camera_position.y,camera_position.z);
+    
+    glActiveTexture(GL_TEXTURE0 + 1);
+    if(!lightmap_texture){
+        glGenTextures(1,&lightmap_texture);
+        
+        glBindTexture(GL_TEXTURE_2D,lightmap_texture);
+    
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+
+        glTexImage2D(GL_TEXTURE_2D,0,GL_R32I,0x1000,0x1000,0,GL_RED_INTEGER,GL_INT,data);
+
+        goto cleanup;
+    }
+
+    int n_part = 4;
+    
+    int offset = N_LUXEL_CACHE / n_part * (g_time.frame_tick % n_part);
+
+    static struct{
+        float  luminance[3];
+        uint32 hash;
+    } light[N_LUXEL_CACHE];
+    
+    for(int i = 0;i < countof(light) / n_part;i += 1){
+        light[i].luminance[0] = (float)g_luxel_cache[offset + i].luminance_direct.x / FIXED_ONE / 16;
+        light[i].luminance[1] = (float)g_luxel_cache[offset + i].luminance_direct.y / FIXED_ONE / 16;
+        light[i].luminance[2] = (float)g_luxel_cache[offset + i].luminance_direct.z / FIXED_ONE / 16;
+        light[i].luminance[0] += (float)g_luxel_cache[offset + i].luminance.x / FIXED_ONE / 16;
+        light[i].luminance[1] += (float)g_luxel_cache[offset + i].luminance.y / FIXED_ONE / 16;
+        light[i].luminance[2] += (float)g_luxel_cache[offset + i].luminance.z / FIXED_ONE / 16;
+        
+        light[i].hash = (g_luxel_cache[offset + i].n_sample & ~LUXEL_DIRECTSAMPLED) > 0x10 ? g_luxel_cache[offset + i].hash : 0;
+        //light[i].hash = g_luxel_cache[offset + i].hash;
+    }
+
+    int upload_size = N_LUXEL_CACHE / 0x1000 * 4 / n_part;
+    
+    glTexSubImage2D(GL_TEXTURE_2D,0,0,upload_size * (g_time.frame_tick % n_part),0x1000,upload_size,GL_RED_INTEGER,GL_INT,light);
+ cleanup:
+    glActiveTexture(GL_TEXTURE0);
 }
 
 static void textureUpload(Texture* texture){
@@ -682,7 +375,7 @@ void drawTexturePolygonGL(DrawSurface* surface,Texture* texture,Vec2* texture_co
         current_shaderprogram = &shader_texture_lighting_program;
         buffer_drawtype = GL_TRIANGLES;
     }
-    float color_div = FIXED_ONE << 4;
+    float color_div = FIXED_ONE * 16;
     if(hdr)
         color_div *= 0.33f;
     VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
@@ -697,7 +390,7 @@ void drawTexturePolygonGL(DrawSurface* surface,Texture* texture,Vec2* texture_co
 }
 
 void drawTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point){
-    float color_div = FIXED_ONE << 4;
+    float color_div = FIXED_ONE * 16;
     if(hdr)
         color_div *= 0.33f;
     if(!texture->gl_id)
@@ -717,9 +410,9 @@ void drawTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_
         buffer_drawtype = GL_TRIANGLES;
         VertexLightingTexture vertex[3];
         Vec3 point_2[3];
-        point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_options.fov);
-        point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_options.fov);
-        point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_options.fov);
+        point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_surface.fov);
+        point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_surface.fov);
+        point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_surface.fov);
         for(int i = 3;i--;){
             vertex[i] = (VertexLightingTexture){
                 .pos = {-(float)point_2[i].y / FIXED_ONE,-(float)point_2[i].x / FIXED_ONE,(float)point_2[i].z / FIXED_ONE},
@@ -736,10 +429,10 @@ void drawTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_
     }
 
 	Vec3 point_2[4];
-	point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_options.fov);
-	point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_options.fov);
-	point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_options.fov);
-	point_2[3] = pointToScreenRenderer(coordinats[3],surface->rotation_matrix,surface->position,g_options.fov);
+	point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[3] = pointToScreenRenderer(coordinats[3],surface->rotation_matrix,surface->position,g_surface.fov);
 
 	Vec3 d_point[] = {
 		{point_2[0].x,point_2[0].y,point_2[0].z},
@@ -775,7 +468,7 @@ void drawColoredTexturePolygonGL(DrawSurface* surface,Texture* texture,Vec2* tex
         current_shaderprogram = &shader_texture_lighting_program;
         buffer_drawtype = GL_TRIANGLES;
     }
-    float color_div = FIXED_ONE << 4;
+    float color_div = FIXED_ONE * 16;
     if(hdr)
         color_div *= 0.33f;
     VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
@@ -790,7 +483,7 @@ void drawColoredTexturePolygonGL(DrawSurface* surface,Texture* texture,Vec2* tex
 }
 
 static void coloredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,ShaderProgram* shader_program,int n_vertex){
-    float color_div = FIXED_ONE << 4;
+    float color_div = FIXED_ONE * 16;
     if(hdr)
         color_div *= 0.25f;
     if(!texture->gl_id)
@@ -808,9 +501,9 @@ static void coloredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* 
         buffer_drawtype = GL_TRIANGLES;
         VertexLightingTexture vertex[3];
         Vec3 point_2[3];
-        point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_options.fov);
-        point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_options.fov);
-        point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_options.fov);
+        point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_surface.fov);
+        point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_surface.fov);
+        point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_surface.fov);
         for(int i = 3;i--;){
             vertex[i] = (VertexLightingTexture){
                 .pos = {-(float)point_2[i].y / FIXED_ONE,-(float)point_2[i].x / FIXED_ONE,(float)point_2[i].z / FIXED_ONE},
@@ -826,10 +519,10 @@ static void coloredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* 
         return;
     }
     Vec3 point_2[4];
-	point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_options.fov);
-	point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_options.fov);
-	point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_options.fov);
-	point_2[3] = pointToScreenRenderer(coordinats[3],surface->rotation_matrix,surface->position,g_options.fov);
+	point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[3] = pointToScreenRenderer(coordinats[3],surface->rotation_matrix,surface->position,g_surface.fov);
 
 	Vec3 d_point[] = {
 		{point_2[0].x,point_2[0].y,point_2[0].z},
@@ -859,17 +552,115 @@ void drawColoredTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* t
 	coloredTexturePolygon3d(surface,texture,texture_coordinats,coordinats,color,&shader_texture_lighting_program,n_vertex);
 }
 
+void drawLightmapPolygon3dGL(DrawSurface* surface,Vec3* coordinats,int lightmap_index,int side){
+    float color_div = FIXED_ONE * 16;
+    if(hdr)
+        color_div *= 0.25f;
+    Vec3 point_2[4];
+	point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[3] = pointToScreenRenderer(coordinats[3],surface->rotation_matrix,surface->position,g_surface.fov);
+
+	Vec3 d_point[] = {
+		{point_2[0].x,point_2[0].y,point_2[0].z},
+		{point_2[1].x,point_2[1].y,point_2[1].z},
+		{point_2[3].x,point_2[3].y,point_2[3].z},
+		{point_2[2].x,point_2[2].y,point_2[2].z}
+	};
+    
+    if(current_shaderprogram != &shader_lightmap || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightmap) * 4 || buffer_drawtype != GL_TRIANGLES){
+        batchDraw();
+        current_shaderprogram = &shader_lightmap;
+        buffer_drawtype = GL_TRIANGLES;
+    }
+    VertexLightmap* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
+ 
+    int g_index[] = {0,1,3,2};
+
+    for(int i = 4;i--;){
+        coordinats[i].a[side >> 1] += REAL_EPSILON;
+    }
+
+    Vec3 u = vec3Direction(vec3Shr(coordinats[0],2),vec3Shr(coordinats[1],2));
+    Vec3 v = vec3Direction(vec3Shr(coordinats[0],2),vec3Shr(coordinats[2],2));
+    
+    for(int i = 4;i--;){
+        if(IS_FLOAT(real))
+            coordinats[g_index[i]] = vec3MulS(coordinats[g_index[i]],FIXED_ONE * 0x10000);
+        vertex[i] = (VertexLightmap){
+            .pos = {-(float)d_point[i].y / FIXED_ONE,-(float)d_point[i].x / FIXED_ONE,(float)d_point[i].z / FIXED_ONE},
+            .lightmap_index = lightmap_index,
+            .world_pos = {(float)coordinats[g_index[i]].x,(float)coordinats[g_index[i]].y,(float)coordinats[g_index[i]].z},
+            .u = {(float)u.x / FIXED_ONE,(float)u.y / FIXED_ONE,(float)u.z / FIXED_ONE},
+            .v = {(float)v.x / FIXED_ONE,(float)v.y / FIXED_ONE,(float)v.z / FIXED_ONE},
+        };
+    }
+    vertex_buffer_ptr += sizeof(VertexLightmap) * 4;
+}
+
+void drawLightmapTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,int lightmap_index,int side){
+    float color_div = FIXED_ONE * 16;
+    if(hdr)
+        color_div *= 0.25f;
+    if(!texture->gl_id)
+		textureUpload(texture);
+    Vec3 point_2[4];
+	point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[2] = pointToScreenRenderer(coordinats[2],surface->rotation_matrix,surface->position,g_surface.fov);
+	point_2[3] = pointToScreenRenderer(coordinats[3],surface->rotation_matrix,surface->position,g_surface.fov);
+
+	Vec3 d_point[] = {
+		{point_2[0].x,point_2[0].y,point_2[0].z},
+		{point_2[1].x,point_2[1].y,point_2[1].z},
+		{point_2[3].x,point_2[3].y,point_2[3].z},
+		{point_2[2].x,point_2[2].y,point_2[2].z}
+	};
+    
+    if(current_shaderprogram != &shader_lightmap_texture || current_texture != texture->gl_id || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightmapTexture) * 4 || buffer_drawtype != GL_TRIANGLES){
+        batchDraw();
+        current_texture = texture->gl_id;
+        current_shaderprogram = &shader_lightmap_texture;
+        buffer_drawtype = GL_TRIANGLES;
+    }
+    VertexLightmapTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
+ 
+    int g_index[] = {0,1,3,2};
+
+    for(int i = 4;i--;){
+        coordinats[i].a[side >> 1] += REAL_EPSILON;
+    }
+
+    Vec3 u = vec3Direction(vec3Shr(coordinats[0],2),vec3Shr(coordinats[1],2));
+    Vec3 v = vec3Direction(vec3Shr(coordinats[0],2),vec3Shr(coordinats[2],2));
+    
+    for(int i = 4;i--;){
+        if(IS_FLOAT(real))
+            coordinats[g_index[i]] = vec3MulS(coordinats[g_index[i]],FIXED_ONE * 0x10000);
+        vertex[i] = (VertexLightmapTexture){
+            .pos = {-(float)d_point[i].y / FIXED_ONE,-(float)d_point[i].x / FIXED_ONE,(float)d_point[i].z / FIXED_ONE},
+            .texture_pos = {(float)texture_coordinats[i].x / FIXED_ONE,(float)texture_coordinats[i].y / FIXED_ONE},
+            .lightmap_index = lightmap_index,
+            .world_pos = {(float)coordinats[g_index[i]].x,(float)coordinats[g_index[i]].y,(float)coordinats[g_index[i]].z},
+            .u = {(float)u.x / FIXED_ONE,(float)u.y / FIXED_ONE,(float)u.z / FIXED_ONE},
+            .v = {(float)v.x / FIXED_ONE,(float)v.y / FIXED_ONE,(float)v.z / FIXED_ONE},
+        };
+    }
+    vertex_buffer_ptr += sizeof(VertexLightmapTexture) * 4;
+}
+
 void drawColoredTextureSkyboxPolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap){
 	coloredTexturePolygon3d(surface,texture,texture_coordinats,coordinats,color,&shader_skybox_program,4);
 }
 
-void drawLineGL(DrawSurface* surface,int x1,int y1,int x2,int y2,Vec3 color){
+void drawLineGL(DrawSurface* surface,real x1,real y1,real x2,real y2,Vec3 color){
     if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 2 || buffer_drawtype != GL_LINES){
         batchDraw();
         current_shaderprogram = &shader_lighting_program;
         buffer_drawtype = GL_LINES;
     }
-    float color_div = FIXED_ONE << 4;
+    float color_div = FIXED_ONE * 16;
     VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
     vertex[0] = (VertexLighting){
         .pos = {-(float)y1 / FIXED_ONE,-(float)x1 / FIXED_ONE,1.0f},
@@ -882,15 +673,15 @@ void drawLineGL(DrawSurface* surface,int x1,int y1,int x2,int y2,Vec3 color){
     vertex_buffer_ptr += sizeof(VertexLighting) * 2;
 }
 
-void drawSegmentGL(DrawSurface* surface,int x1,int y1,int x2,int y2,int thickness,Vec3 color){
+void drawSegmentGL(DrawSurface* surface,real x1,real y1,real x2,real y2,real thickness,Vec3 color){
     if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
         batchDraw();
         current_shaderprogram = &shader_lighting_program;
         buffer_drawtype = GL_TRIANGLES;
     }
-    float color_div = FIXED_ONE << 4;
+    float color_div = FIXED_ONE * 16;
     VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
-    Vec2 direction = vec2Direction((Vec2){x1 << 8,y1 << 8},(Vec2){x2 << 8,y2 << 8});
+    Vec2 direction = vec2Direction((Vec2){realShr(x1,8),realShr(y1,8)},(Vec2){realShr(x2,8),realShr(y2,8)});
         
     Vec2 quad[] = {
         vec2Add((Vec2){x1,y1},vec2MulS(vec2Rotate(direction,FIXED_ONE / 8 * 3),thickness)),
@@ -913,7 +704,7 @@ void drawSegment3dGL(DrawSurface* surface,Vec3* coordinats,int thickness,Vec3 co
         current_shaderprogram = &shader_lighting_program;
         buffer_drawtype = GL_TRIANGLES;
     }
-    float color_div = FIXED_ONE << 4;
+    float color_div = FIXED_ONE ;
     VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
     for(int i = 4;i--;){
         vertex[i] = (VertexLighting){
@@ -924,13 +715,13 @@ void drawSegment3dGL(DrawSurface* surface,Vec3* coordinats,int thickness,Vec3 co
     vertex_buffer_ptr += sizeof(VertexLighting) * 4;
 }
 
-void drawRectangleGL(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color){
+void drawRectangleGL(DrawSurface* surface,real x,real y,real size_x,real size_y,Vec3 color){
     if(current_shaderprogram != &shader_lighting_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLighting) * 4 || buffer_drawtype != GL_TRIANGLES){
         batchDraw();
         current_shaderprogram = &shader_lighting_program;
         buffer_drawtype = GL_TRIANGLES;
     }
-    float color_div = FIXED_ONE << 4;
+    float color_div = FIXED_ONE * 16;
     VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
     Vec2 position[] = {{y,x},{y + size_y,x},{y + size_y,x + size_x},{y,x + size_x}};
     for(int i = 4;i--;){
@@ -942,7 +733,7 @@ void drawRectangleGL(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3
     vertex_buffer_ptr += sizeof(VertexLighting) * 4;
 }
 
-void drawEllipsesGL(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color){
+void drawEllipsesGL(DrawSurface* surface,real x,real y,real size_x,real size_y,Vec3 color){
     if(!modern_gl)
 		return;
 	if(current_shaderprogram != &shader_circle_program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexCircle) * 4 || buffer_drawtype != GL_TRIANGLES){
@@ -950,7 +741,7 @@ void drawEllipsesGL(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 
 		current_shaderprogram = &shader_circle_program;
 		buffer_drawtype = GL_TRIANGLES;
 	}
-	float color_div = FIXED_ONE << 4;
+	float color_div = FIXED_ONE * 16;
 	VertexCircle* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
     float gl_coordinates[][2] = {{-1.0f,-1.0f},{1.0f,-1.0f},{1.0f,1.0f},{-1.0f,1.0f}};
     Vec2 position[] = {{y - size_y,x - size_x},{y + size_y,x - size_x},{y + size_y,x + size_x},{y - size_y,x + size_x}};
@@ -972,7 +763,7 @@ void drawCircle3dGL(DrawSurface* surface,Vec3* coordinates,Vec3 color){
 		current_shaderprogram = &shader_circle_program;
 		buffer_drawtype = GL_TRIANGLES;
 	}
-	float color_div = FIXED_ONE << 4;
+	float color_div = FIXED_ONE * 16;
 	VertexCircle* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
     float gl_coordinates[][2] = {{-1.0f,-1.0f},{1.0f,-1.0f},{1.0f,1.0f},{-1.0f,1.0f}};
     for(int i = 4;i--;){
@@ -991,18 +782,44 @@ static void shaderProgramDelete(ShaderProgram shader_program){
 	glDeleteProgram(shader_program.id);
 }
 
-static ShaderProgram shaderProgramCreate(char* vertex_source,char* fragment_source){
+#include "platform/storage.h"
+
+static ShaderProgram shaderProgramCreate(String vertex_path,String fragment_path){
 	ShaderProgram program = {
 		.id = glCreateProgram(),
 		.vertex_shader = glCreateShader(GL_VERTEX_SHADER),
 		.fragment_shader = glCreateShader(GL_FRAGMENT_SHADER),
 	};
 
-	glShaderSource(program.vertex_shader,1,(const char**)&vertex_source,0);
-	glShaderSource(program.fragment_shader,1,(const char**)&fragment_source,0);
+    FileContent vertex   = storageFileRead(&g_arena_frame,stringConcat(&g_arena_frame,(String)STRING_LITERAL("shader/"),vertex_path).data);
+    FileContent fragment = storageFileRead(&g_arena_frame,stringConcat(&g_arena_frame,(String)STRING_LITERAL("shader/"),fragment_path).data);
+
+	glShaderSource(program.vertex_shader,1,(void*)&vertex.content,(int*)&vertex.size);
+	glShaderSource(program.fragment_shader,1,(void*)&fragment.content,(int*)&fragment.size);
 
 	glCompileShader(program.vertex_shader);
 	glCompileShader(program.fragment_shader);
+
+    int status;
+    
+    glGetShaderiv(program.vertex_shader,GL_COMPILE_STATUS,&status);
+    if(!status){
+        String log = {.size = 512,.data = memoryArenaAllocate(&g_arena_frame,512)}; 
+        glGetShaderInfoLog(program.vertex_shader,512,0,log.data);
+        print((String)STRING_LITERAL("shader compilation failed:\n\n"));
+        printNL(vertex_path);
+        print(log);
+    }
+
+    glGetShaderiv(program.fragment_shader,GL_COMPILE_STATUS,&status);
+    if(!status){
+        String log = {.size = 512,.data = memoryArenaAllocate(&g_arena_frame,512)}; 
+        glGetShaderInfoLog(program.fragment_shader,512,0,log.data);
+        print((String)STRING_LITERAL("shader compilation failed:\n\n"));
+        printNL(fragment_path);
+        print(log);
+    }
+    
 	glAttachShader(program.id,program.vertex_shader);
 	glAttachShader(program.id,program.fragment_shader);
 	glLinkProgram(program.id);
@@ -1072,6 +889,8 @@ static void modernGlInit(int pxf){
 #endif
 
     openglPolygonFill(!g_options.gl_wireframe);
+
+    glActiveTexture(GL_TEXTURE0);
     
 	glCreateBuffers(1,&g_vbo);
 	glBindBuffer(GL_ARRAY_BUFFER,g_vbo);
@@ -1084,18 +903,61 @@ static void modernGlInit(int pxf){
 	glEnableVertexAttribArray(0);
 	glEnableVertexAttribArray(1);
 	glEnableVertexAttribArray(2);
-	glEnableVertexAttribArray(3);
 
 	glVertexAttribPointer(0,3,GL_FLOAT,0,sizeof(VertexLightingTexture),(void*)offsetof(VertexLightingTexture,pos));
 	glVertexAttribPointer(1,2,GL_FLOAT,0,sizeof(VertexLightingTexture),(void*)offsetof(VertexLightingTexture,texture_pos));
 	glVertexAttribPointer(2,3,GL_FLOAT,0,sizeof(VertexLightingTexture),(void*)offsetof(VertexLightingTexture,lighting));
 
-	shader_texture_lighting_program     = shaderProgramCreate(vertex_texture_lighting_source,fragment_texture_lighting_source);
+	shader_texture_lighting_program     = shaderProgramCreate((String)STRING_LITERAL("texture_lighting.vert"),(String)STRING_LITERAL("texture_lighting.frag"));
 	shader_texture_lighting_program.vao = &vao_lighting_texture;
-	
-	shader_skybox_program     = shaderProgramCreate(vertex_texture_lighting_source,fragment_texture_lighting_skybox_source);
+
+	shader_skybox_program     = shaderProgramCreate((String)STRING_LITERAL("texture_lighting.vert"),(String)STRING_LITERAL("skybox.frag"));
 	shader_skybox_program.vao = &vao_lighting_texture;
-	
+    
+    //lightmap
+    glGenVertexArrays(1,&vao_lightmap_texture);
+	glBindVertexArray(vao_lightmap_texture);
+    
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
+    glEnableVertexAttribArray(3);
+    glEnableVertexAttribArray(4);
+    glEnableVertexAttribArray(5);
+
+	glVertexAttribPointer(0,3,GL_FLOAT,0,sizeof(VertexLightmapTexture),(void*)offsetof(VertexLightmapTexture,pos));
+	glVertexAttribPointer(1,2,GL_FLOAT,0,sizeof(VertexLightmapTexture),(void*)offsetof(VertexLightmapTexture,texture_pos));
+    glVertexAttribIPointer(2,1,GL_INT,sizeof(VertexLightmapTexture),(void*)offsetof(VertexLightmapTexture,lightmap_index));
+    glVertexAttribPointer(3,3,GL_FLOAT,0,sizeof(VertexLightmapTexture),(void*)offsetof(VertexLightmapTexture,world_pos));
+    glVertexAttribPointer(4,3,GL_FLOAT,0,sizeof(VertexLightmapTexture),(void*)offsetof(VertexLightmapTexture,u));
+    glVertexAttribPointer(5,3,GL_FLOAT,0,sizeof(VertexLightmapTexture),(void*)offsetof(VertexLightmapTexture,v));
+
+	shader_lightmap_texture     = shaderProgramCreate((String)STRING_LITERAL("texture_lighting_lightmap.vert"),(String)STRING_LITERAL("texture_lighting_lightmap.frag"));
+	shader_lightmap_texture.vao = &vao_lightmap_texture;
+
+    glUniform1i(glGetUniformLocation(shader_lightmap_texture.id,"ourTexture"),0);
+    glUniform1i(glGetUniformLocation(shader_lightmap_texture.id,"lightmap"),1);
+
+    glGenVertexArrays(1,&vao_lightmap);
+	glBindVertexArray(vao_lightmap);
+    
+	glEnableVertexAttribArray(0);
+	glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
+    glEnableVertexAttribArray(3);
+    glEnableVertexAttribArray(4);
+
+	glVertexAttribPointer(0,3,GL_FLOAT,0,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,pos));
+    glVertexAttribIPointer(1,1,GL_INT,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,lightmap_index));
+    glVertexAttribPointer(2,3,GL_FLOAT,0,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,world_pos));
+    glVertexAttribPointer(3,3,GL_FLOAT,0,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,u));
+    glVertexAttribPointer(4,3,GL_FLOAT,0,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,v));
+
+	shader_lightmap     = shaderProgramCreate((String)STRING_LITERAL("lighting_lightmap.vert"),(String)STRING_LITERAL("lighting_lightmap.frag"));
+	shader_lightmap.vao = &vao_lightmap;
+
+    glUniform1i(glGetUniformLocation(shader_lightmap.id,"lightmap"),1);
+    //lightmap end
 	vertex_size = sizeof(float) * 3;
 
 	glGenVertexArrays(1,&vao);
@@ -1103,7 +965,7 @@ static void modernGlInit(int pxf){
 
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0,3,GL_FLOAT,0,vertex_size,(void*)0);
-	shader_program = shaderProgramCreate(vertex_source,fragment_source);
+	shader_program = shaderProgramCreate((String)STRING_LITERAL("vertex.vert"),(String)STRING_LITERAL("fragment.frag"));
 	shader_program.vao = &vao;
 
 	glGenVertexArrays(1,&vao_lighting);
@@ -1116,20 +978,21 @@ static void modernGlInit(int pxf){
 	glVertexAttribPointer(0,3,GL_FLOAT,0,sizeof(VertexLighting),(void*)offsetof(VertexLighting,pos));
 	glVertexAttribPointer(1,3,GL_FLOAT,0,sizeof(VertexLighting),(void*)offsetof(VertexLighting,lighting));
 
-	shader_lighting_program = shaderProgramCreate(vertex_lighting_source,fragment_lighting_source);
+	shader_lighting_program = shaderProgramCreate((String)STRING_LITERAL("lighting.vert"),(String)STRING_LITERAL("lighting.frag"));
 	shader_lighting_program.vao = &vao_lighting;
 
 	glGenVertexArrays(1,&vao_circle);
 	glBindVertexArray(vao_circle);
 
 	glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glEnableVertexAttribArray(2);
+    
 	glVertexAttribPointer(0,3,GL_FLOAT,0,sizeof(VertexCircle),(void*)0);
-	glEnableVertexAttribArray(1);
 	glVertexAttribPointer(1,2,GL_FLOAT,0,sizeof(VertexCircle),(void*)(3 * sizeof(float)));
-	glEnableVertexAttribArray(2);
 	glVertexAttribPointer(2,3,GL_FLOAT,0,sizeof(VertexCircle),(void*)(5 * sizeof(float)));
 
-	shader_circle_program     = shaderProgramCreate(vertex_circle_source,fragment_circle_source);
+	shader_circle_program     = shaderProgramCreate((String)STRING_LITERAL("circle.vert"),(String)STRING_LITERAL("circle.frag"));
 	shader_circle_program.vao = &vao_circle;
 
 	glClearColor(0.5f,0.5f,0.5f,1.0f);
@@ -1221,6 +1084,7 @@ bool createSurfaceGL(DrawSurface* surface){
 			{.name = "glDeleteTextures",.fn_ptr = (funcptr_t*)&glDeleteTextures},
 			{.name = "glBindTexture",.fn_ptr = (funcptr_t*)&glBindTexture},
 			{.name = "glTexImage2D",.fn_ptr = (funcptr_t*)&glTexImage2D},
+            {.name = "glTexSubImage2D",.fn_ptr = (funcptr_t*)&glTexSubImage2D},
 			{.name = "glTexParameteri",.fn_ptr = (funcptr_t*)&glTexParameteri},
 			{.name = "glTexParameterf",.fn_ptr = (funcptr_t*)&glTexParameterf},
 			{.name = "glGetFloatv",.fn_ptr = (funcptr_t*)&glGetFloatv},
@@ -1282,6 +1146,7 @@ bool createSurfaceGL(DrawSurface* surface){
 
 			{.name = "glEnableVertexAttribArray",.fn_ptr = (funcptr_t*)&glEnableVertexAttribArray},
 			{.name = "glVertexAttribPointer",.fn_ptr = (funcptr_t*)&glVertexAttribPointer},
+            {.name = "glVertexAttribIPointer",.fn_ptr = (funcptr_t*)&glVertexAttribIPointer},
 			{.name = "glShaderSource",.fn_ptr = (funcptr_t*)&glShaderSource},
 			{.name = "glCompileShader",.fn_ptr = (funcptr_t*)&glCompileShader},
 			{.name = "glAttachShader",.fn_ptr = (funcptr_t*)&glAttachShader},
@@ -1289,6 +1154,8 @@ bool createSurfaceGL(DrawSurface* surface){
 			{.name = "glLinkProgram",.fn_ptr = (funcptr_t*)&glLinkProgram},
 			{.name = "glUseProgram",.fn_ptr = (funcptr_t*)&glUseProgram},
 			{.name = "glDeleteProgram",.fn_ptr = (funcptr_t*)&glDeleteProgram},
+            {.name = "glGetShaderiv",.fn_ptr = (funcptr_t*)&glGetShaderiv},
+			{.name = "glGetShaderInfoLog",.fn_ptr = (funcptr_t*)&glGetShaderInfoLog},
 
 			{.name = "glCreateProgram",.fn_ptr = (funcptr_t*)&glCreateProgram},
 			{.name = "glCreateShader",.fn_ptr = (funcptr_t*)&glCreateShader},
@@ -1303,6 +1170,8 @@ bool createSurfaceGL(DrawSurface* surface){
 			{.name = "glDeleteVertexArrays",.fn_ptr = (funcptr_t*)&glDeleteVertexArrays},
 			{.name = "glBindVertexArray",.fn_ptr = (funcptr_t*)&glBindVertexArray},
 			{.name = "glGenFramebuffers",.fn_ptr = (funcptr_t*)&glGenFramebuffers},
+
+            {.name = "glTexImage1D",.fn_ptr = (funcptr_t*)&glTexImage1D},
 
 			{.name = "glBindFramebuffer",.fn_ptr = (funcptr_t*)&glBindFramebuffer},
 			{.name = "glFramebufferTexture2D",.fn_ptr = (funcptr_t*)&glFramebufferTexture2D},

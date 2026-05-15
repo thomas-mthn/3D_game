@@ -1,11 +1,9 @@
 #include "draw_soft.h"
 #include "draw.h"
-#include "fixed.h"
 #include "memory.h"
 #include "vec2.h"
 #include "vec3.h"
 #include "main.h"
-#include "libc.h"
 
 #ifdef __linux__
 #include "linux/l_main.h"
@@ -91,6 +89,7 @@ void softSurfaceBlit(DrawSurface* surface){
 }
 
 static void setScanlineColor(ScanlineColor* color,Scanline scanline,Vec3 color_1,Vec3 color_2,Vec2 pos_1,Vec2 pos_2,int size){
+#if 0
 	int p_begin,p_end;
 	int delta,delta_pos;
     Vec3 delta_color;
@@ -137,10 +136,12 @@ static void setScanlineColor(ScanlineColor* color,Scanline scanline,Vec3 color_1
 		delta_pos -= delta;
 	}
 #endif
+#endif
 }
 
 static void setScanlineTexture(ScanlineColor* color,ScanlineTexture texture,Scanline scanline,Vec2 texture_1,Vec2 texture_2,Vec2 pos_1,Vec2 pos_2,int size){
-	int p_begin,p_end;
+#if 0
+    int p_begin,p_end;
 	int delta,delta_pos;
     Vec2 delta_texture;
     Vec2 texture_iterator;
@@ -186,10 +187,12 @@ static void setScanlineTexture(ScanlineColor* color,ScanlineTexture texture,Scan
 		scanline.end[p_begin] = tMax(scanline.end[p_begin],delta_pos >> FIXED_PRECISION);
 		delta_pos -= delta;
 	}
+#endif
 }
 
 static void setScanlineColorTexture(ScanlineColor* color,ScanlineTexture texture,Scanline scanline,Vec2 texture_1,Vec2 texture_2,Vec3 color_1,Vec3 color_2,Vec2 pos_1,Vec2 pos_2,int size){
-	int p_begin,p_end;
+#if 0
+    int p_begin,p_end;
 	int delta,delta_pos;
     Vec3 delta_color;
     Vec2 delta_texture;
@@ -249,6 +252,7 @@ static void setScanlineColorTexture(ScanlineColor* color,ScanlineTexture texture
 		scanline.end[p_begin] = tMax(scanline.end[p_begin],delta_pos >> FIXED_PRECISION);
 		delta_pos -= delta;
 	}
+#endif
 #endif
 }
 /*
@@ -346,10 +350,10 @@ void drawPolygon3dSoft(DrawSurface* surface,Vec3* coordinats,Vec3 color){
     if(coordinats[0].z <= 0 || coordinats[1].z <= 0 || coordinats[2].z <= 0 || coordinats[3].z <= 0)
         return;
     Vec2 coords_2d[] = {
-        fixedDivR(coordinats[0].x,coordinats[0].z),fixedDivR(-coordinats[0].y,coordinats[0].z),
-        fixedDivR(coordinats[1].x,coordinats[1].z),fixedDivR(-coordinats[1].y,coordinats[1].z),
-        fixedDivR(coordinats[2].x,coordinats[2].z),fixedDivR(-coordinats[2].y,coordinats[2].z),
-        fixedDivR(coordinats[3].x,coordinats[3].z),fixedDivR(-coordinats[3].y,coordinats[3].z),
+        realDivR(coordinats[0].x,coordinats[0].z),realDivR(-coordinats[0].y,coordinats[0].z),
+        realDivR(coordinats[1].x,coordinats[1].z),realDivR(-coordinats[1].y,coordinats[1].z),
+        realDivR(coordinats[2].x,coordinats[2].z),realDivR(-coordinats[2].y,coordinats[2].z),
+        realDivR(coordinats[3].x,coordinats[3].z),realDivR(-coordinats[3].y,coordinats[3].z),
     };
     drawPolygonSoft(surface,coords_2d,4,color);
 }
@@ -415,10 +419,10 @@ void drawColoredPolygon3dSoft(DrawSurface* surface,Vec3* coordinats,Vec3* color)
     if(coordinats[0].z <= 0 || coordinats[1].z <= 0 || coordinats[2].z <= 0 || coordinats[3].z <= 0)
         return;
     Vec2 coords_2d[] = {
-        fixedDivR(coordinats[0].x,coordinats[0].z),fixedDivR(-coordinats[0].y,coordinats[0].z),
-        fixedDivR(coordinats[1].x,coordinats[1].z),fixedDivR(-coordinats[1].y,coordinats[1].z),
-        fixedDivR(coordinats[2].x,coordinats[2].z),fixedDivR(-coordinats[2].y,coordinats[2].z),
-        fixedDivR(coordinats[3].x,coordinats[3].z),fixedDivR(-coordinats[3].y,coordinats[3].z),
+        realDivR(coordinats[0].x,coordinats[0].z),realDivR(-coordinats[0].y,coordinats[0].z),
+        realDivR(coordinats[1].x,coordinats[1].z),realDivR(-coordinats[1].y,coordinats[1].z),
+        realDivR(coordinats[2].x,coordinats[2].z),realDivR(-coordinats[2].y,coordinats[2].z),
+        realDivR(coordinats[3].x,coordinats[3].z),realDivR(-coordinats[3].y,coordinats[3].z),
     };
     drawColoredPolygonSoft(surface,coords_2d,color,4);
 }
@@ -486,7 +490,7 @@ void drawTexturePolygonSoft(DrawSurface* surface,Texture* texture,Vec2* texture_
         texture_delta.y /= tMax(surface->scanline.end[x] - surface->scanline.begin[x],1);
         
         for(int y = surface->scanline.begin[x];y < surface->scanline.end[x];y++){
-            unsigned texel = texture->pixel_data[mipmap_offset + (texture_begin.x * mipmap_size >> FIXED_PRECISION & mipmap_size - 1) * mipmap_size + (texture_begin.y * mipmap_size >> FIXED_PRECISION & mipmap_size - 1)];
+            unsigned texel = texture->pixel_data[mipmap_offset + (realToInt(texture_begin.x * mipmap_size) & mipmap_size - 1) * mipmap_size + (realToInt(texture_begin.y * mipmap_size) & mipmap_size - 1)];
             
             if(texel >> 24 <= 0x80) 
                 surface->data[x * surface->width + y] = colorToPixelColor(vec3Mul(vec3Shr(pixelColorToColor(texel),4),color)); 
@@ -499,10 +503,10 @@ void drawTexturePolygon3dSoft(DrawSurface* surface,Texture* texture,Vec2* textur
     if(coordinats[0].z <= 0 || coordinats[1].z <= 0 || coordinats[2].z <= 0 || coordinats[3].z <= 0)
         return;
     Vec2 coords_2d[] = {
-        fixedDivR(coordinats[0].x,coordinats[0].z),fixedDivR(coordinats[0].y,coordinats[0].z),
-        fixedDivR(coordinats[1].x,coordinats[1].z),fixedDivR(coordinats[1].y,coordinats[1].z),
-        fixedDivR(coordinats[2].x,coordinats[2].z),fixedDivR(coordinats[2].y,coordinats[2].z),
-        fixedDivR(coordinats[3].x,coordinats[3].z),fixedDivR(coordinats[3].y,coordinats[3].z),
+        realDivR(coordinats[0].x,coordinats[0].z),realDivR(coordinats[0].y,coordinats[0].z),
+        realDivR(coordinats[1].x,coordinats[1].z),realDivR(coordinats[1].y,coordinats[1].z),
+        realDivR(coordinats[2].x,coordinats[2].z),realDivR(coordinats[2].y,coordinats[2].z),
+        realDivR(coordinats[3].x,coordinats[3].z),realDivR(coordinats[3].y,coordinats[3].z),
     };
     drawTexturePolygonSoft(surface,texture,texture_coordinats,coords_2d,color,n_point);
 }
@@ -610,15 +614,15 @@ void drawColoredTexturePolygon3dSoft(DrawSurface* surface,Texture* texture,Vec2*
     if(coordinats[0].z <= 0 || coordinats[1].z <= 0 || coordinats[2].z <= 0 || coordinats[3].z <= 0)
         return;
     Vec2 coords_2d[] = {
-        fixedDivR(coordinats[0].x,coordinats[0].z),fixedDivR(-coordinats[0].y,coordinats[0].z),
-        fixedDivR(coordinats[1].x,coordinats[1].z),fixedDivR(-coordinats[1].y,coordinats[1].z),
-        fixedDivR(coordinats[2].x,coordinats[2].z),fixedDivR(-coordinats[2].y,coordinats[2].z),
-        fixedDivR(coordinats[3].x,coordinats[3].z),fixedDivR(-coordinats[3].y,coordinats[3].z),
+        realDivR(coordinats[0].x,coordinats[0].z),realDivR(-coordinats[0].y,coordinats[0].z),
+        realDivR(coordinats[1].x,coordinats[1].z),realDivR(-coordinats[1].y,coordinats[1].z),
+        realDivR(coordinats[2].x,coordinats[2].z),realDivR(-coordinats[2].y,coordinats[2].z),
+        realDivR(coordinats[3].x,coordinats[3].z),realDivR(-coordinats[3].y,coordinats[3].z),
     };
     drawColoredTexturePolygonSoft(surface,texture,texture_coordinats,coords_2d,color,4);
 }
 
-void drawSegmentSoft(DrawSurface* surface,int x1,int y1,int x2,int y2,int thickness,Vec3 color){
+void drawSegmentSoft(DrawSurface* surface,real x1,real y1,real x2,real y2,real thickness,Vec3 color){
     Vec2 p1 = {x1,y1};
     Vec2 p2 = {x2,y2};
 
@@ -633,56 +637,56 @@ void drawSegmentSoft(DrawSurface* surface,int x1,int y1,int x2,int y2,int thickn
     drawPolygonSoft(surface,quad,4,color);
 }
 
-void drawLineSoft(DrawSurface* surface,int x1,int y1,int x2,int y2,Vec3 color){
+void drawLineSoft(DrawSurface* surface,real x1,real y1,real x2,real y2,Vec3 color){
     int pixel_color = colorToPixelColor(color);
 
-    x1 = transformDraw(surface->height,x1);
-    y1 = transformDraw(surface->width,-y1);
-    x2 = transformDraw(surface->height,x2);
-    y2 = transformDraw(surface->width,-y2);
+    int x1_i = transformDraw(surface->height,x1);
+    int y1_i = transformDraw(surface->width,-y1);
+    int x2_i = transformDraw(surface->height,x2);
+    int y2_i = transformDraw(surface->width,-y2);
 
-    int dx = tAbs(x2 - x1), sx = x1 < x2 ? 1 : -1;
-    int dy = tAbs(y2 - y1), sy = y1 < y2 ? 1 : -1;
+    int dx = tAbs(x2_i - x1_i), sx = x1_i < x2_i ? 1 : -1;
+    int dy = tAbs(y2_i - y1_i), sy = y1_i < y2_i ? 1 : -1;
     int err = (dx > dy ? dx : -dy)/2, e2;
 
     if(
-        x1 >= 0 && x1 < surface->height && x2 >= 0 && x2 < surface->height &&
-        y1 >= 0 && y1 < surface->width && y2 >= 0 && y2 < surface->width
+        x1_i >= 0 && x1_i < surface->height && x2_i >= 0 && x2_i < surface->height &&
+        y1_i >= 0 && y1_i < surface->width && y2_i >= 0 && y2_i < surface->width
     ){
         for(;;){
-            surface->data[x1 * surface->width + y1] = pixel_color;
-            if(x1 == x2 && y1 == y2)
+            surface->data[x1_i * surface->width + y1_i] = pixel_color;
+            if(x1_i == x2_i && y1_i == y2_i)
                 return;
             e2 = err;
             if(e2 >- dx){
                 err -= dy;
-                x1 += sx;
+                x1_i += sx;
             }
             if(e2 < dy){
                 err += dx;
-                y1 += sy;
+                y1_i += sy;
             }
         }
     }
 
     for(;;){
-        if(x1 >= 0 && x1 < surface->height && y1 >= 0 && y1 < surface->width)
-            surface->data[x1 * surface->width + y1] = pixel_color;
-        if(x1 == x2 && y1 == y2)
+        if(x1_i >= 0 && x1_i < surface->height && y1_i >= 0 && y1_i < surface->width)
+            surface->data[x1_i * surface->width + y1_i] = pixel_color;
+        if(x1_i == x2_i && y1_i == y2_i)
             break;
         e2 = err;
         if(e2 >- dx){
             err -= dy;
-            x1 += sx;
+            x1_i += sx;
         }
         if(e2 < dy){
             err += dx;
-            y1 += sy;
+            y1_i += sy;
         }
     }
 }
 
-void drawEllipsesSoft(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color){
+void drawEllipsesSoft(DrawSurface* surface,real x,real y,real size_x,real size_y,Vec3 color){
     int pixel_color = colorToPixelColor(color);
 
     x = transformDraw(surface->height,x);
@@ -693,9 +697,9 @@ void drawEllipsesSoft(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec
     int max_y = tMin(y + scaleDraw(surface->width,size_y) + 1,surface->width  - 1);
     for(int i = min_x;i < max_x;i++){
         for(int j = min_y;j < max_y;j++){
-            int rel_x = (i - x << FIXED_PRECISION) / surface->height;
-            int rel_y = (j - y << FIXED_PRECISION) / surface->width;
-            int distance = rel_x * rel_x + rel_y * rel_y;
+            real rel_x = (intToReal(i - x)) / surface->height;
+            real rel_y = (intToReal(j - y)) / surface->width;
+            real distance = rel_x * rel_x + rel_y * rel_y;
 
             if(distance > FIXED_ONE){
                 continue;
@@ -708,7 +712,7 @@ void drawEllipsesSoft(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec
     }
 }
 
-void drawRingSoft(DrawSurface* surface,int x,int y,int radius,int thickness,Vec3 color){
+void drawRingSoft(DrawSurface* surface,real x,real y,real radius,int thickness,Vec3 color){
     int pixel_color = colorToPixelColor(color);
 
     int outer_radius = radius + thickness;
@@ -730,16 +734,16 @@ void drawRingSoft(DrawSurface* surface,int x,int y,int radius,int thickness,Vec3
     }
 }
 
-void drawRectangleSoft(DrawSurface* surface,int x,int y,int size_x,int size_y,Vec3 color){
+void drawRectangleSoft(DrawSurface* surface,real x,real y,real size_x,real size_y,Vec3 color){
     int pixel_color = colorToPixelColor(color);
-    x = transformDraw(surface->height,x);
-    y = transformDraw(surface->width ,y);
-    size_x = scaleDraw(surface->height,size_x);
-    size_y = scaleDraw(surface->width ,size_y);
-    int min_x = tMax(x,0);
-    int min_y = tMax(y,0);
-    int max_x = tMin(x + size_x,surface->height - 1);
-    int max_y = tMin(y + size_y,surface->width  - 1);
+    int x_i = transformDraw(surface->height,x);
+    int y_i = transformDraw(surface->width ,y);
+    int size_i_x = scaleDraw(surface->height,size_x);
+    int size_i_y = scaleDraw(surface->width ,size_y);
+    int min_x = tMax(x_i,0);
+    int min_y = tMax(y_i,0);
+    int max_x = tMin(x_i + size_i_x,surface->height - 1);
+    int max_y = tMin(y_i + size_i_y,surface->width  - 1);
     for(int i = min_x;i < max_x;i++){
         for(int j = min_y;j < max_y;j++)
             surface->data[i * surface->width + j] = pixel_color;

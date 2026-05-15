@@ -2,6 +2,8 @@
 #define TEXTURE_H
 
 #include "vec2.h"
+#include "vec3.h"
+#include "main.h"
 
 typedef enum {
 	TEXTURE_WALL,
@@ -30,9 +32,18 @@ structure(Texture){
 	unsigned gl_id;
 };
 
+structure(Cubemap){
+    int size;
+    Texture textures[6];
+};
+
 extern Texture g_textures[];
-extern TextureType g_skybox_textures[];
 extern Vec2 g_texture_coordinates_fill[];
+extern Cubemap g_skybox;
+
+int cubemapColorGet(Cubemap* cubemap,Vec3 direction);
+int cubemapColorGet2(Cubemap* cubemap,Vec3 direction);
+Vec3 cubemapDirectionGet(Cubemap* cubemap,Side side,int x,int y);
 
 void texturesGenerate(void);
 int textureLookup(Texture* texture,int x,int y,int mipmap);

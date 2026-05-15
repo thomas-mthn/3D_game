@@ -1,0 +1,2 @@
+bear -- gcc audio.c dda.c draw.c draw_soft.c entity.c equib_model.c font.c geometry.c lighting.c linux.c main.c memory.c octree.c octree_render.c pathfinding.c physics.c span.c staff.c string.c texture.c texture_markov.c tmath.c voxel_gui.c voxel_menu.c -o linux -lX11 -O2 -march=native -fsanitize=address
+

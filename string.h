@@ -3,10 +3,9 @@
 
 #include "langext.h"
 
+structure(MemoryArena);
+
 structure(String){
-    enum{
-        STRING_MALLOC = 1 << 0,
-    } flags;
     int size;
     char* data;
 };
@@ -15,9 +14,12 @@ bool stringCompareSizeInsensitive(String string,String compare);
 bool stringCompareSizeCaseInsensitive(String string,String compare);
 String stringMake(char* cstring);
 String numberToString(char* buffer,int number);
+String stringCopy(MemoryArena* arena,String string);
 int stringToNumber(String string);
 String stringInString(String string_1,String string_2);
-String stringConcat(String string,String append);
+String stringConcat(MemoryArena* arena,String string,String append);
+String stringConcatChar(MemoryArena* arena,String string,char c);
+String stringInsertChar(MemoryArena* arena,String string,char c,int index);
 String stringWordSlice(String string);
 void stringToUpper(String string);
 void stringToLower(String string);
