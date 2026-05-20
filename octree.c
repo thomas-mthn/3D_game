@@ -9,10 +9,10 @@
 #include "libc.h"
 #include "opengl.h"
 #include "entity.h"
+#include "lighting.h"
 
 AllocatorFreeList g_allocator_world; 
 
-Voxel g_voxel;
 Voxel* g_voxel_tick_list;
 
 static void toggleVsync(VoxelGuiElement* self){
@@ -163,6 +163,80 @@ static VoxelGuiElement voxel_console_gui[] = {
     },
 };
 
+static void textureChange(VoxelGuiElement* self){
+    self->button.voxel->texture_id += 1;
+    self->button.voxel->texture_id %= TEXTURE_ECOUNT;
+    octreeRefresh();
+}
+
+static void textureToggle(VoxelGuiElement* self){
+    self->button.voxel->has_texture ^= true;
+    octreeRefresh();
+}
+
+static void emitIncrement(VoxelGuiElement* self){
+    if(self->button.voxel->emit_pow < 16)
+        self->button.voxel->emit_pow += 1;
+    octreeRefresh();
+}
+
+static void emitDecrement(VoxelGuiElement* self){
+    if(self->button.voxel->emit_pow)
+        self->button.voxel->emit_pow -= 1;
+    octreeRefresh();
+}
+
+VoxelGuiElement g_voxel_custom_gui[] = {
+    {
+        .type = VOXEL_GUI_COLORPICKER,
+        .position = {REAL_UNIT * 0x10,REAL_UNIT * 0x10},
+    },
+    {
+        .type = VOXEL_GUI_BUTTON,
+        .button.on_click = textureToggle,
+        .position = {REAL_UNIT * 0x80,REAL_UNIT * 0xF0},
+    },
+    {
+        .type = VOXEL_GUI_BUTTON,
+        .button.on_click = textureChange,
+        .position = {REAL_UNIT * 0xA0,REAL_UNIT * 0xF0},
+    },
+};
+
+VoxelGuiElement g_voxel_custom_emit_gui[] = {
+    {
+        .type = VOXEL_GUI_COLORPICKER,
+        .position = {REAL_UNIT * 0x10,REAL_UNIT * 0x10},
+    },
+    {
+        .type = VOXEL_GUI_BUTTON,
+        .button.on_click = emitDecrement,
+        .position = {REAL_UNIT * 0x50,REAL_UNIT * 0x10},
+    },
+    {
+        .type = VOXEL_GUI_BUTTON,
+        .button.on_click = emitIncrement,
+        .position = {REAL_UNIT * 0x70,REAL_UNIT * 0x10},
+    },
+};
+
+VoxelGuiElement g_voxel_plane_gui[] = {
+    {
+        .type = VOXEL_GUI_COLORPICKER,
+        .position = {REAL_UNIT * 0x10,REAL_UNIT * 0x10},
+    },
+    {
+        .type = VOXEL_GUI_BUTTON,
+        .button.on_click = textureToggle,
+        .position = {REAL_UNIT * 0x80,REAL_UNIT * 0xF0},
+    },
+    {
+        .type = VOXEL_GUI_BUTTON,
+        .button.on_click = textureChange,
+        .position = {REAL_UNIT * 0xA0,REAL_UNIT * 0xF0},
+    },
+};
+
 VoxelGuiElement g_inventory_gui[31] = {
 	[30] = {
         .type = VOXEL_GUI_STRING,
@@ -184,6 +258,7 @@ void voxelMenuMainSet(void){
 }
 
 #define GUI_ADD(GUI) .gui = GUI,.n_gui = countof(GUI)
+#define GUI_INTERACT_ADD(GUI) .gui_interact = GUI,.n_gui_interact = countof(GUI)
 
 #define ALMOST_WHITE (FIXED_ONE - FIXED_ONE / 16)
 
@@ -255,7 +330,7 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
 		.color = {ALMOST_WHITE,ALMOST_WHITE,ALMOST_WHITE},
 	},
 	[VOXEL_MENU] = {
-		.color = {0x3000,0x3000,0x3000},
+		.color = {REAL_UNIT * 0x30,REAL_UNIT * 0x30,REAL_UNIT * 0x30},
         GUI_ADD(voxel_menu_gui),
         .no_blockplace = true,
 	},
@@ -323,10 +398,12 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
         .rd_trace = true,
     },
     [VOXEL_STRING] = {
+        .interact = true,
         .color = {REAL_UNIT * 0x1F,REAL_UNIT * 0x1F,REAL_UNIT * 0x1F},
         GUI_ADD(voxel_string_gui),
     },
     [VOXEL_CONSOLE] = {
+        .interact = true,
         GUI_ADD(voxel_console_gui),
     },
     [VOXEL_GLASS] = {
@@ -474,6 +551,26 @@ VoxelStatic g_voxel_static[VOXEL_ECOUNT] = {
         .slope_flip_y = true,
         .slope_axis = VEC3_Z,
     },
+    [VOXEL_PLANE] = {
+        .color = {ALMOST_WHITE,ALMOST_WHITE,ALMOST_WHITE},
+        .translucent = true,
+        .interact = true,
+        GUI_INTERACT_ADD(g_voxel_plane_gui),
+    },
+    [VOXEL_CUSTOM] = {
+        .texturefill = true,
+        .texture_size = FIXED_ONE * 4,
+        .interact = true,
+        .color = {ALMOST_WHITE,FIXED_ONE / 16,FIXED_ONE / 16},
+        GUI_INTERACT_ADD(g_voxel_custom_gui),
+    },
+    [VOXEL_CUSTOM_EMIT] = {
+        .texturefill = true,
+        .interact = true,
+        .emiter = true,
+        .color = {ALMOST_WHITE,FIXED_ONE / 16,FIXED_ONE / 16},
+        GUI_INTERACT_ADD(g_voxel_custom_emit_gui),
+    },
 };
 
 static void octreeIndicesSet(VoxelSerialized* voxel_serial_array,int* voxel_serial_index,Voxel* voxel){
@@ -523,6 +620,25 @@ static void octreeSerializeRecursive(VoxelSerialized* voxel_serial_array,int* vo
             tMemcpy(voxel_serial->string_data,voxel->string.data,voxel->string.size);
             *voxel_serial_index += sizeof(VoxelSerializedString) + voxel->string.size;
         } break;
+        case VOXEL_PLANE:{
+            VoxelSerializedPlane* voxel_serial = (void*)((char*)voxel_serial_array + *voxel_serial_index);
+            voxel_serial->angle = voxel->angle;
+            voxel_serial->distance = voxel->distance;
+            *voxel_serial_index += sizeof(VoxelSerializedPlane);
+        } break;
+        case VOXEL_CUSTOM:{
+            VoxelSerializedCustom* voxel_serial = (void*)((char*)voxel_serial_array + *voxel_serial_index);
+            voxel_serial->color = voxel->color;
+            voxel_serial->texture_id = voxel->texture_id;
+            voxel_serial->has_texture = voxel->has_texture;
+            *voxel_serial_index += sizeof(VoxelSerializedCustom);
+        } break;
+        case VOXEL_CUSTOM_EMIT:{
+            VoxelSerializedCustomEmit* voxel_serial = (void*)((char*)voxel_serial_array + *voxel_serial_index);
+            voxel_serial->color = voxel->color;
+            voxel_serial->emit_pow = voxel->emit_pow;
+            *voxel_serial_index += sizeof(VoxelSerializedCustomEmit);
+        } break;
 		default:{
 			*voxel_serial_index += sizeof(VoxelSerialized);
 		} break;
@@ -554,6 +670,25 @@ Voxel* octreeDeserializeRecursive(VoxelSerializedParent* voxel_serial_array,int 
         voxel->string.data = allocatorFreeListAlloc(&g_allocator_world,voxel_serial_string->string_length);
         tMemcpy(voxel->string.data,voxel_serial_string->string_data,voxel_serial_string->string_length);
         voxel->string.size = voxel_serial_string->string_length;
+    }
+    
+    if(voxel->type == VOXEL_PLANE){
+        VoxelSerializedPlane* voxel_serial_plane = (void*)voxel_serial;
+        voxel->angle = voxel_serial_plane->angle;
+        voxel->distance = voxel_serial_plane->distance;
+    }
+
+    if(voxel->type == VOXEL_CUSTOM){
+        VoxelSerializedCustom* voxel_serial_custom = (void*)voxel_serial;
+        voxel->color = voxel_serial_custom->color;
+        voxel->texture_id = voxel_serial_custom->texture_id;
+        voxel->has_texture = voxel_serial_custom->has_texture;
+    }
+
+    if(voxel->type == VOXEL_CUSTOM_EMIT){
+        VoxelSerializedCustomEmit* voxel_serial_custom = (void*)voxel_serial;
+        voxel->color = voxel_serial_custom->color;
+        voxel->emit_pow = voxel_serial_custom->emit_pow;
     }
     
 	if(voxel->type != VOXEL_PARENT)
@@ -634,6 +769,12 @@ int voxelMemoryCountRecursive(Voxel* voxel){
 			return count + sizeof(VoxelSerializedParent);
         case VOXEL_STRING:
             return sizeof(VoxelSerializedString) + voxel->string.size;
+        case VOXEL_PLANE:
+            return sizeof(VoxelSerializedPlane);
+        case VOXEL_CUSTOM:
+            return sizeof(VoxelSerializedCustom);
+        case VOXEL_CUSTOM_EMIT:
+            return sizeof(VoxelSerializedCustomEmit);
 		case VOXEL_BUTTON: case VOXEL_PRESSURE_PLATE:
 			return sizeof(VoxelSerializedButton) + voxel->n_link * sizeof(int);
 		default:
@@ -642,7 +783,7 @@ int voxelMemoryCountRecursive(Voxel* voxel){
 }
 
 Voxel* voxelGet(Vec3i position,int depth){
-	Voxel* voxel = &g_voxel;
+	Voxel* voxel = &g_world.voxel;
 	for(int i = depth - 1;i >= 0;i--){
 		Vec3i sub_coord = (Vec3i){position.x >> i,position.y >> i,position.z >> i};
 		sub_coord = (Vec3i){sub_coord.x & 1,sub_coord.y & 1,sub_coord.z & 1};
@@ -741,7 +882,7 @@ Vec3 posWorldPos(Vec3 position,int depth){
 Voxel* voxelPositionGet(Vec3 pos){
     if(IS_FLOAT(real)){
         Vec3i grid_pos = {realToInt(pos.x * 0x100),realToInt(pos.y * 0x100),realToInt(pos.z * 0x100)}; 
-        Voxel* voxel = &g_voxel;
+        Voxel* voxel = &g_world.voxel;
         int depth = 0x10;
         for(;;){
             Voxel* child_ptr = voxel->child[grid_pos.z >> depth & 1][grid_pos.y >> depth & 1][grid_pos.x >> depth & 1];
@@ -757,7 +898,7 @@ Voxel* voxelPositionGet(Vec3 pos){
     pos.x = realShr(pos.x,8);
 	pos.y = realShr(pos.y,8);
 	pos.z = realShr(pos.z,8);
-	Voxel* voxel = &g_voxel;
+	Voxel* voxel = &g_world.voxel;
 	for(;;){
 		Voxel* child_ptr = voxel->child[(int)pos.z >> FIXED_PRECISION & 1][(int)pos.y >> FIXED_PRECISION & 1][(int)pos.x >> FIXED_PRECISION & 1];
 		if(child_ptr->type != VOXEL_PARENT){
@@ -774,7 +915,7 @@ Voxel* voxelPositionGet(Vec3 pos){
 TraverseInit initTraverse(Vec3 pos){
     if(IS_FLOAT(real)){
         Vec3i grid_pos = {realToInt(pos.x * 0x100),realToInt(pos.y * 0x100),realToInt(pos.z * 0x100)};
-        Voxel* voxel = &g_voxel;
+        Voxel* voxel = &g_world.voxel;
         int depth = 0x10;
         for(;;){
             Voxel* child_ptr = voxel->child[grid_pos.z >> depth & 1][grid_pos.y >> depth & 1][grid_pos.x >> depth & 1];
@@ -784,15 +925,15 @@ TraverseInit initTraverse(Vec3 pos){
             depth -= 1;
         }
         int div_d = depth;
-        pos.x = tFract(realShr(pos.x * 0x100,div_d) / 2) * 2;
-        pos.y = tFract(realShr(pos.y * 0x100,div_d) / 2) * 2;
-        pos.z = tFract(realShr(pos.z * 0x100,div_d) / 2) * 2;
+        pos.x = tFractU(realShr(pos.x * 0x100,div_d) / 2) * 2;
+        pos.y = tFractU(realShr(pos.y * 0x100,div_d) / 2) * 2;
+        pos.z = tFractU(realShr(pos.z * 0x100,div_d) / 2) * 2;
         return (TraverseInit){pos,voxel};
     }
     pos.x = realShr(pos.x,8);
 	pos.y = realShr(pos.y,8);
 	pos.z = realShr(pos.z,8);
-	Voxel* voxel = &g_voxel;
+	Voxel* voxel = &g_world.voxel;
 	for(;;){
 		Voxel* child_ptr = voxel->child[(int)pos.z >> FIXED_PRECISION & 1][(int)pos.y >> FIXED_PRECISION & 1][(int)pos.x >> FIXED_PRECISION & 1];
 		if(child_ptr->type != VOXEL_PARENT)
@@ -829,9 +970,8 @@ Entity* entityRayCollisionRecursive(Voxel* voxel,Vec3 position,Vec3 direction){
 Voxel* treeRayTrace(Voxel* voxel,Vec3 position,Vec3 ray_position,Vec3 direction,Vec3Axis* side,TreeTraceFlags flags){
 	Ray3 ray = initRay3(position,direction);
     Voxel* child;
-#if 0
+#if 1
     if(flags.entity){
-        
         int index = ray.square_pos.z * 4 + ray.square_pos.y * 2 + ray.square_pos.x;
         child = voxel->child_s[index];
 
@@ -839,7 +979,6 @@ Voxel* treeRayTrace(Voxel* voxel,Vec3 position,Vec3 ray_position,Vec3 direction,
             if(rayBoxIntersection(entity->position,vec3Shr(entity->hitbox,1),ray_position,direction))
                 goto end; 
         }
-
     }
 #endif
 	iterateRay3(&ray);
@@ -880,7 +1019,7 @@ Voxel* treeRayTrace(Voxel* voxel,Vec3 position,Vec3 ray_position,Vec3 direction,
             continue;
         }
 		child = voxel->child_s[index];
-#if 0
+#if 1
         if(flags.entity){
             for(Entity* entity = child->entity_list;entity;entity = entity->next_voxel){
                 if(rayBoxIntersection(entity->position,vec3Shr(entity->hitbox,1),ray_position,direction))
@@ -912,9 +1051,42 @@ Voxel* treeRayTrace(Voxel* voxel,Vec3 position,Vec3 ray_position,Vec3 direction,
                 voxel = child;
             } goto sh;
         }
-        if(!flags.everything_solid && g_voxel_static[child->type].slope && !slopeHit(child,ray_position,direction)){
-            iterateRay3(&ray);
-            continue;
+        if(!flags.everything_solid){
+            if(g_voxel_static[child->type].slope && !slopeHit(child,ray_position,direction)){
+                iterateRay3(&ray);
+                continue;
+            }
+            if(child->type == VOXEL_PLANE){
+                Vec3 relative = vec3Sub(ray_position,voxelWorldPosCenter(child));
+                Plane plane = {
+                    .normal = getLookDirection(child->angle),
+                    .distance = child->distance,
+                };
+                real distance = rayPlaneIntersection(relative,direction,plane);
+                Vec3 hit_position = vec3Add(ray_position,vec3MulS(direction,distance));
+
+                if(distance > 0){
+                    if(voxelPositionGet(hit_position) != child){
+                        real v_dist = rayBoxIntersection(voxelWorldPosCenter(child),vec3Single(depthToSize(child->depth) / 2),ray_position,direction);
+                        if(sdPlane(relative,plane.normal,plane.distance) < 0){
+                            if(distance > 0 && v_dist > distance){
+                                iterateRay3(&ray);
+                                continue;
+                            }
+                        }
+                        else{
+                            if(v_dist < distance){
+                                iterateRay3(&ray);
+                                continue;
+                            }
+                        }
+                    }
+                }
+                else{
+                    iterateRay3(&ray);
+                    continue;
+                }
+            }
         }
 		if(side) 
 			*side = ray.square_side;
@@ -925,24 +1097,74 @@ Voxel* treeRayTrace(Voxel* voxel,Vec3 position,Vec3 ray_position,Vec3 direction,
 
 static void voxelEmissionSet(Voxel* voxel){
     VoxelStatic* voxel_s = g_voxel_static + voxel->type;
-    real emission = realShl(tMax(tMax(voxel_s->color.x,voxel_s->color.y),voxel_s->color.z),8);
-    emission = realShr(emission,voxel->depth * 2);
+    real emission;
+    if(voxel->type == VOXEL_CUSTOM_EMIT){
+        emission = realMulR(tMax(voxel->color.x,tMax(voxel->color.y,voxel->color.z)),intToReal(1 << voxel->emit_pow));
+        emission = realMulR(emission,FIXED_ONE / 0x40);
+    }
+    else{
+        emission = realShl(tMax(tMax(voxel_s->color.x,voxel_s->color.y),voxel_s->color.z),8);
+    }
                 
     for(Voxel* v = voxel;v;v = v->parent)
         v->emission += emission;
+}
+
+static void voxelEmissionUnset(Voxel* voxel){
+    VoxelStatic* voxel_s = g_voxel_static + voxel->type;
+    real emission;
+    if(voxel->type == VOXEL_CUSTOM_EMIT){
+        emission = realMulR(tMax(voxel->color.x,tMax(voxel->color.y,voxel->color.z)),intToReal(1 << voxel->emit_pow));
+        emission = realMulR(emission,FIXED_ONE * 0x40);
+    }
+    else{
+        emission = realShl(tMax(tMax(voxel_s->color.x,voxel_s->color.y),voxel_s->color.z),8);
+    }
+                
+    for(Voxel* v = voxel;v;v = v->parent)
+        v->emission += emission;
+}
+
+static void emisionSetGlobal(Voxel* voxel){
+    if(voxel->type == VOXEL_PARENT){
+        for(int i = countof(voxel->child_s);i--;)
+            emisionSetGlobal(voxel->child_s[i]);
+    }
+    if(g_voxel_static[voxel->type].emiter){
+        voxelEmissionSet(voxel);
+    }
+}
+
+static void emisionReset(Voxel* voxel){
+    voxel->emission = 0;
+    if(voxel->type == VOXEL_PARENT){
+        for(int i = countof(voxel->child_s);i--;)
+            emisionReset(voxel->child_s[i]);
+    }
 }
 
 void voxelChildMaskSet(Voxel* voxel){
     voxel->child_mask = 0;
     for(int i = countof(voxel->child_s);i--;){
         Voxel* child = voxel->child_s[i];
-        if(child->type == VOXEL_AIR || child->type == VOXEL_WATER)
+        if(child->type == VOXEL_AIR)
             voxel->child_mask |= 1 << i;
         if(child->type == VOXEL_PARENT)
             voxelChildMaskSet(child);
         if(g_voxel_static[child->type].emiter)
             voxelEmissionSet(child);
     }
+}
+
+void octreeRefresh(void){
+    for(int i = N_LUXEL_CACHE;i--;){
+        g_luxel_cache[i].n_sample = 0;
+        g_luxel_cache[i].pre_refresh = vec3Add(g_luxel_cache[i].luminance,g_luxel_cache[i].luminance_direct);
+        g_luxel_cache[i].refresh = true;
+    }
+    voxelChildMaskSet(&g_world.voxel);
+    emisionReset(&g_world.voxel);
+    emisionSetGlobal(&g_world.voxel);
 }
 
 static int treeRayTraceIntersectCount(Voxel* voxel,Vec3 position,Vec3 direction){
@@ -1019,7 +1241,7 @@ void voxelFreeRecursive(Voxel* voxel){
 	allocatorFreeListFree(&g_allocator_world,voxel);
 }
 
-void voxelSet(Voxel* voxel,Vec3i pos,int depth,VoxelType type){
+Voxel* voxelSet(Voxel* voxel,Vec3i pos,int depth,VoxelType type){
 	Voxel* node = voxel;
 	for(int i = depth - 1;i >= 0;i--){
         Vec3i sub_pos = {pos.x >> i & 1,pos.y >> i & 1,pos.z >> i & 1};
@@ -1073,14 +1295,18 @@ void voxelSet(Voxel* voxel,Vec3i pos,int depth,VoxelType type){
 			node->type = type;
             if(g_voxel_static[type].emiter)
                 voxelEmissionSet(node);
-            
-            voxelChildMaskSet(&g_voxel);
-			return;
+            if(type == VOXEL_PLANE)
+                node->angle = (Vec2){0,FIXED_ONE / 4};
+			return node;
 		}
-		if(!node->depth)
-			return;
 		node = parent;
 	}
+}
+
+Voxel* voxelEditorSet(Vec3i pos,int depth,VoxelType type){
+    Voxel* voxel = voxelSet(&g_world.voxel,pos,depth,type);
+    octreeRefresh();
+    return voxel;
 }
 
 bool lineOfSight(Vec3 position_1,Vec3 position_2){

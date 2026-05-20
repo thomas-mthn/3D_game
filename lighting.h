@@ -5,8 +5,6 @@
 #include "vec3.h"
 #include "main.h"
 
-#define LUXEL_MAX_MIPMAP 12
-
 #ifdef __wasm__
 #define N_LUXEL_CACHE 0x40000
 #else
@@ -19,6 +17,8 @@ structure(Luxel){
     uint32 hash;
 	Vec3 luminance;
     Vec3 luminance_direct;
+    Vec3 pre_refresh;
+    bool refresh;
 	uint16 tick_last_updated;
     union{
         uint16 n_sample;
@@ -42,25 +42,25 @@ structure(RayLuminanceFlag){
     bool no_emit : 1;
 };
 
-static int surfaceAngle(Vec3 position,Vec3 normal){
-	return FIXED_ONE;
-	real dot = vec3Dot(vec3Normalize(getLookDirection(g_surface.angle)),normal);
+static real surfaceAngle(Vec3 position,Vec3 normal){
+	real dot = vec3Dot(vec3Direction(g_surface.position,position),normal);
 	real angle = tAbs(dot) / 2 + FIXED_ONE / 2;
-	angle = realDivR(FIXED_ONE,angle);
+	angle = tReciprocal(angle);
 
     return angle;
 }
 
 static int mipmapGet(Vec3 position,Vec3 normal,real distance,real angle){
 	real angle_distance = realMulR(angle,distance);
+    angle_distance /= 2;
     if(IS_FLOAT(real)){
         union{
             float f;
             int i;
         } bits = {.f = angle_distance};
-        return ((bits.i >> 23) & 0xFF) - 127 + 16;
+        return tMax(((bits.i >> 23) & 0xFF) - 127 + 16,14);
     }
-	return bitScanReverse(angle_distance);
+	return tMax(bitScanReverse(angle_distance),12);
 }
 
 Vec3 skyboxSample(Vec3 direction);
@@ -78,15 +78,11 @@ Vec3 lightmapGet(LightmapTree* lightmap,Vec2 uv);
 Vec3 lightmapBilinear(LightmapTree* lightmap,Vec2 uv);
 void lightmapTreeGenerate(LightmapTree* node,Voxel* voxel,Vec3 block_pos,int side,Vec2i coord,int depth,real surface_angle,Vec2 size);
 
-void lightmapGenerateRecursiveGPU(LightmapGPU* node,Voxel* voxel,Vec3 block_pos,int side,Vec2i coord,int depth,real surface_angle,Vec2 size);
-
 void lightingEntityDynamic(Voxel* voxel,Entity* entity);
 void lightingEntityShadow(Voxel* voxel,Entity* entity);
 
-Vec3 lightingPositionLuminanceGet(Vec3 position,int depth);
+Vec3 lightingPositionLuminanceGet(Vec3 position,int depth,Vec3 normal);
 
 extern Luxel g_luxel_cache[];
-extern int g_lightmap_gpu_ptr;
-extern LightmapGPU g_lightmap_gpu[];
 
 #endif

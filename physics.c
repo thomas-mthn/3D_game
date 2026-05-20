@@ -83,7 +83,11 @@ static Collision boxTreeCollisionRecursive(Entity* entity,Vec3 pos,Vec3 velocity
     Vec3 normal = {.z = FIXED_ONE};
     VoxelStatic* voxel_s = g_voxel_static + voxel->type;
 
+    if(!treeCollisionVoxelCheck(pos,entity->hitbox,voxel_pos,voxel_size,!entity->has_hitbox))
+        return (Collision){0};
+
     if(!entity->non_interactive && voxel_s->translucent){
+#if 1
         for(Entity* other = voxel->entity_list;other;other = other->next_voxel){
             if(entity == other)
                 continue;
@@ -93,12 +97,9 @@ static Collision boxTreeCollisionRecursive(Entity* entity,Vec3 pos,Vec3 velocity
                 continue;
             return (Collision){.entity = other,.time = 0,.normal = normal,.type = COLLISION_ENTITY}; 
         }
+#endif
     }
-
-    if(voxel_s->slope){
-        if(!treeCollisionVoxelCheck(pos,entity->hitbox,voxel_pos,voxel_size,!entity->has_hitbox))
-            return (Collision){0};
-        
+    if(voxel_s->slope){ 
         Vec3 u = voxel_s->slope_u;
         Vec3 v = voxel_s->slope_v;
 
@@ -153,7 +154,45 @@ static Collision boxTreeCollisionRecursive(Entity* entity,Vec3 pos,Vec3 velocity
                 return collision;
             } break;
             case VOXEL_AIR:
-                return (Collision){0}; 
+                return (Collision){0};
+            case VOXEL_PLANE:{
+                Vec3 p_normal = getLookDirection(voxel->angle);
+                Vec3 tangent = vec3Normalize(vec3Cross(p_normal,(Vec3){FIXED_ONE,0,0}));
+                Vec3 u = tangent;
+                Vec3 v = vec3Cross(p_normal,tangent);
+
+                Vec3 slope_pos = voxel_pos;
+
+                slope_pos = vec3Add(slope_pos,vec3MulS(voxel_s->slope_offset,voxel_size));
+
+                Vec3 position = vec3Sub(pos,slope_pos);
+            
+                Vec3 normal = vec3Cross(u,v);
+                Plane plane = {.normal = normal,voxel->distance};
+
+                PlaneCollision collision;
+                if(entity->has_hitbox){
+                    collision = intersectBoxPlane(position,entity->hitbox,plane);
+                }
+                else{
+                    bool pre_side = vec3Dot(plane.normal,position) + plane.distance > 0;
+                    bool post_side = vec3Dot(plane.normal,vec3Sub(position,velocity)) + plane.distance > 0;
+
+                    if(pre_side != post_side)
+                        collision = PLANE_BETWEEN;
+                    else
+                        collision = pre_side ? PLANE_FRONT : PLANE_BACK;
+                }
+            
+                if(collision == PLANE_BETWEEN && intersectBoxPlane(vec3Sub(position,velocity),entity->hitbox,plane) == PLANE_FRONT){
+                    real time = realDivR(vec3Dot(normal,position),vec3Dot(normal,velocity));
+                    time = tClamp(time - REAL_UNIT * 0x08,0,FIXED_ONE);
+                    return (Collision){.type = COLLISION_VOXEL,.normal = normal,.time = time,.voxel = voxel};
+                }
+                else if(collision == PLANE_FRONT){
+                    return (Collision){0};
+                }
+            } break;
             case VOXEL_MOVABLE:{
                 Vec3 block_size_m = {
                     voxel_size,
@@ -164,8 +203,6 @@ static Collision boxTreeCollisionRecursive(Entity* entity,Vec3 pos,Vec3 velocity
                     return (Collision){0};
             } break;
             case VOXEL_PRESSURE_PLATE:{
-                if(!intersectBoxCube(pos,entity->hitbox,voxel_pos,voxel_size))
-                    return (Collision){0}; 
                 if(!voxel->animation){
                     voxelLinkSignal(voxel);
                     voxelTickListAdd(voxel);
@@ -185,28 +222,7 @@ static Collision boxTreeCollisionRecursive(Entity* entity,Vec3 pos,Vec3 velocity
                     return (Collision){0}; 
             } break;
             case VOXEL_WATER:{
-                if(!intersectBoxBox(pos,entity->hitbox,voxel_pos,voxel_size_water))
-                    return (Collision){0}; 
-                if(!voxel->animation){
-                    voxel->splash_position = (Vec2){pos.x,pos.y};
-                    voxel->splash_tick = g_time.tick;
-                    voxelTickListAdd(voxel);
-                    voxel->animation = FIXED_ONE;
-                }
-                else if(voxel->collision_tick != g_time.tick && voxel->collision_tick != g_time.tick - 1){
-                    voxel->splash_position = (Vec2){pos.x,pos.y};
-                    voxel->splash_tick = g_time.tick;
-                    voxel->animation = FIXED_ONE;
-                }
-                else{
-                    voxel->animation = tMax(voxel->animation,FIXED_ONE / 2);
-                }
-                voxel->collision_tick = g_time.tick;
             } return (Collision){.in_water = true}; 
-            default:{
-                if(!treeCollisionVoxelCheck(pos,entity->hitbox,voxel_pos,voxel_size,!entity->has_hitbox))
-                    return (Collision){0};
-            } 
         }
     }
 
@@ -273,7 +289,7 @@ void movementUpdate(Entity* entity){
     Collision collision;
     for(int i = 0x20;;i--){
         Vec3 vel_itt = vec3MulS(velocity_delta,time);
-        collision = boxTreeCollisionRecursive(entity,vec3Add(entity->position,vel_itt),vel_itt,&g_voxel);        
+        collision = boxTreeCollisionRecursive(entity,vec3Add(entity->position,vel_itt),vel_itt,&g_world.voxel);        
 
         if(!collision.voxel || !i){
             if(i)
@@ -287,28 +303,54 @@ void movementUpdate(Entity* entity){
         PRINT_VEC3(velocity_delta);
         PRINT_VEC3(entity->position);
 #endif
-        switch(entity->type){
-            case ENTITY_WEAPON:{
-                if(entity->attack_cooldown < REAL_EPSILON)
-                    break;
+        if(collision.type == COLLISION_ENTITY){
+            if(collision.entity == entity->parent){
+                entity->position = vec3Add(entity->position,vec3MulS(velocity_delta,time));
+                continue;
+            }
+            switch(entity->type){
+                case ENTITY_WEAPON:{
+                    if(entity->attack_cooldown < REAL_EPSILON)
+                        break;
                 
-                if(collision.type == COLLISION_ENTITY){
-                    entityHit(collision.entity);
-                    entity->attack_cooldown = 0;
-                    break;
-                }
+                    if(collision.type == COLLISION_ENTITY){
+                        entityHit(collision.entity);
+                        entity->attack_cooldown = 0;
+                        break;
+                    }
     
-                RayHit hit = rayHitPosition(g_surface.position,vec3Direction(g_player.entity->position,entity->position));
+                    RayHit hit = rayHitPosition(g_surface.position,vec3Direction(g_player.entity->position,entity->position));
 
-                if(!hit.voxel)
-                    break;
+                    if(!hit.voxel)
+                        break;
 
-                VoxelStatic* voxel_s = g_voxel_static + hit.voxel->type;
-                audioPlay(entity->position,AUDIO_PUNCH_HIT);
-            } break;
-        }
-        if(collision.type != COLLISION_VOXEL)
+                    VoxelStatic* voxel_s = g_voxel_static + hit.voxel->type;
+                    audioPlay(entity->position,AUDIO_PUNCH_HIT);
+                } break;
+                case ENTITY_SLIME:{
+                    if(collision.type != COLLISION_ENTITY)
+                        break;
+
+                    Entity* collider = collision.entity;
+                
+                    if(collider->type == ENTITY_PLAYER){
+                        Vec2 direction = vec2Direction((Vec2){collider->position.x,collider->position.y},(Vec2){entity->position.x,entity->position.y});
+                        entity->velocity.x += direction.x / 0x80;
+                        entity->velocity.y += direction.y / 0x80;
+                        entity->velocity.z += FIXED_ONE / 0x80;
+
+                        collider->velocity.x -= direction.x / 0x80;
+                        collider->velocity.y -= direction.y / 0x80;
+                        collider->velocity.z += FIXED_ONE / 0x80;
+#if 0
+                        collider->health -= FIXED_ONE / 4;
+#endif
+                        entity->attack_cooldown = 0x80;
+                    }
+                } break;
+            }
             continue;
+        }
         if(tAbs(collision.normal.z) < REAL_EPSILON){
             real upper_z = entity->position.z - entity->hitbox.z;
             real height_delta = voxelWorldPos(collision.voxel).z + depthToSize(collision.voxel->depth) - upper_z;
@@ -327,6 +369,7 @@ void movementUpdate(Entity* entity){
             if(entity->bounce){
                 velocity_delta = vec3Reflect(velocity_delta,collision.normal);
                 entity->velocity = vec3Reflect(entity->velocity,collision.normal);
+                entity->velocity = vec3MulS(entity->velocity,entity->bounciness);
             }
             else{
                 velocity_delta = vec3Sub(velocity_delta,vec3MulS(collision.normal,vec3Dot(velocity_delta,collision.normal)));

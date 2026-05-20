@@ -189,16 +189,17 @@ static void drawSlopeRecursive(Voxel* voxel,Vec3 block_pos,Vec3 u,Vec3 v,Vec2i c
 	}
     
 	int mipmap = mipmapGet(squarePointClosestPosition(pos[0],size_u,normal),normal,distance_max,FIXED_ONE);
+    mipmap = tClamp(mipmap,0,31);
 
-	int split = 25 + -tClamp(mipmap,26 - LUXEL_MAX_MIPMAP,31) - voxel->depth;
+	int split = 25 + -mipmap - voxel->depth;
 
 	VoxelStatic* voxel_s = g_voxel_static + voxel->type;
-    if(depth < split && !voxel_s->emiter){
+    if(depth > 8 && depth < split && !voxel_s->emiter){
 #if 0
         if(sdSquareSquare(vec3Shr(g_surface.position,4),vec3Shr(block_pos_t,4),size >> 4,side) > RENDER_DISTANCE)
             return;
 #endif
-        if(!squareInScreenSpace(pos))
+        if(!squareInScreenSpace(g_view_plane,pos))
             return;
 #if 0
         if(occlusionBufferHidden(&g_surface,pos))
@@ -233,7 +234,7 @@ static void drawSlopeRecursive(Voxel* voxel,Vec3 block_pos,Vec3 u,Vec3 v,Vec2i c
 		}
 		Vec3 position = luxel_pos[i];
 
-		luxel_colors[index] = lightingPositionLuminanceGet(position,mipmap);
+		luxel_colors[index] = lightingPositionLuminanceGet(position,mipmap,normal);
 #if 0
 		unsigned dynamic_hash = luxelHashGet(position,mipmap);
 		Luxel* luxel_dynamic = luxelDynamicGet(dynamic_hash);
@@ -318,7 +319,7 @@ static void drawSidePart(Voxel* voxel,Vec3 block_pos,Side side,Vec2 size,real di
 	point_2[2] = pointToScreenRenderer(pos[2],g_surface.rotation_matrix,g_surface.position,g_surface.fov);
 	point_2[3] = pointToScreenRenderer(pos[3],g_surface.rotation_matrix,g_surface.position,g_surface.fov);
 
-	int mipmap = tClamp(mipmapGet(squarePointClosestPosition(pos[0],size.x,normal),normal,distance_max,surface_angle),26 - LUXEL_MAX_MIPMAP,31);
+	int mipmap = mipmapGet(squarePointClosestPosition(pos[0],size.x,normal),normal,distance_max,surface_angle);
 
 	Vec3 light_pos = pos[0];
     light_pos.a[axis.x] += size.x / 2;
@@ -331,7 +332,7 @@ static void drawSidePart(Voxel* voxel,Vec3 block_pos,Side side,Vec2 size,real di
 		luminance = voxel_s->side[side].custom ? voxel_s->side[side].color : voxel_s->color;
 	}
 	else if(g_options.lighting_engine && g_options.smooth_lighting){
-		luminance = lightingPositionLuminanceGet(luxel_pos,mipmap);
+		luminance = lightingPositionLuminanceGet(luxel_pos,mipmap,normal);
 		if(!voxel_s->texture)
 			luminance = vec3Mul(luminance,voxel_s->side[side].custom ? voxel_s->side[side].color : voxel_s->color);
 	}
@@ -378,7 +379,7 @@ static void drawSidePart(Voxel* voxel,Vec3 block_pos,Side side,Vec2 size,real di
 	    position.a[axis.x] += IS_FLOAT(real) ? x / 0x10000 : x;
 	    position.a[axis.y] += IS_FLOAT(real) ? y / 0x10000 : y;
 
-		luxel_colors[index] = lightingPositionLuminanceGet(position,mipmap);
+		luxel_colors[index] = lightingPositionLuminanceGet(position,mipmap,normal);
 #if 0
 		unsigned dynamic_hash = luxelHashGet(position,mipmap);
 		Luxel* luxel_dynamic = luxelDynamicGet(dynamic_hash);
@@ -558,7 +559,7 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2i coord,i
 	Vec3 normal = g_normal_table[side];
 	int mipmap = mipmapGet(squarePointClosestPosition(pos[0],size.x,normal),normal,distance_max,surface_angle);
 
-	int split = 25 + -tClamp(mipmap,26 - LUXEL_MAX_MIPMAP,31) - voxel->depth;
+	int split = 25 + -mipmap - voxel->depth;
 
     split -= 1;
     
@@ -583,7 +584,7 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2i coord,i
     if(sdSquareSquare(vec3Shr(g_surface.position,4),vec3Shr(block_pos_t,4),realShr(size.x,4),side) > RENDER_DISTANCE)
         return;
 
-    if(!squareInScreenSpace(pos))
+    if(!squareInScreenSpace(g_view_plane,pos))
         return;
 #if 0
     if(occlusionBufferHidden(&g_surface,pos))
@@ -625,7 +626,7 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2i coord,i
         if(sdSquareSquare(vec3Shr(g_surface.position,4),vec3Shr(block_pos_t,4),realShr(size.x,4),side) > RENDER_DISTANCE)
             return;
                 
-		if(!squareInScreenSpace(pos))
+		if(!squareInScreenSpace(g_view_plane,pos))
 			return;
         
         if(g_options.lighting_engine){
@@ -660,7 +661,7 @@ static void drawSide(Voxel* voxel,Vec3 block_pos,Side side,Vec2 size,bool occlud
 #if 1
     if(voxel->type == VOXEL_MIRROR || voxel->type == VOXEL_WATER){
         trace_buffer = memoryArenaAllocateZero(&g_arena_frame,sizeof *trace_buffer);
-        lightmapTreeGenerate(trace_buffer,voxel,block_pos,side,(Vec2i){0},0,0,size);
+        lightmapTreeGenerate(trace_buffer,voxel,block_pos,side,(Vec2i){0},0,surfaceAngle(block_pos,g_normal_table[side]),size);
     }
     
     /*
@@ -681,8 +682,13 @@ static void drawSide(Voxel* voxel,Vec3 block_pos,Side side,Vec2 size,bool occlud
             drawGuiRectangle(voxel,g_axis_table[side],block_pos,vec2Single(FIXED_ONE / 4),vec2Single(FIXED_ONE / 2),color,side);
         } break;
     }
-
-    voxelGuiDraw(voxel,block_pos,side);
+    VoxelStatic* voxel_s = g_voxel_static + voxel->type;
+    int n_gui = voxel_s->side[side].custom ? voxel_s->side[side].n_gui : voxel_s->n_gui;
+    VoxelGuiElement* gui = voxel_s->side[side].custom ? voxel_s->side[side].gui : voxel_s->gui;
+    voxelGuiDraw(voxel,block_pos,side,gui,n_gui);
+    
+    if(voxel == g_voxel_interact)
+        voxelGuiDraw(voxel,block_pos,side,voxel_s->gui_interact,voxel_s->n_gui_interact);
 
 	if(voxel->type == VOXEL_CHEST && side != VEC3_Z * 2 && side != VEC3_Z * 2 + 1){
 		if(voxel->chest_open){
@@ -715,13 +721,14 @@ static void drawSide(Voxel* voxel,Vec3 block_pos,Side side,Vec2 size,bool occlud
 #endif
 	}
 #endif
-    VoxelStatic* voxel_s = g_voxel_static + voxel->type;
-
     if(voxel_s->emiter){
         DrawPrimitive* polygon = primitiveToDraw();
         for(int i = countof(pos);i--;)
             polygon->position[i] = pos[i];
-        polygon->luminance = voxel_s->color;
+        if(voxel->type == VOXEL_CUSTOM_EMIT)
+            polygon->luminance = vec3MulS(voxel->color,intToReal(1 << voxel->emit_pow));
+        else
+            polygon->luminance = voxel_s->color;
         return;
 	}
     if(g_options.gl_qlightmap && !g_voxel_static[voxel->type].rd_trace){
@@ -732,7 +739,10 @@ static void drawSide(Voxel* voxel,Vec3 block_pos,Side side,Vec2 size,bool occlud
 
         Vec2 texture_crd[4];
         DrawPrimitive* primitive = primitiveToDraw();
-        if(g_voxel_static[voxel->type].texture){
+        Texture* texture = g_voxel_static[voxel->type].texture;
+        if(voxel->type == VOXEL_CUSTOM && voxel->has_texture)
+            texture = g_textures + voxel->texture_id;
+        if(texture){
             if(voxel_s->texturefill){
                 texture_crd[0] = g_texture_coordinates_fill[0];
                 texture_crd[1] = g_texture_coordinates_fill[1];
@@ -750,15 +760,18 @@ static void drawSide(Voxel* voxel,Vec3 block_pos,Side side,Vec2 size,bool occlud
                 texture_crd[2] = (Vec2){texture_x + texture_size,texture_y + texture_size}; 
                 texture_crd[3] = (Vec2){texture_x + texture_size,texture_y}; 
             }
-            primitive->texture = voxel_s->texture;
+            primitive->texture = texture;
         }
         primitive->gpu_lightmap = true;
-        primitive->lightmap_index = g_lightmap_gpu_ptr;
         primitive->side = side;
+        primitive->normal = g_normal_table[side];
+
+        primitive->luminance = voxel->type == VOXEL_CUSTOM ? voxel->color : vec3Single(FIXED_ONE);
+            
         
         for(int i = 4;i--;){
             primitive->position[i] = pos[i];
-            if(g_voxel_static[voxel->type].texture)
+            if(texture)
                 primitive->texture_crd[i] = texture_crd[i];
         }
     }
@@ -833,6 +846,12 @@ static void slopeDraw(Voxel* voxel,Vec3 block_pos,real block_size){
     }
 }
 
+static Vec3 polygonPositionNew(Vec3 inside,Vec3 outside,Plane plane){
+    Vec3 direction = vec3Direction(outside,inside);
+    real distance = rayPlaneIntersection(outside,direction,plane);
+    return vec3Add(outside,vec3MulS(direction,tAbs(distance)));
+}
+#include "geometry.h"
 void octreeDraw(Voxel* voxel){
 	real block_size = depthToSize(voxel->depth);
 	Vec3 block_pos = voxelWorldPos(voxel);
@@ -930,14 +949,124 @@ void octreeDraw(Voxel* voxel){
         boxQuadWireframeDraw(voxelWorldPos(voxel),vec3Single(depthToSize(voxel->depth)),color,true);
     }
     if(g_voxel_static[voxel->type].translucent){
+#if 1
         for(Entity* entity = voxel->entity_list;entity;entity = entity->next_voxel)
             entityDraw(entity);
+#endif
     }
     if(g_voxel_static[voxel->type].slope){
         slopeDraw(voxel,block_pos,block_size);
     }
     else{
         switch(voxel->type){
+            case VOXEL_PLANE:{
+                Vec3 relative = vec3AddS(block_pos,block_size / 2);
+                Plane plane = {.normal = getLookDirection(voxel->angle),voxel->distance};
+                
+                int face[][4] = {
+                    {0,1,3,2},
+                    {4,5,7,6},
+                    {0,4,5,1},
+                    {2,3,7,6},
+                    {0,2,6,4},
+                    {1,5,7,3},
+                };
+
+                for(int i = countof(face);i--;){
+                    if(i & 1){
+                        if(g_surface.position.a[i / 2] - point[face[i][0]].a[i / 2] < 0)
+                            continue;
+                    }
+                    else{
+                        if(g_surface.position.a[i / 2] - point[face[i][0]].a[i / 2] > 0)
+                            continue;
+                    }
+                    Vec3 d_point[] = {
+                        vec3Sub(point[face[i][0]],relative),
+                        vec3Sub(point[face[i][1]],relative),
+                        vec3Sub(point[face[i][2]],relative),
+                        vec3Sub(point[face[i][3]],relative),
+                    };
+                    real view_z[5] = {
+                        -vec3Dot(d_point[0],plane.normal),
+                        -vec3Dot(d_point[1],plane.normal),
+                        -vec3Dot(d_point[2],plane.normal),
+                        -vec3Dot(d_point[3],plane.normal),
+                    };
+                    Vec3 quad_new[5];
+                    int quad_ptr = 0;
+                    for(int j = 0;j < 4;j++){
+                        int mix_value;
+                        int i_next = (j + 1) % 4;
+                        if(view_z[j] > 0){
+                            quad_new[quad_ptr] = d_point[j];
+                            quad_ptr += 1;
+                            if(quad_ptr == countof(quad_new))
+                                break;
+                            if(view_z[(j + 1) % 4] <= 0){
+                                quad_new[quad_ptr] = polygonPositionNew(d_point[j],d_point[i_next],plane);
+                                quad_ptr += 1;
+                                if(quad_ptr == countof(quad_new))
+                                    break;
+                            }
+                        }
+                        else{
+                            if(view_z[(j + 1) % 4] > 0){
+                                quad_new[quad_ptr] = polygonPositionNew(d_point[i_next],d_point[j],plane);
+                                quad_ptr += 1;
+                                if(quad_ptr == countof(quad_new))
+                                    break;
+                            }
+                        }
+                    }
+                    int d_index[] = {0,1,3,2};
+                    if(quad_ptr == 4){
+                        DrawPrimitive* primitive = primitiveToDraw();
+
+                        primitive->gpu_lightmap = true;
+                        for(int j = 4;j--;)
+                            primitive->position[j] = vec3Add(quad_new[d_index[j]],relative);
+                        primitive->normal = g_normal_table[i];
+                    }
+                }
+                Vec3 pos[4];
+
+                int edge[][2] = {
+                    {0,1},{1,3},{3,2},{2,0},
+                    {4,5},{5,7},{7,6},{6,4},
+                    {0,4},{1,5},{2,6},{3,7},
+                };
+                
+                int pos_index = 0;
+                
+                for(int i = countof(edge);i--;){
+                    for(int j = 2;j--;){
+                        Vec3 pos_1 = vec3Sub(point[edge[i][!!j]],relative);
+                        Vec3 pos_2 = vec3Sub(point[edge[i][!j]],relative);
+
+                        Vec3 direction = vec3Direction(pos_1,pos_2);
+
+                        real distance = rayPlaneIntersection(pos_1,direction,plane);
+
+                        if(distance < 0)
+                            continue;
+ 
+                        if(distance < block_size){
+                            pos[pos_index++] = vec3Add(vec3Add(pos_1,vec3MulS(direction,distance)),relative);
+                            if(pos_index == 4)
+                                goto quad;
+                            j = 0;
+                        }
+                    }
+                }
+            quad:
+                DrawPrimitive* primitive = primitiveToDraw();
+
+                primitive->gpu_lightmap = true;
+                for(int i = 4;i--;)
+                    primitive->position[i] = pos[i];
+                primitive->normal = plane.normal;
+            } break;
             case VOXEL_AIR:
                 return;
             case VOXEL_MOVABLE:{
@@ -977,20 +1106,24 @@ void octreeDraw(Voxel* voxel){
 }
 
 #include "opengl.h"
-#include "libc.h"
+
 void octreeDrawList(void){
     if(g_options.gl_qlightmap){
-        lightmapUploadGL((char*)g_lightmap_gpu,g_lightmap_gpu_ptr * sizeof(*g_lightmap_gpu));
-        tMemset(g_lightmap_gpu,0,g_lightmap_gpu_ptr * sizeof(*g_lightmap_gpu));
-        g_lightmap_gpu_ptr = 0;
+        lightmapUploadGL();
     }
     for(DrawPrimitive* primitive = draw_list;primitive;primitive = primitive->next){
         switch(primitive->type){
             case PRIMITIVE_CIRCLE:{
-                drawCircle3d(&g_surface,primitive->position,vec3MulS(primitive->luminance,g_exposure));
+                if(primitive->is_sprite)
+                    drawCircle(&g_surface,primitive->position_sprite[0].x,primitive->position_sprite[0].y,primitive->sprite_size.x,vec3MulS(primitive->luminance,g_exposure));
+                else
+                    drawCircle3d(&g_surface,primitive->position,vec3MulS(primitive->luminance,g_exposure));
             } break;
             case PRIMITIVE_LINE:{
-                drawLine(&g_surface,primitive->position[0].x,primitive->position[0].y,primitive->position[1].x,primitive->position[1].y,vec3MulS(primitive->luminance,g_exposure));
+                if(primitive->is_sprite)
+                    drawLine(&g_surface,primitive->position[0].x,primitive->position[0].y,primitive->position[1].x,primitive->position[1].y,vec3MulS(primitive->luminance,g_exposure));
+                else
+                    drawLine3d(&g_surface,primitive->position[0],primitive->position[1],0x00FFFF);
             } break;
             case PRIMITIVE_TRIANGLE:{
                 if(primitive->has_lighting){
@@ -1011,9 +1144,9 @@ void octreeDrawList(void){
             case PRIMITIVE_QUAD:{
                 if(primitive->gpu_lightmap){
                     if(primitive->texture)
-                        drawLightmapTexturePolygon3dGL(&g_surface,primitive->texture,primitive->texture_crd,primitive->position,primitive->lightmap_index,primitive->side);
+                        drawLightmapTexturePolygon3dGL(&g_surface,primitive->texture,primitive->texture_crd,primitive->position,primitive->lightmap_index,primitive->side,primitive->luminance);
                     else
-                        drawLightmapPolygon3dGL(&g_surface,primitive->position,primitive->lightmap_index,primitive->side);
+                        drawLightmapPolygon3dGL(&g_surface,primitive->position,primitive->lightmap_index,primitive->normal,primitive->side);
                 }
                 else if(primitive->texture){
                     if(primitive->is_sprite){

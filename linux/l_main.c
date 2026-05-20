@@ -427,9 +427,11 @@ int main(void){
         
 		frameRender();
 
-        gui2dStringDraw(0x800,0x4A00,(String)STRING_LITERAL("fps"),0xA00,0x000000,0x1400,(Gui2dFlags){0});
-        gui2dNumberDraw(0x800,0x2A00,fps,0x800,(Gui2dFlags){0});
-        
+        gui2dStringDraw(REAL_UNIT * 0x08,REAL_UNIT * 0x4A,(String)STRING_LITERAL("fps"),REAL_UNIT * 0xA,0xFFFFFF,REAL_UNIT * 0x14,(Gui2dFlags){0});
+        gui2dNumberDraw(REAL_UNIT * 0x08,REAL_UNIT * 0x2A,fps,REAL_UNIT * 0x08,(Gui2dFlags){0});
+#if 0
+        printNumberNL(fps);
+#endif   
         surfaceBlit(&g_surface);
     }
 

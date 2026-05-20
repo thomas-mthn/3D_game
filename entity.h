@@ -50,6 +50,7 @@ structure(Entity){
 	};
 	Vec3 color;
 	Vec3 color_emit;
+    real bounciness;
     
     bool emit : 1;
     bool no_gravity : 1;
@@ -64,10 +65,15 @@ structure(Entity){
 	bool bounce : 1;
     bool has_hitbox : 1;
     bool non_interactive : 1;
+    bool circle : 1;
+    bool particle_shrink : 1;
+
+    Entity* parent;
 
     Vec3 hitbox;
 	real size;
-	int health;
+	real health;
+    real lifetime;
 	Texture texture_dynamic;
 	Texture* texture;
     
@@ -86,7 +92,7 @@ structure(Entity){
 		int distance_route_node;
 	}* pathfinding;
 
-	int move_angle;
+	real move_angle;
     
 	Vec3 render_position;
 	Vec3 render_direction;

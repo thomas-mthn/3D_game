@@ -23,12 +23,10 @@ void gui2dRectangleDraw(Vec2 position,Vec2 size,int color,Gui2dFlags flags){
             position.y -= FIXED_ONE;
     }
     
-    drawRectangle(&g_surface,position.x,position.y,size.x,size.y,pixelColorToColor(color));
+    drawRectangle(&g_surface,position.x,position.y,size.x,size.y,vec3MulS(pixelColorToColor(color),REAL_UNIT));
 }
 
 static void gui2dSegmentDraw(Vec2 pos_1,Vec2 pos_2,real thickness,int color,Gui2dFlags flags){
-    return;
-    
     pos_1 = aspectRatioTransform(pos_1);
     pos_2 = aspectRatioTransform(pos_2);
 
@@ -62,10 +60,10 @@ static void gui2dSegmentDraw(Vec2 pos_1,Vec2 pos_2,real thickness,int color,Gui2
         }
     }
     
-    drawSegment(&g_surface,pos_1.x,pos_1.y,pos_2.x,pos_2.y,thickness,pixelColorToColor(color));
+    drawSegment(&g_surface,pos_1.x,pos_1.y,pos_2.x,pos_2.y,thickness,vec3MulS(pixelColorToColor(color),REAL_UNIT));
 }
 
-void gui2dFrameDraw(real x,real y,real size_x,real size_y,int color,int thickness,Gui2dFlags flags){
+void gui2dFrameDraw(real x,real y,real size_x,real size_y,int color,real thickness,Gui2dFlags flags){
     gui2dRectangleDraw((Vec2){x,y},(Vec2){size_x,thickness},color,flags);
     gui2dRectangleDraw((Vec2){x,y},(Vec2){thickness,size_y},color,flags);
     gui2dRectangleDraw((Vec2){x,y + size_y - thickness},(Vec2){size_x,thickness},color,flags);
@@ -73,10 +71,9 @@ void gui2dFrameDraw(real x,real y,real size_x,real size_y,int color,int thicknes
 }
 
 void gui2dNumberDraw(real x,real y,int number,real scale,Gui2dFlags flags){
-    return;
     char buffer[0x10];
     String string = numberToString(buffer,number);
-    gui2dStringDraw(x,y,string,scale,0xFFFFFF,0x1800,flags);
+    gui2dStringDraw(x,y,string,scale,0xFFFFFF,REAL_UNIT * 0x18,flags);
 }
 
 void gui2dStringDraw(real x,real y,String string,real scale,int color,real thickness,Gui2dFlags flags){
@@ -97,12 +94,12 @@ void gui2dStringDraw(real x,real y,String string,real scale,int color,real thick
                 real offset_transform_x = realMulR(down_offset,scale);
                 Vec2 coord_transform[] = {
                     {
-                        realMulR(intToReal(coords[0]),scale) * mirror_x + x + offset_transform_x * mirror_x,
-                        realMulR(intToReal(coords[1]),scale) * mirror_y + y + offset_transform * mirror_y,
+                        realMulR(intToReal(coords[0]) / 0x100,scale) * mirror_x + x + offset_transform_x * mirror_x,
+                        realMulR(intToReal(coords[1]) / 0x100,scale) * mirror_y + y + offset_transform * mirror_y,
                     },
                     {
-                        realMulR(intToReal(coords[2]),scale) * mirror_x + x + offset_transform_x * mirror_x,
-                        realMulR(intToReal(coords[3]),scale) * mirror_y + y + offset_transform * mirror_y
+                        realMulR(intToReal(coords[2]) / 0x100,scale) * mirror_x + x + offset_transform_x * mirror_x,
+                        realMulR(intToReal(coords[3]) / 0x100,scale) * mirror_y + y + offset_transform * mirror_y
                     }
                 };
                 

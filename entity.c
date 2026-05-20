@@ -73,62 +73,10 @@ Vec3 ellipsoidNormal(Vec3 pos,Vec3 ra){
     return vec3Normalize(vec3Div(pos,(vec3Mul(ra,ra))));
 }
 
-structure(Quaternion){
-    Vec3 v;
-    real w;
-};
-
-static Quaternion quaternionCreate(Vec2 angle){
-    Quaternion q;
-    
-    real cy = tCos(angle.y / 2);
-    real sy = tSin(angle.y / 2);
-    real cr = tCos(0);
-    real sr = tSin(0);
-    real cp = tCos(angle.x / 2);
-    real sp = tSin(angle.x / 2);
-
-    q.w = realMulR(realMulR(cy,cr),cp) + realMulR(realMulR(sy,sr),sp);
-    q.v.a[0] = realMulR(realMulR(cy,sr),cp) - realMulR(realMulR(sy,cr),sp);
-    q.v.a[1] = realMulR(realMulR(cy,cr),sp) + realMulR(realMulR(sy,sr),cp);
-    q.v.a[2] = realMulR(realMulR(sy,cr),cp) - realMulR(realMulR(cy,sr),sp);
-
-    return q;
-}
-
-static Vec3 quaternionRotate(Quaternion q,Vec3 v){
-    Vec3 result;
-
-    real ww = realMulR(q.w,q.w);
-    real xx = realMulR(q.v.a[0],q.v.a[0]);
-    real yy = realMulR(q.v.a[1],q.v.a[1]);
-    real zz = realMulR(q.v.a[2],q.v.a[2]);
-    real wx = realMulR(q.w,q.v.a[0]);
-    real wy = realMulR(q.w,q.v.a[1]);
-    real wz = realMulR(q.w,q.v.a[2]);
-    real xy = realMulR(q.v.a[0],q.v.a[1]);
-    real xz = realMulR(q.v.a[0],q.v.a[2]);
-    real yz = realMulR(q.v.a[1],q.v.a[2]);
-
-    result.a[0] = realMulR(ww,v.a[0]) + realMulR(2 * wy,v.a[2]) - realMulR(2 * wz,v.a[1]) +
-                  realMulR(xx,v.a[0]) + realMulR(2 * xy,v.a[1]) + realMulR(2 * xz,v.a[2]) -
-                  realMulR(zz,v.a[0]) - realMulR(yy,v.a[0]);
-    
-    result.a[1] = realMulR(2 * xy,v.a[0]) + realMulR(yy,v.a[1]) + realMulR(2 * yz,v.a[2]) +
-                  realMulR(2 * wz,v.a[0]) - realMulR(zz,v.a[1]) + realMulR(ww,v.a[1]) -
-                  realMulR(2 * wx,v.a[2]) - realMulR(xx,v.a[1]);
-    
-    result.a[2] = realMulR(2 * xz,v.a[0]) + realMulR(2 * yz,v.a[1]) + realMulR(zz,v.a[2]) -
-                  realMulR(2 * wy,v.a[0]) - realMulR(yy,v.a[2]) + realMulR(2 * wx,v.a[1]) -
-                  realMulR(xx,v.a[2]) + realMulR(ww,v.a[2]);
-
-    return result;
-}
-
 void ellipsoidModelGenerate(Vec3 position,Texture* texture,ModelEllipsoid* ellipsoids,int n_ellipsoid,Vec2 model_angle,bool angle_player){
     static ModelEllipsoid model_default = {
         .color = {FIXED_ONE,FIXED_ONE,FIXED_ONE},
-        .radius = {FIXED_ONE,FIXED_ONE,FIXED_ONE},
+        .radius = {FIXED_ONE / 2,FIXED_ONE / 2,FIXED_ONE / 2},
     };
 	struct{
 		Vec3 direction;
@@ -200,14 +148,15 @@ void ellipsoidModelGenerate(Vec3 position,Texture* texture,ModelEllipsoid* ellip
 		ModelEllipsoid* model_ellipsoid = 0;
         
         if(!ellipsoids){
-            model_ellipsoid = &model_default;
-            min_distance = rayEllipsoidIntersection(camera_position,direction,model_ellipsoid->position,model_ellipsoid->radius);
+            min_distance = rayEllipsoidIntersection(camera_position,direction,model_default.position,model_default.radius);
+            if(min_distance > 0)
+                model_ellipsoid = &model_default;
         }
         else{
 			for(int j = 0;j < n_ellipsoid;j++){
 				ModelEllipsoid* ellipsoid = ellipsoids + j;
 				real distance = rayEllipsoidIntersection(camera_position,direction,ellipsoid->position,ellipsoid->radius);
-				if(distance == -1 || distance > min_distance)	
+				if(distance < 0 || distance > min_distance)	
 					continue;
 				min_distance = distance;
 				model_ellipsoid = ellipsoid;
@@ -243,10 +192,10 @@ void entityAdd(Entity* entity){
 
 Entity* entityCreate(Vec3 position,EntityType type){
 	Entity* entity = tMallocZero(sizeof *entity);
-    
+
 	entity->position = position;
 	entity->type = type;
-	entity->health = 1;
+	entity->health = FIXED_ONE;
 	entity->physics_friction_ground = PHYSICS_FRICTION_GROUND;
 	entity->physics_friction_air = PHYSICS_FRICTION_AIR;
 	entity->color_emit = (Vec3){FIXED_ONE / 2,FIXED_ONE / 2,FIXED_ONE / 2};
@@ -297,7 +246,8 @@ Entity* entityCreate(Vec3 position,EntityType type){
             entity->hitbox = (Vec3){FIXED_ONE,FIXED_ONE,FIXED_ONE};
 			entity->gravitate_player_freeze = 0x80;
 			entity->texture_dynamic = textureCreate(0x100);
-            //ellipsoidModelGenerate(entity->position,&entity->texture_dynamic,entity->mo,g_entity_static[entity->type].n_model_sphere,(Vec2){entity->move_angle,0},true);
+            entity->render_direction = vec3Direction(entity->position,g_surface.position);
+		    ellipsoidModelGenerate(entity->position,&entity->texture_dynamic,entity->model_sphere,entity->n_model_sphere,(Vec2){entity->move_angle,0},true);
 		} break;
 		case ENTITY_SLIME:{
             entity->has_hitbox = true;
@@ -331,7 +281,6 @@ Entity* entityCreate(Vec3 position,EntityType type){
 		} break;
 		case ENTITY_PARTICLE:{
             entity->non_interactive = true;
-			entity->health = 0x8;
 		} break;
 	}
     entityAdd(entity);
@@ -424,9 +373,8 @@ static bool entityTickSlime(Entity* slime){
 	if(slime->on_ground && tRndChance(0x80)){
 		real angle;
 		if(!g_player.movement_fly && lineOfSight(g_surface.position,slime->position)){
-			real distance = vec2Distance((Vec2){slime->position.x,slime->position.y},(Vec2){g_surface.position.x,g_surface.position.y}) * 8;
-			Vec2 offset = vec2MulS((Vec2){g_player.entity->velocity.x,g_player.entity->velocity.y},distance);
-			Vec2 direction = vec2Direction((Vec2){slime->position.x,slime->position.y},vec2Add((Vec2){g_surface.position.x,g_surface.position.y},offset));
+            Vec2 pos_2d = {slime->position.x,slime->position.y};
+			Vec2 direction = vec2Direction(pos_2d,(Vec2){g_surface.position.x,g_surface.position.y});
 			slime->velocity.x += realShr((direction.x),1);
 			slime->velocity.y += realShr((direction.y),1);
 			angle = tArcTan2(direction.y,direction.x);
@@ -442,22 +390,7 @@ static bool entityTickSlime(Entity* slime){
 
 	if(slime->attack_cooldown > 0)
 		slime->attack_cooldown -= 1;
-#if 0
-	else if(intersectBoxBox(playerHitboxGet(),PLAYER_SIZE,slime->position,slime->hitbox)){
-		Vec2 direction = vec2Direction((Vec2){g_surface.position.x,g_surface.position.y},(Vec2){slime->position.x,slime->position.y});
-		slime->velocity.x += (direction.x) >> 4;
-		slime->velocity.y += (direction.y) >> 4;
-		slime->velocity.z += FIXED_ONE / 6;
 
-		g_player.entity.velocity.x -= (direction.x) >> 4;
-		g_player.entity.velocity.y -= (direction.y) >> 4;
-		g_player.entity.velocity.z += FIXED_ONE / 6;
-
-		g_player.entity.health -= FIXED_ONE / 4;
-
-		slime->attack_cooldown = 0x80;
-	}
-#endif
 	return true;
 }
 
@@ -540,8 +473,8 @@ static bool entityTickMonster(Entity* entity){
 }
 
 static bool entityTickParticle(Entity* entity){
-	entity->health -= 1;
-	if(entity->health <= 0)
+	entity->lifetime -= g_time.delta;
+	if(entity->lifetime < 0)
 		return false;
 	return true;
 }
@@ -577,12 +510,14 @@ static Entity* boltMonsterCollision(Voxel* voxel,Vec3 position){
 		}
 		return 0;
 	}
+#if 1
 	for(Entity* entity = (voxel->entity_list);entity;entity = entity->next_voxel){
 		if(!entity->hitable)
 			continue;
 		if(intersectBoxPoint(position,entity->position,entity->hitbox))
 			return entity;
 	}
+#endif
 	return 0;
 }
 
@@ -599,17 +534,21 @@ void entityHit(Entity* entity){
 		Vec3 velocity = vec3Add(vec3Rnd(),from_player);
         
 		Entity* particle = entityCreate(death_position,ENTITY_PARTICLE);
-#if 1
+
 		particle->color = (Vec3){
             realRandom(FIXED_ONE / 8),
             realRandom(FIXED_ONE / 8),
             realRandom(FIXED_ONE / 2) + FIXED_ONE / 2,
         };
-#endif          
+        
 		particle->health = tRnd() % 0x80 + 0x80;
-		particle->size = FIXED_ONE / 16;
+		particle->size = FIXED_ONE / 32 + realRandom(FIXED_ONE / 32);
 		particle->velocity = vec3Mix(velocity,from_player,FIXED_ONE / 2);
         particle->velocity = vec3Shl(particle->velocity,1);
+        particle->circle = true;
+        particle->bounce = true;
+        particle->bounciness = REAL_UNIT * 0x80;
+        particle->lifetime = FIXED_ONE * 0x10 + realRandom(FIXED_ONE * 0x10);
 	}
 }
 
@@ -636,7 +575,7 @@ static bool entityTickBolt(Entity* entity){
 	entity->health -= 1;
 	if(entity->health <= 0)
 		return false;
-	Entity* entity_collided = boltMonsterCollision(&g_voxel,entity->position);
+	Entity* entity_collided = boltMonsterCollision(&g_world.voxel,entity->position);
 	spellAdjectiveParticleSpawn(entity);
 	if(entity_collided){
 		entityHit(entity_collided);
@@ -708,7 +647,7 @@ static bool entityTickBomb(Entity* entity){
 		return false;
 	}
 	spellAdjectiveParticleSpawn(entity);
-	Entity* entity_collided = boltMonsterCollision(&g_voxel,entity->position);
+	Entity* entity_collided = boltMonsterCollision(&g_world.voxel,entity->position);
 	if(entity_collided){
 		//monsterHit(entity_collided);
 		return false;
@@ -769,11 +708,9 @@ static bool entityTickWeapon(Entity* entity){
 
     Vec3 wish_position = g_surface.position;
             
-    wish_position = vec3Add(wish_position,vec3MulS(direction_x,FIXED_ONE * 2));
-    wish_position = vec3Add(wish_position,vec3MulS(direction_y,FIXED_ONE / 2));
+    wish_position = vec3Add(wish_position,vec3MulS(direction_x,REAL_UNIT * 0x1C0));
+    wish_position = vec3Add(wish_position,vec3MulS(direction_y,FIXED_ONE / 4));
     wish_position = vec3Add(wish_position,vec3MulS(direction_z,FIXED_ONE / 2));
-
-    wish_position = vec3Sub(wish_position,g_player.entity->velocity);
     
     wish_position = vec3Mix(entity->position,wish_position,FIXED_ONE / 2);
 
@@ -844,7 +781,8 @@ static void entityRender3d(Entity* entity,real entity_size){
     real discrepancy = vec3DistanceSquare(entity->render_direction,to_player);
 	if(discrepancy > REAL_UNIT){
         textureDestroy(entity->texture_dynamic);
-        entity->texture_dynamic = textureCreate(realShr(realToInt(size * 0x100) * tMax(g_surface.window_height,g_surface.window_width),10));
+        int texture_size = realShr(realToInt(size * 0x100) * tMax(g_surface.window_height,g_surface.window_width),10);
+        entity->texture_dynamic = textureCreate(tMin(0x100,texture_size));
         Vec2 angle = (Vec2){entity->move_angle,0};
 		ellipsoidModelGenerate(entity->position,&entity->texture_dynamic,entity->model_sphere,entity->n_model_sphere,angle,true);
         entity->render_direction = to_player;
@@ -917,7 +855,7 @@ void entityDraw(Entity* entity){
 			drawEllipses(&g_surface,point.x,point.y,realMulR(size * 4,g_surface.fov.x),realMulR(size * 4,g_surface.fov.y),vec3MulS(vec3Single(1 << 14),g_exposure));
 			drawEllipses(&g_surface,point.x - size / 2,point.y + size / 2,realMulR(size,g_surface.fov.x),realMulR(size,g_surface.fov.y),vec3MulS(vec3Single(1 << 18),g_exposure));
 			drawRectangle(&g_surface,point.x - size * 2 - size / 4,point.y - size / 2,realMulR(size,g_surface.fov.x),realMulR(size,g_surface.fov.y) * 4,vec3Single(1 << 16));
-			real fuse = realMulR(realMulR(size,g_surface.fov.x),entity->health << 10);
+			real fuse = realMulR(realMulR(size,g_surface.fov.x),entity->health);
 			drawRectangle(&g_surface,point.x - size * 2 - size / 4 - fuse / 2,point.y,realMulR(fuse,g_surface.fov.x),realMulR(size,g_surface.fov.y),pixelColorToColor(0x83B2EB));
 			drawRectangle(&g_surface,point.x - size * 2 - size / 4 - fuse / 2 - size / 2,point.y,realMulR(size,g_surface.fov.x),realMulR(size,g_surface.fov.y),pixelColorToColor(0x1050FF));
 		} break;
@@ -969,6 +907,7 @@ void entityDraw(Entity* entity){
 			if(!point.z)
 				return;
 			real size = entitySpriteSize(entity->position,entity->size);
+            size = realMulR(size,tMin(entity->lifetime / 4,FIXED_ONE));
             Vec2 points[] = {
 				{point.x + realMulR(size,g_surface.fov.x),point.y + realMulR(size,g_surface.fov.y)},
 				{point.x + realMulR(size,g_surface.fov.x),point.y - realMulR(size,g_surface.fov.y)},
@@ -1000,22 +939,16 @@ void entityDraw(Entity* entity){
                 DrawPrimitive* primitive = primitiveToDraw();
                 primitive->luminance = color;
                 primitive->is_sprite = true;
-                for(int i = 4;i--;)
-                    primitive->position_sprite[i] = points[i];
-#if 0
-                if(g_surface.backend == RENDER_BACKEND_SOFTWARE){
-                    Vec2 points[] = {
-                        {point.x + fixedMulR(size,g_surface.fov.x),-point.y + fixedMulR(size,g_surface.fov.y)},
-                        {point.x + fixedMulR(size,g_surface.fov.x),-point.y - fixedMulR(size,g_surface.fov.y)},
-                        {point.x - fixedMulR(size,g_surface.fov.x),-point.y - fixedMulR(size,g_surface.fov.y)},
-                        {point.x - fixedMulR(size,g_surface.fov.x),-point.y + fixedMulR(size,g_surface.fov.y)},
-                    };
-                    spanQuadAdd(&g_surface,points,color);
+                primitive->type = entity->circle ? PRIMITIVE_ELLIPSIS : PRIMITIVE_QUAD;
+                if(entity->circle){
+                    primitive->sprite_size.x = realMulR(size,g_surface.fov.x);
+                    primitive->sprite_size.y = realMulR(size,g_surface.fov.y);
+                    primitive->position_sprite[0] = (Vec2){point.x,point.y};
                 }
                 else{
-                    drawPolygon(&g_surface,points,4,color);
+                    for(int i = 4;i--;)
+                        primitive->position_sprite[i] = points[i];
                 }
-#endif
 			}
 		} break;
 		case ENTITY_PICKUP:{
@@ -1080,11 +1013,10 @@ void entityDrawHitbox(void){
 void entityDynamicLighting(void){
 	for(Entity* entity = g_entity;entity;entity = entity->next){
         if(g_options.rd_dshadow && !entity->non_interactive)
-            lightingEntityShadow(&g_voxel,entity);
-        
+            lightingEntityShadow(&g_world.voxel,entity);
 		if(!entity->emit)
 			continue;
-        lightingEntityDynamic(&g_voxel,entity);
+        lightingEntityDynamic(&g_world.voxel,entity);
 	}	
 }
 

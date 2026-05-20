@@ -13,6 +13,7 @@ vec3 CubicHermite (vec3 A, vec3 B, vec3 C, vec3 D, float t){
    	vec3 d = B;
     return a*t3 + b*t2 + c*t + d;
 }
+
 vec3 BicubicHermiteTextureSample(vec2 P){
 	float c_textureSize = float(textureSize(ourTexture,0).x);
 	float c_onePixel = (1.0 / c_textureSize);

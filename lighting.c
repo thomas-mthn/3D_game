@@ -17,8 +17,8 @@
 
 #define N_EVICT_TRIES 4
 
-alignas(32) Luxel g_luxel_cache[N_LUXEL_CACHE];
-alignas(32) static Luxel luxel_dynamic_cache[0x10000];
+Luxel g_luxel_cache[N_LUXEL_CACHE];
+static Luxel luxel_dynamic_cache[0x10000];
 
 //only works on axis aligned squares
 Vec3 squarePointClosestPosition(Vec3 square_pos,real square_size,Vec3 normal){
@@ -40,25 +40,27 @@ Vec3 squarePointClosestPosition(Vec3 square_pos,real square_size,Vec3 normal){
 	return R;
 }
 
-static unsigned hash4(unsigned x,unsigned y,unsigned z,unsigned w){
-    unsigned h = 0x811C9DC5;
-    h ^= x; 
-	h *= 0x27d4eb2d;
-    h ^= y; 
-	h *= 0x165667b1;
-    h ^= z; 
-	h *= 0x1b873593;
-    h ^= w; 
-	h *= 0x85ebca6b;
+static unsigned hash4(unsigned x,unsigned y,unsigned z,unsigned w,unsigned n_x,unsigned n_y,unsigned n_z){
+    unsigned values[] = {x,y,z,w,(n_x + 0x80) >> 8,(n_y + 0x80) >> 8,(n_z + 0x80)  >> 8};
+    unsigned h = 0x811C9DC5u;
     
-    h ^= h >> 16;
+    for(int i = 0;i < countof(values);i++){
+        h ^= values[i];
+        h = tHash(h);
+    }
+
     return h;
 }
 
-static unsigned luxelHashGet(Vec3 position,int depth){
-    if(IS_FLOAT(real))
+static unsigned luxelHashGet(Vec3 position,int depth,Vec3 normal){
+    Vec3 u = vec3NormalToU(normal);
+    Vec3 v = vec3Cross(normal,u);
+    position = (Vec3){tAbs(vec3Dot(position,u)),tAbs(vec3Dot(position,v)),tAbs(vec3Dot(position,normal))};
+    if(IS_FLOAT(real)){
         position = vec3MulS(position,0x10000);
-	return hash4(position.x,position.y,position.z,depth);
+        normal = vec3MulS(normal,0x10000);
+    }
+	return hash4(position.x,position.y,position.z,depth,normal.x,normal.y,normal.z);
 }
 
 static Luxel* luxelGet(unsigned hash){
@@ -70,12 +72,12 @@ static Luxel* luxelGet(unsigned hash){
     return 0;
 }
 
-Vec3 lightingPositionLuminanceGet(Vec3 position,int depth){
-    unsigned hash = luxelHashGet(position,depth);
+Vec3 lightingPositionLuminanceGet(Vec3 position,int depth,Vec3 normal){
+    unsigned hash = luxelHashGet(position,depth,normal);
     Luxel* luxel = luxelGet(hash);
     if(luxel)
         return luxel->luminance;
-    hash = luxelHashGet(vec3Shr(position,1),depth + 1);
+    hash = luxelHashGet(vec3Shr(position,1),depth + 1,normal);
     luxel = luxelGet(hash);
 
     return luxel ? luxel->luminance : (Vec3){0};
@@ -137,7 +139,7 @@ static Vec3 voxelEmit(Voxel* voxel,Vec3 light_pos,int mipmap,Vec3 normal,bool en
     if(voxel->type == VOXEL_PARENT){
         Vec3 voxel_position = voxelWorldPosCenter(voxel);
 #if 1
-        if(sdVoxel(light_pos,voxel_position,depthToSize(voxel->depth)) > voxel->emission * 0x2)
+        if(sdVoxel(light_pos,voxel_position,depthToSize(voxel->depth)) > voxel->emission)
             return (Vec3){0};
 #endif
         Vec3 luminance = {0};
@@ -148,10 +150,9 @@ static Vec3 voxelEmit(Voxel* voxel,Vec3 light_pos,int mipmap,Vec3 normal,bool en
     if(g_voxel_static[voxel->type].emiter){
         Vec3 emiter_position = voxelWorldPosCenter(voxel);
         real distance = vec3Distance(light_pos,emiter_position);
-#if 0
-        real intensity = fixedDivR(1 << (int)tMax(26 - voxel->depth,0),fixedMulR(distance,distance));
-#endif
-        real intensity = realDivR(FIXED_ONE,realMulR(distance,distance));
+        distance = sdVoxel(light_pos,emiter_position,depthToSize(voxel->depth) / 3);
+        
+        real intensity = tReciprocal(realMulR(distance,distance));
         Vec3 direction = vec3Direction(emiter_position,light_pos);
         real angle = -vec3Dot(direction,normal);
 #if 0
@@ -162,9 +163,15 @@ static Vec3 voxelEmit(Voxel* voxel,Vec3 light_pos,int mipmap,Vec3 normal,bool en
             return (Vec3){0};
 #endif
 #if 1
-        if(treeRayTraceAndInit(light_pos,vec3Direction(light_pos,emiter_position),0,(TreeTraceFlags){.entity = true}) != voxel)
+        if(treeRayTraceAndInit(light_pos,vec3Direction(light_pos,emiter_position),0,(TreeTraceFlags){.entity = false}) != voxel)
             return (Vec3){0};
 #endif
+        if(voxel->type == VOXEL_CUSTOM_EMIT){
+            Vec3 color = vec3MulS(voxel->color,intensity);
+            color = vec3MulS(color,intToReal(1 << voxel->emit_pow));
+            return vec3MulS(color,angle);
+        }
+            
         return vec3MulS(vec3MulS(g_voxel_static[voxel->type].color,intensity),angle);
     }
     return (Vec3){0};
@@ -182,10 +189,10 @@ static void entityDynamicLightingSide(Voxel* voxel,Entity* entity,Vec3 block_pos
 	square_pos.a[axis.x] += size / 2;
 	square_pos.a[axis.y] += size / 2;
 
-	int mipmap = tClamp(mipmapGet(squarePointClosestPosition(square_pos,size,normal),normal,distance_max,surface_angle),26 - LUXEL_MAX_MIPMAP,31);
+	int mipmap = mipmapGet(squarePointClosestPosition(square_pos,size,normal),normal,distance_max,surface_angle);
 
 	Vec3 luxel_pos = vec3Shr(luxel_position,mipmap);
-	unsigned hash = luxelHashGet(luxel_pos,mipmap);
+	unsigned hash = luxelHashGet(luxel_pos,mipmap,normal);
 	Luxel* luxel = luxelDynamicGet(hash);
 
 	Vec3 position = square_pos;
@@ -239,7 +246,7 @@ static void entityDynamicLightingSideRecursive(Voxel* voxel,Entity* entity,Vec3 
 
 	Vec3 normal = g_normal_table[side];
 
-	int mipmap = tClamp(mipmapGet(squarePointClosestPosition(positions[0],size,normal),normal,distance_max,surface_angle),26 - LUXEL_MAX_MIPMAP,31);
+	int mipmap = mipmapGet(squarePointClosestPosition(positions[0],size,normal),normal,distance_max,surface_angle);
 
 	int split = 25 + -mipmap - voxel->depth;
 
@@ -295,32 +302,32 @@ static void shadowSide(Voxel* voxel,Entity* entity,Vec3 block_pos,int side,Vec2i
 	Vec2i axis = g_axis_table[side];
 	Vec3 luxel_position = block_pos;
 	real size = depthToSize(voxel->depth) / (1 << depth);
-	luxel_position.a[axis.x] += realMulR(coord.x << FIXED_PRECISION,size);
-	luxel_position.a[axis.y] += realMulR(coord.y << FIXED_PRECISION,size);
+	luxel_position.a[axis.x] += realMulR(intToReal(coord.x),size);
+	luxel_position.a[axis.y] += realMulR(intToReal(coord.y),size);
 	
 	Vec3 square_pos = luxel_position;
 	square_pos.a[axis.x] += size / 2;
 	square_pos.a[axis.y] += size / 2;
 
-	int mipmap = tClamp(mipmapGet(squarePointClosestPosition(square_pos,size,normal),normal,distance_max,surface_angle),26 - LUXEL_MAX_MIPMAP,31);
+	int mipmap = mipmapGet(squarePointClosestPosition(square_pos,size,normal),normal,distance_max,surface_angle);
 
 	Vec3 luxel_pos = vec3Shr(luxel_position,mipmap);
-	unsigned hash = luxelHashGet(luxel_pos,mipmap);
+	unsigned hash = luxelHashGet(luxel_pos,mipmap,normal);
 	Luxel* luxel = luxelGet(hash);
-
+     
     if(!luxel || luxel->tick_last_updated == g_time.frame_tick)
         return;
 
     if(!luxel->luminance_direct.x && !luxel->luminance_direct.y && !luxel->luminance_direct.z)
         return;
 
-	Vec3 position = square_pos;
+	Vec3 position = luxel_position;
 	position.a[side >> 1] += side & 1 ? REAL_EPSILON : -REAL_EPSILON;
 
     if(!g_voxel_static[voxelPositionGet(position)->type].translucent)
         return;
     
-    luxel->luminance_direct = voxelEmit(&g_voxel,position,mipmap,normal,true);
+    luxel->luminance_direct = voxelEmit(&g_world.voxel,position,mipmap,normal,true);
     luxel->tick_last_updated = g_time.frame_tick;
 }
 
@@ -328,8 +335,8 @@ static void shadowSideRecursive(Voxel* voxel,Entity* entity,Vec3 block_pos,int s
 	Vec2i axis = g_axis_table[side];
 	Vec3 block_pos_t = block_pos;
 	real size = depthToSize(voxel->depth) / (1 << depth);
-	block_pos_t.a[axis.x] += realMulR(coord.x << FIXED_PRECISION,size);
-	block_pos_t.a[axis.y] += realMulR(coord.y << FIXED_PRECISION,size);
+	block_pos_t.a[axis.x] += realMulR(intToReal(coord.x),size);
+	block_pos_t.a[axis.y] += realMulR(intToReal(coord.y),size);
 
 	Vec3 positions[4] = {block_pos_t,block_pos_t,block_pos_t,block_pos_t};
 
@@ -344,7 +351,7 @@ static void shadowSideRecursive(Voxel* voxel,Entity* entity,Vec3 block_pos,int s
 	Vec3* position_farthest;
 
 	for(int i = 0;i < countof(positions);i++){
-		int distance = vec3Dot(vec3Shr(g_surface.position,4),vec3Shr(positions[i],4));
+		real distance = vec3Dot(vec3Shr(g_surface.position,4),vec3Shr(positions[i],4));
 		if(distance > distance_max){
 			distance_max = distance;
 			position_farthest = positions + i;
@@ -355,7 +362,7 @@ static void shadowSideRecursive(Voxel* voxel,Entity* entity,Vec3 block_pos,int s
 
 	Vec3 normal = g_normal_table[side];
 
-	int mipmap = tClamp(mipmapGet(squarePointClosestPosition(positions[0],size,normal),normal,distance_max,surface_angle),26 - LUXEL_MAX_MIPMAP,31);
+	int mipmap = mipmapGet(squarePointClosestPosition(positions[0],size,normal),normal,distance_max,surface_angle);
 
 	int split = 25 + -mipmap - voxel->depth;
 
@@ -365,19 +372,19 @@ static void shadowSideRecursive(Voxel* voxel,Entity* entity,Vec3 block_pos,int s
 		v_pos.a[axis.y] += coord.y;
 		if(side & 1)
 			v_pos.a[side >> 1] += (1 << depth) - 1;
-		
+#if 0
 		if(sdVoxel(entity->position,positions[0],size) > FIXED_ONE * 4)
 			return;
-
+#endif
 		coord.x <<= 1;
 		coord.y <<= 1;
 	    shadowSideRecursive(voxel,entity,block_pos,side,(Vec2i){coord.x + 0,coord.y + 0},depth + 1,surface_angle);
-	    shadowSideRecursive(voxel,entity,block_pos,side,(Vec2i){coord.x + 0,coord.y + 0},depth + 1,surface_angle);
-	    shadowSideRecursive(voxel,entity,block_pos,side,(Vec2i){coord.x + 0,coord.y + 0},depth + 1,surface_angle);
-	    shadowSideRecursive(voxel,entity,block_pos,side,(Vec2i){coord.x + 0,coord.y + 0},depth + 1,surface_angle);
+	    shadowSideRecursive(voxel,entity,block_pos,side,(Vec2i){coord.x + 0,coord.y + 1},depth + 1,surface_angle);
+	    shadowSideRecursive(voxel,entity,block_pos,side,(Vec2i){coord.x + 1,coord.y + 0},depth + 1,surface_angle);
+	    shadowSideRecursive(voxel,entity,block_pos,side,(Vec2i){coord.x + 1,coord.y + 1},depth + 1,surface_angle);
 		return;
 	}
-#if 0
+#if 1
     shadowSide(voxel,entity,block_pos,side,coord,depth,distance_max,surface_angle);
 #endif
     //entityDynamicLightingSide(voxel,entity,block_pos,side,coord,depth,distance_max,surface_angle);
@@ -388,14 +395,16 @@ static void shadowLightingSidePre(Voxel* voxel,Entity* entity,Vec3 block_pos,int
 }
 
 void lightingEntityShadow(Voxel* voxel,Entity* entity){
+#if 0 
 	real block_size = depthToSize(voxel->depth);
 	Vec3 block_pos = voxelWorldPos(voxel);
 	if(voxel->type == VOXEL_PARENT){
-		if(sdVoxel(entity->position,block_pos,block_size) > FIXED_ONE * 4)
+     
+		if(sdVoxel(entity->position,block_pos,block_size) > FIXED_ONE * 0x4)
 			return;
+        
 		for(int i = 0;i < countof(voxel->child_s);i++)
 			lightingEntityShadow(voxel->child_s[i],entity);
-			
 		return;
 	}
 	if(voxel->type == VOXEL_AIR || voxel->type == VOXEL_MIRROR || g_voxel_static[voxel->type].emiter)
@@ -406,6 +415,7 @@ void lightingEntityShadow(Voxel* voxel,Entity* entity){
     shadowLightingSidePre(voxel,entity,vec3Add(block_pos,(Vec3){0,block_size,0}),3);
     shadowLightingSidePre(voxel,entity,block_pos,4);
     shadowLightingSidePre(voxel,entity,vec3Add(block_pos,(Vec3){0,0,block_size}),5);
+#endif
 }
 
 static Vec3 triangleNormal(Vec3 a,Vec3 b,Vec3 c){
@@ -414,194 +424,22 @@ static Vec3 triangleNormal(Vec3 a,Vec3 b,Vec3 c){
     return vec3Normalize(vec3Cross(u,v));
 }
 
-int g_lightmap_gpu_ptr;
-LightmapGPU g_lightmap_gpu[0x1000000];
-
-static void lightmapGenerateGPU(LightmapGPU* node,Voxel* voxel,Vec3 block_pos,Vec2 size,int side,real distance_max,Vec2i coord,int depth){
-    Vec2i axis = g_axis_table[side];
-    Vec3 normal = g_normal_table[side];
-
-    Vec3 block_pos_t = block_pos;
-	block_pos_t.a[axis.x] += realMulR(coord.x << FIXED_PRECISION,size.x);
-	block_pos_t.a[axis.y] += realMulR(coord.y << FIXED_PRECISION,size.y);
-
-    Vec3 pos[4] = {block_pos_t,block_pos_t,block_pos_t,block_pos_t};
-
-	pos[1].a[axis.y] += size.y;
-	pos[2].a[axis.x] += size.x;
-	pos[3].a[axis.x] += size.x;
-	pos[3].a[axis.y] += size.y;
-    
-    int mipmap = tClamp(mipmapGet(squarePointClosestPosition(pos[0],size.x,normal),normal,distance_max,FIXED_ONE),26 - LUXEL_MAX_MIPMAP,31);
-    
-    Vec3 light_pos = pos[0];
-    light_pos.a[axis.x] += size.x / 2;
-    light_pos.a[axis.y] += size.y / 2;
-
-    Vec3 luxel_pos = vec3Shr(light_pos,mipmap);
-    unsigned hash = luxelHashGet(luxel_pos,mipmap);
-    Luxel* luxel = luxelGet(hash);
-
-    Vec3 luminance;
-    VoxelStatic* voxel_s = g_voxel_static + voxel->type;
-
-    luminance = lightingPositionLuminanceGet(luxel_pos,mipmap);
-
-    unsigned dynamic_hash = luxelHashGet(luxel_pos,mipmap);
-    Luxel* luxel_dynamic = luxelDynamicGet(dynamic_hash);
-
-    if(luxel_dynamic->hash == dynamic_hash)
-        luminance = vec3Add(luminance,luxel_dynamic->luminance);
-		
-    if(!voxel_s->texture)
-        luminance = vec3Mul(luminance,voxel_s->color);
-
-	luminance = vec3MulS(luminance,g_exposure);
-    
-    node->color[2] = (float)(realShr(luminance.x,4)) / FIXED_ONE;
-    node->color[1] = (float)(realShr(luminance.y,4)) / FIXED_ONE;
-    node->color[0] = (float)(realShr(luminance.z,4)) / FIXED_ONE;
-}
-
-void lightmapGenerateRecursiveGPU(LightmapGPU* node,Voxel* voxel,Vec3 block_pos,int side,Vec2i coord,int depth,real surface_angle,Vec2 size){
-    Vec2i axis = g_axis_table[side];
-    Vec3 block_pos_t = block_pos;
-	block_pos_t.a[axis.x] += realMulR(coord.x << FIXED_PRECISION,size.x);
-	block_pos_t.a[axis.y] += realMulR(coord.y << FIXED_PRECISION,size.y);
-
-    Vec3 pos[4] = {block_pos_t,block_pos_t,block_pos_t,block_pos_t};
-
-	pos[1].a[axis.y] += size.y;
-	pos[2].a[axis.x] += size.x;
-	pos[3].a[axis.x] += size.x;
-	pos[3].a[axis.y] += size.y;
-    
-	real distance_max = 0;
-	int distance_max_index;
-
-	for(int i = 0;i < 4;i++){
-		real distance = vec3Distance(vec3Shr(g_surface.position,4),vec3Shr(pos[i],4));
-		if(distance > distance_max){
-			distance_max = distance;
-			distance_max_index = i;
-		}
-	}
-    
-    Vec3 normal = g_normal_table[side];
-    int mipmap = mipmapGet(squarePointClosestPosition(pos[0],size.x,normal),normal,distance_max,surface_angle);
-
-	int split = 25 + -tClamp(mipmap,26 - LUXEL_MAX_MIPMAP,31) - voxel->depth;
-
-    split -= 1;
-
-    if(depth < split){
-        Vec3i v_pos = {voxel->position_x << depth,voxel->position_y << depth,voxel->position_z << depth};
-        v_pos.a[axis.x] += coord.x;
-        v_pos.a[axis.y] += coord.y;
-        
-        if(side & 1)
-            v_pos.a[side >> 1] += (1 << depth) - 1;
-        
-        if(!squareVisible(v_pos,voxel->depth + depth,side,voxel->type))
-            return;
-        
-        if(sdSquareSquare(vec3Shr(g_surface.position,4),vec3Shr(block_pos_t,4),realShr(size.x,4),side) > RENDER_DISTANCE)
-            return;
-
-        if(!squareInScreenSpace(pos))
-            return;
-        
-        coord.x <<= 1;
-        coord.y <<= 1;
-
-        for(int i = countof(node->child);i--;){
-            node->child[i] = g_lightmap_gpu_ptr;
-            g_lightmap_gpu_ptr += 1;
-        }
-        
-        lightmapGenerateRecursiveGPU(g_lightmap_gpu + node->child[0],voxel,block_pos,side,(Vec2i){coord.x + 0,coord.y + 0},depth + 1,surface_angle,vec2Shr(size,1));
-        lightmapGenerateRecursiveGPU(g_lightmap_gpu + node->child[1],voxel,block_pos,side,(Vec2i){coord.x + 0,coord.y + 1},depth + 1,surface_angle,vec2Shr(size,1));
-        lightmapGenerateRecursiveGPU(g_lightmap_gpu + node->child[2],voxel,block_pos,side,(Vec2i){coord.x + 1,coord.y + 0},depth + 1,surface_angle,vec2Shr(size,1));
-        lightmapGenerateRecursiveGPU(g_lightmap_gpu + node->child[3],voxel,block_pos,side,(Vec2i){coord.x + 1,coord.y + 1},depth + 1,surface_angle,vec2Shr(size,1));
-
-        return;
-    }
-
-    for(int i = countof(node->child);i--;){
-        node->child[i] = g_lightmap_gpu_ptr;
-        g_lightmap_gpu_ptr += 1;
-    }
-
-    pos[1].a[axis.y] -= realShr(size.y,1);
-	pos[2].a[axis.x] -= realShr(size.x,1);
-	pos[3].a[axis.x] -= realShr(size.x,1);
-	pos[3].a[axis.y] -= realShr(size.y,1);
-    
-    Vec2 l_size = vec2MulS(size,realShr(FIXED_ONE,depth));
-
-    for(int i = 4;i--;){
-        pos[i].a[axis.x] += l_size.x;
-        pos[i].a[axis.y] += l_size.y;
-    }
-
-    size = vec2Shr(size,1);
-
-    coord.x <<= 1;
-    coord.y <<= 1;
-    
-    lightmapGenerateGPU(g_lightmap_gpu + node->child[0],voxel,block_pos,size,side,distance_max,(Vec2i){coord.x + 0,coord.y + 0},depth + 1);
-    lightmapGenerateGPU(g_lightmap_gpu + node->child[1],voxel,block_pos,size,side,distance_max,(Vec2i){coord.x + 0,coord.y + 1},depth + 1);
-    lightmapGenerateGPU(g_lightmap_gpu + node->child[2],voxel,block_pos,size,side,distance_max,(Vec2i){coord.x + 1,coord.y + 0},depth + 1);
-    lightmapGenerateGPU(g_lightmap_gpu + node->child[3],voxel,block_pos,size,side,distance_max,(Vec2i){coord.x + 1,coord.y + 1},depth + 1);
-}
-
-void lightmapTreeGenerate(LightmapTree* node,Voxel* voxel,Vec3 block_pos,int side,Vec2i coord,int depth,real surface_angle,Vec2 size){
+static void lightmapGenerate(LightmapTree* node,Voxel* voxel,Vec3 block_pos,Vec2i coord,int depth,Side side,Vec2 size,real distance_max,real surface_angle){
     Vec2i axis = g_axis_table[side];
     Vec3 block_pos_t = block_pos;
 	block_pos_t.a[axis.x] += realMulR(intToReal(coord.x),size.x);
 	block_pos_t.a[axis.y] += realMulR(intToReal(coord.y),size.y);
 
-    Vec3 pos[4] = {block_pos_t,block_pos_t,block_pos_t,block_pos_t};
+    Vec3 pos[] = {block_pos_t,block_pos_t,block_pos_t,block_pos_t};
 
 	pos[1].a[axis.y] += size.y;
 	pos[2].a[axis.x] += size.x;
 	pos[3].a[axis.x] += size.x;
 	pos[3].a[axis.y] += size.y;
-    
-	real distance_max = 0;
-	int distance_max_index;
 
-	for(int i = 0;i < 4;i++){
-		real distance = vec3Distance(vec3Shr(g_surface.position,4),vec3Shr(pos[i],4));
-		if(distance > distance_max){
-			distance_max = distance;
-			distance_max_index = i;
-		}
-	}
-    
     Vec3 normal = g_normal_table[side];
-    int mipmap = mipmapGet(squarePointClosestPosition(block_pos_t,size.x,normal),normal,distance_max,surface_angle);
-
-	int split = 25 + -tClamp(mipmap,26 - LUXEL_MAX_MIPMAP,31) - voxel->depth;
-
-    if(g_voxel_static[voxel->type].rd_trace)
-        split += 1;
     
-    if(depth < split){
-        coord.x <<= 1;
-        coord.y <<= 1;
-        
-        for(int i = countof(node->child);i--;)
-            node->child[i] = memoryArenaAllocateZero(&g_arena_frame,sizeof *node->child[i]);
-        
-        lightmapTreeGenerate(node->child[0],voxel,block_pos,side,(Vec2i){coord.x + 0,coord.y + 0},depth + 1,surface_angle,vec2Shr(size,1));
-        lightmapTreeGenerate(node->child[1],voxel,block_pos,side,(Vec2i){coord.x + 0,coord.y + 1},depth + 1,surface_angle,vec2Shr(size,1));
-        lightmapTreeGenerate(node->child[2],voxel,block_pos,side,(Vec2i){coord.x + 1,coord.y + 0},depth + 1,surface_angle,vec2Shr(size,1));
-        lightmapTreeGenerate(node->child[3],voxel,block_pos,side,(Vec2i){coord.x + 1,coord.y + 1},depth + 1,surface_angle,vec2Shr(size,1));
-
-        return;
-    }
-    mipmap = tClamp(mipmapGet(squarePointClosestPosition(pos[0],size.x,normal),normal,distance_max,surface_angle),26 - LUXEL_MAX_MIPMAP,31);
+    int mipmap = mipmapGet(squarePointClosestPosition(pos[0],size.x,normal),normal,distance_max,surface_angle);
     
     Vec3 light_pos = pos[0];
     light_pos.a[axis.x] += size.x / 2;
@@ -651,17 +489,67 @@ void lightmapTreeGenerate(LightmapTree* node,Voxel* voxel,Vec3 block_pos,int sid
         } break;
         default:{
             Vec3 luxel_pos = vec3Shr(light_pos,mipmap);
-            unsigned hash = luxelHashGet(luxel_pos,mipmap);
+            unsigned hash = luxelHashGet(luxel_pos,mipmap,normal);
             Luxel* luxel = luxelGet(hash);
     
-            node->luminance = vec3MulS(lightingPositionLuminanceGet(luxel_pos,mipmap),g_exposure);
+            node->luminance = vec3MulS(lightingPositionLuminanceGet(luxel_pos,mipmap,normal),g_exposure);
         }
     }
 }
 
+void lightmapTreeGenerate(LightmapTree* node,Voxel* voxel,Vec3 block_pos,int side,Vec2i coord,int depth,real surface_angle,Vec2 size){
+    Vec2i axis = g_axis_table[side];
+    Vec3 block_pos_t = block_pos;
+	block_pos_t.a[axis.x] += realMulR(intToReal(coord.x),size.x);
+	block_pos_t.a[axis.y] += realMulR(intToReal(coord.y),size.y);
+
+    Vec3 pos[4] = {block_pos_t,block_pos_t,block_pos_t,block_pos_t};
+
+	pos[1].a[axis.y] += size.y;
+	pos[2].a[axis.x] += size.x;
+	pos[3].a[axis.x] += size.x;
+	pos[3].a[axis.y] += size.y;
+    
+	real distance_max = 0;
+	int distance_max_index;
+
+	for(int i = 0;i < 4;i++){
+		real distance = vec3Distance(vec3Shr(g_surface.position,4),vec3Shr(pos[i],4));
+		if(distance > distance_max){
+			distance_max = distance;
+			distance_max_index = i;
+		}
+	}
+    
+    Vec3 normal = g_normal_table[side];
+    int mipmap = mipmapGet(squarePointClosestPosition(block_pos_t,size.x,normal),normal,distance_max,surface_angle);
+
+	int split = 25 + -mipmap - voxel->depth;
+
+    for(int i = countof(node->child);i--;)
+        node->child[i] = memoryArenaAllocateZero(&g_arena_frame,sizeof *node->child[i]);
+
+    coord.x <<= 1;
+    coord.y <<= 1;
+    
+    if(depth < split){
+        lightmapTreeGenerate(node->child[0],voxel,block_pos,side,(Vec2i){coord.x + 0,coord.y + 0},depth + 1,surface_angle,vec2Shr(size,1));
+        lightmapTreeGenerate(node->child[1],voxel,block_pos,side,(Vec2i){coord.x + 0,coord.y + 1},depth + 1,surface_angle,vec2Shr(size,1));
+        lightmapTreeGenerate(node->child[2],voxel,block_pos,side,(Vec2i){coord.x + 1,coord.y + 0},depth + 1,surface_angle,vec2Shr(size,1));
+        lightmapTreeGenerate(node->child[3],voxel,block_pos,side,(Vec2i){coord.x + 1,coord.y + 1},depth + 1,surface_angle,vec2Shr(size,1));
+        return;
+    }
+    lightmapGenerate(node->child[0],voxel,block_pos,(Vec2i){coord.x + 0,coord.y + 0},depth + 1,side,vec2Shr(size,1),distance_max,surface_angle);
+    lightmapGenerate(node->child[1],voxel,block_pos,(Vec2i){coord.x + 0,coord.y + 1},depth + 1,side,vec2Shr(size,1),distance_max,surface_angle);
+    lightmapGenerate(node->child[2],voxel,block_pos,(Vec2i){coord.x + 1,coord.y + 0},depth + 1,side,vec2Shr(size,1),distance_max,surface_angle);
+    lightmapGenerate(node->child[3],voxel,block_pos,(Vec2i){coord.x + 1,coord.y + 1},depth + 1,side,vec2Shr(size,1),distance_max,surface_angle);
+}
+
+static Vec3 water_color = (Vec3){REAL_UNIT * 0xC00,REAL_UNIT * 0x400,REAL_UNIT * 0x100};
+
 static Vec3 rayLuminanceRecursive(TraverseInit init,Vec3 position,Vec3 direction,int depth,RayLuminanceFlag flags){
     if(!depth)
-		return vec3Single(0);
+	    return (Vec3){0};
 
 	Vec3Axis side;
 	Voxel* voxel = treeRayTrace(init.voxel,init.pos,position,direction,&side,(TreeTraceFlags){0});
@@ -672,7 +560,10 @@ static Vec3 rayLuminanceRecursive(TraverseInit init,Vec3 position,Vec3 direction
 	VoxelStatic* voxel_s = g_voxel_static + voxel->type;
 
 	if(voxel_s->emiter)
-		return flags.no_emit ? (Vec3){0} : vec3Shl(voxel_s->color,0);
+		return flags.no_emit ? (Vec3){0} : vec3Shl(voxel_s->color,4);
+
+    if(voxel->type == VOXEL_CUSTOM_EMIT)
+		return flags.no_emit ? (Vec3){0} : vec3Shl(voxel->color,4);
 
 	Vec3 end_pos = rayVoxelHitPosition(voxel,position,direction,side);
 
@@ -684,12 +575,17 @@ static Vec3 rayLuminanceRecursive(TraverseInit init,Vec3 position,Vec3 direction
             return vec3MulS(rayLuminanceRecursive(initTraverse(end_pos),end_pos,offset,depth - 1,flags),FIXED_ONE - (FIXED_ONE / 8));
         }
         case VOXEL_GLASS:{
-            end_pos.a[side] -= direction.a[side] < 0 ? 0x10 : -0x10;
+            end_pos.a[side] -= direction.a[side] < 0 ? REAL_EPSILON : -REAL_EPSILON;
             return rayLuminanceRecursive(initTraverse(end_pos),end_pos,direction,depth - 1,flags);
         }
         case VOXEL_WATER:{
-            end_pos.a[side] -= direction.a[side] < 0 ? 0x10 : -0x10;
-            return rayLuminanceRecursive(initTraverse(end_pos),end_pos,direction,depth - 1,flags);
+            real distance_o = rayCubeIntersection(voxelWorldPosCenter(voxel),depthToSize(voxel->depth) / 2,position,direction);
+            real distance_i = rayCubeIntersectionInside(voxelWorldPosCenter(voxel),depthToSize(voxel->depth) / 2,position,direction);
+            real distance = distance_i - distance_o;
+            distance /= 4;
+            distance = tReciprocal(realMulR(distance,distance) + FIXED_ONE);
+            end_pos.a[side] -= direction.a[side] < 0 ? REAL_EPSILON : -REAL_EPSILON;
+            return vec3Mix(water_color,rayLuminanceRecursive(initTraverse(end_pos),end_pos,direction,depth - 1,flags),distance);
         }
     }
 
@@ -723,30 +619,38 @@ static Vec3 rayLuminanceRecursive(TraverseInit init,Vec3 position,Vec3 direction
 		Vec3 texel = vec3Shr(pixelColorToColor(textureLookup(voxel_s->texture,uv.x,uv.y,3)),4);
 		return texel;
     }
-    
-	int mipmap = tClamp(mipmapGet(end_pos,g_normal_table[side << 1],vec3Distance(vec3Shr(end_pos,4),vec3Shr(g_surface.position,4)),surfaceAngle(position,g_normal_table[side << 1])),26 - LUXEL_MAX_MIPMAP,31);
-    
+    Vec3 normal = g_normal_table[side << 1 | direction.a[side] < 0];
+	int mipmap = mipmapGet(end_pos,normal,vec3Distance(vec3Shr(end_pos,4),vec3Shr(g_surface.position,4)),FIXED_ONE);
+
 	Vec3 luxel_pos = vec3Shr(end_pos,mipmap);
-	unsigned hash = luxelHashGet(luxel_pos,mipmap);
+	unsigned hash = luxelHashGet(luxel_pos,mipmap,normal);
 	Luxel* luxel = luxelGet(hash);
 
     if(!luxel)
-        return (Vec3){0};
+        return (Vec3){0,0,0};
     
 	if(luxel->hash == hash){
 		Vec3 luminance = vec3Add(vec3Shr(luxel->luminance,4),vec3Shr(luxel->luminance_direct,4));
-		if(!voxel_s->texture)
+        Texture* texture = voxel->type == VOXEL_CUSTOM ? g_textures + voxel->texture_id : voxel_s->texture;
+		if(!texture){
+            if(voxel->type == VOXEL_CUSTOM)
+                return vec3Mul(luminance,voxel->color);
 			return vec3Mul(luminance,voxel_s->color);
+        }
         if(!g_options.textures)
             return luminance;
 
 		Vec2 uv = voxelGuiPositionGet(voxel,position,direction,side);
-		
-		uv.x = realShr(realMulR(realMulR(uv.x,voxel_s->texture_size),depthToSize(voxel->depth)),4);
-		uv.y = realShr(realMulR(realMulR(uv.y,voxel_s->texture_size),depthToSize(voxel->depth)),4);
 
-		Vec3 texel = vec3Shr(pixelColorToColor(textureLookup(voxel_s->texture,uv.x,uv.y,3)),4);
-		return vec3Mul(luminance,texel);
+		uv.x = realShr(realMulR(realMulR(uv.x,voxel_s->texture_size),depthToSize(voxel->depth)),5);
+		uv.y = realShr(realMulR(realMulR(uv.y,voxel_s->texture_size),depthToSize(voxel->depth)),5);
+
+		Vec3 texel = vec3Shr(pixelColorToColor(textureLookup(texture,uv.x,uv.y,2)),4);
+        texel = vec3Mul(texel,luminance);
+        if(voxel->type == VOXEL_CUSTOM)
+            texel = vec3Mul(texel,voxel->color);
+        
+		return texel;
 	}
 	return vec3Single(0);
 }
@@ -754,23 +658,35 @@ static Vec3 rayLuminanceRecursive(TraverseInit init,Vec3 position,Vec3 direction
 Vec3 rayLuminance(Vec3 position,Vec3 direction,RayLuminanceFlag flags){
 	TraverseInit init = initTraverse(position);
 	Voxel* voxel = voxelPositionGet(position);
+    direction = vec3Epsilon(direction);
     if(!voxelTranslucent(voxel))
         return (Vec3){0};
+    if(voxel->type == VOXEL_WATER){
+        real distance = rayCubeIntersectionInside(voxelWorldPosCenter(voxel),depthToSize(voxel->depth) / 2,position,direction);
+        if(distance > REAL_EPSILON * 0x40){
+            position = vec3Add(position,vec3MulS(direction,distance - REAL_EPSILON * 0x10));
+            distance /= 4;
+            distance = tReciprocal(realMulR(distance,distance) + FIXED_ONE);
+            
+            return vec3Mix(water_color,rayLuminance(position,direction,flags),distance);
+        }
+    }
 	return rayLuminanceRecursive(init,position,direction,8,flags);
 }
 
 Vec3 rayLuminanceInit(TraverseInit init,Vec3 position,Vec3 direction){
+    direction = vec3Epsilon(direction);
 	return rayLuminanceRecursive(init,position,direction,8,(RayLuminanceFlag){0});
 }
 
 Vec3 rayLuminanceTrace(Vec3 position,Vec3 direction){
+    direction = vec3Epsilon(direction);
 	return rayLuminanceRecursive(initTraverse(position),position,direction,8,(RayLuminanceFlag){.fulltrace = true});
 }
 
 structure(LightingWorkData){
 	Voxel* voxel;
 	Vec3 position;
-	Vec3 light_position;
 	Vec3 u;
     Vec3 v;
     int side;
@@ -816,6 +732,69 @@ Vec3 luminanceQuery(Voxel* voxel,Vec3 normal,Vec3 position,int n_sample){
 	return rayLuminance(position,offset,(RayLuminanceFlag){.no_emit = true});
 }
 
+static void lightingPlaneRecursive(Voxel* voxel,LightingWorkData* lighting_data,Vec3 block_pos,Vec3i coord,Plane plane,int depth){
+    real cube_size = depthToSize(voxel->depth + depth);
+    Vec3 cube_pos = {
+        realMulR(intToReal(coord.x),cube_size),
+        realMulR(intToReal(coord.y),cube_size),
+        realMulR(intToReal(coord.z),cube_size),
+    };
+#if 1
+    if(!intersectCubePlane(vec3SubS(cube_pos,depthToSize(voxel->depth) / 2),cube_size,plane))
+        return;
+#endif
+    real dist = sdVoxel(g_surface.position,vec3Add(block_pos,vec3AddS(cube_pos,cube_size)),cube_size / 2) / 0x10;
+
+    real angle = surfaceAngle(vec3Add(block_pos,vec3AddS(cube_pos,cube_size)),plane.normal);
+    
+    int mipmap = mipmapGet(vec3Add(block_pos,vec3AddS(cube_pos,cube_size / 2)),plane.normal,dist,angle);
+    
+    int split = 25 + -mipmap - voxel->depth;
+
+	VoxelStatic* voxel_s = g_voxel_static + voxel->type;
+    if(depth < split){
+#if 0
+        if(sdSquareSquare(vec3Shr(g_surface.position,4),vec3Shr(block_pos_t,4),size >> 4,side) > RENDER_DISTANCE)
+            return;
+#endif 
+        coord.x <<= 1;
+        coord.y <<= 1;
+        coord.z <<= 1;
+        
+        lightingPlaneRecursive(voxel,lighting_data,block_pos,(Vec3i){coord.x + 0,coord.y + 0,coord.z + 0},plane,depth + 1);
+        lightingPlaneRecursive(voxel,lighting_data,block_pos,(Vec3i){coord.x + 0,coord.y + 1,coord.z + 0},plane,depth + 1);
+        lightingPlaneRecursive(voxel,lighting_data,block_pos,(Vec3i){coord.x + 1,coord.y + 0,coord.z + 0},plane,depth + 1);
+        lightingPlaneRecursive(voxel,lighting_data,block_pos,(Vec3i){coord.x + 1,coord.y + 1,coord.z + 0},plane,depth + 1);
+
+        lightingPlaneRecursive(voxel,lighting_data,block_pos,(Vec3i){coord.x + 0,coord.y + 0,coord.z + 1},plane,depth + 1);
+        lightingPlaneRecursive(voxel,lighting_data,block_pos,(Vec3i){coord.x + 0,coord.y + 1,coord.z + 1},plane,depth + 1);
+        lightingPlaneRecursive(voxel,lighting_data,block_pos,(Vec3i){coord.x + 1,coord.y + 0,coord.z + 1},plane,depth + 1);
+        lightingPlaneRecursive(voxel,lighting_data,block_pos,(Vec3i){coord.x + 1,coord.y + 1,coord.z + 1},plane,depth + 1);
+        return;
+    }
+    //PRINT_VAR(split);
+	Vec3 light_pos = vec3Add(block_pos,vec3AddS(cube_pos,cube_size / 2));
+	real size = cube_size / 2;
+
+    if(lighting_work_data_ptr >= countof(lighting_work_data) - 1)
+		return;
+
+	Vec3 position = light_pos;
+    
+	LightingWorkData* light_data = lighting_data + lighting_work_data_ptr++;
+
+    Vec3 normal = getLookDirection(voxel->angle);
+    Vec3 tangent = vec3Normalize(vec3Cross(normal,(Vec3){FIXED_ONE,0,0}));
+	*light_data = (LightingWorkData){
+		.position = position,
+		.mipmap = mipmap,
+        .u = tangent,
+        .v = vec3Cross(normal,tangent),
+		.voxel = voxel,
+		.size = size
+	};
+}
+
 static void lightingSlopeRecursive(Voxel* voxel,LightingWorkData* lighting_data,Vec3 block_pos,Vec3 u,Vec3 v,Vec2i coord,int depth){
     Vec3 normal = vec3Cross(u,v);
     
@@ -849,8 +828,9 @@ static void lightingSlopeRecursive(Voxel* voxel,LightingWorkData* lighting_data,
 			distance_max_index = i;
 		}
 	}
-    int mipmap = tClamp(mipmapGet(squarePointClosestPosition(pos[0],size_u,normal),normal,distance_max,FIXED_ONE),26 - LUXEL_MAX_MIPMAP,31);
-
+    int mipmap = mipmapGet(squarePointClosestPosition(pos[0],size_u,normal),normal,distance_max,FIXED_ONE);
+    mipmap = tClamp(mipmap,0,31);
+    
     int split = 25 + -mipmap - voxel->depth;
 
 	VoxelStatic* voxel_s = g_voxel_static + voxel->type;
@@ -876,15 +856,14 @@ static void lightingSlopeRecursive(Voxel* voxel,LightingWorkData* lighting_data,
     if(lighting_work_data_ptr >= countof(lighting_work_data) - 1)
 		return;
 
-	mipmap = tClamp(mipmapGet(light_pos,normal,distance_max,FIXED_ONE),26 - LUXEL_MAX_MIPMAP,31);
+	mipmap = mipmapGet(light_pos,normal,distance_max,FIXED_ONE);
 
 	Vec3 position = light_pos;
     
 	LightingWorkData* light_data = lighting_data + lighting_work_data_ptr++;
-
+    
 	*light_data = (LightingWorkData){
 		.position = position,
-		.light_position = light_pos,
 		.mipmap = mipmap,
 	    .u = u,
         .v = v,
@@ -919,16 +898,15 @@ static void lightingSide(Voxel* voxel,LightingWorkData* lighting_data,Vec3 block
 		}
 	}
 
-	int mipmap = tClamp(mipmapGet(light_pos,normal,distance_max,angle),26 - LUXEL_MAX_MIPMAP,31);
+	int mipmap = mipmapGet(light_pos,normal,distance_max,angle);
 
 	Vec3 position = light_pos;
-	light_pos.a[side >> 1] += side & 1 ? REAL_EPSILON : -REAL_EPSILON;
+	position.a[side >> 1] += side & 1 ? REAL_EPSILON : -REAL_EPSILON;
     
 	LightingWorkData* light_data = lighting_data + lighting_work_data_ptr++;
 
 	*light_data = (LightingWorkData){
 		.position = position,
-		.light_position = light_pos,
 		.mipmap = mipmap,
 		.voxel = voxel,
 		.size = size,
@@ -966,14 +944,14 @@ static void lightingSideRecursive(Voxel* voxel,LightingWorkData* lighting_data,V
 
 	distance_max = vec3Distance(vec3Shr(g_surface.position,4),vec3Shr(pos[distance_max_index],4));
 
-	Vec3 cube_c = pos[0];	
+	Vec3 cube_c = pos[0];
 
 	cube_c.a[axis.x] = tClamp(g_surface.position.a[axis.x],pos[0].a[axis.x],pos[3].a[axis.x]);
 	cube_c.a[axis.y] = tClamp(g_surface.position.a[axis.y],pos[0].a[axis.y],pos[3].a[axis.y]);
 
 	Vec3 normal = g_normal_table[side];
 	
-	int mipmap = tClamp(mipmapGet(squarePointClosestPosition(pos[0],size,normal),normal,distance_max,angle),26 - LUXEL_MAX_MIPMAP,31);
+	int mipmap = mipmapGet(squarePointClosestPosition(pos[0],size,normal),normal,distance_max,angle);
 
 	int split = 25 + -mipmap - voxel->depth;
 	
@@ -983,16 +961,13 @@ static void lightingSideRecursive(Voxel* voxel,LightingWorkData* lighting_data,V
 		v_pos.a[axis.y] += coord.y;
 		if(side & 1)
 			v_pos.a[side >> 1] += (1 << depth) - 1;
-#if 1
-		if(sdSquareSquare(vec3Shr(g_surface.position,4),vec3Shr(block_pos_t,4),realShr(size,4),side) > RENDER_DISTANCE)
-			return;
-#if 1
+#if 0
 		if(!squareVisible(v_pos,voxel->depth + depth,side,voxel->type))
 			return;
 #endif
-        if(!squareInScreenSpace(pos))
+        if(!squareInScreenSpace(g_view_plane_lighting,pos))
 			return;
-		#endif
+        
 		coord.x <<= 1;
 		coord.y <<= 1;
 		lightingSideRecursive(voxel,lighting_data,block_pos,side,(Vec2i){coord.x + 0,coord.y + 0},depth + 1,angle);
@@ -1047,7 +1022,7 @@ static void lightingCollect(LightingWorkData* lighting_data){
     static struct{
         Voxel* voxel;
         int child_index;
-    } stack[0x100] = {{.voxel = &g_voxel}};
+    } stack[0x100] = {{.voxel = &g_world.voxel}};
     while(lighting_work_data_ptr < countof(lighting_work_data) - 1){
         Voxel* voxel = stack[stack_depth].voxel;
         real block_size = depthToSize(voxel->depth);
@@ -1063,10 +1038,12 @@ static void lightingCollect(LightingWorkData* lighting_data){
                 {block_pos.x + block_size,block_pos.y + block_size,block_pos.z + 0},
                 {block_pos.x + block_size,block_pos.y + block_size,block_pos.z + block_size},
             };
-            if(!cubeInScreenSpace(point))
+            if(!cubeInScreenSpace(g_view_plane_lighting,point))
                 goto next;
+            
             if(sdVoxelSquare(vec3Shr(g_surface.position,4),vec3Shr(block_pos,4),block_size / 16) > RENDER_DISTANCE)
                 goto next;
+            
             if(stack[stack_depth].child_index < 8){
                 stack[stack_depth + 1].voxel = voxel->child_s[stack[stack_depth].child_index];
                 stack[stack_depth + 1].child_index = 0;
@@ -1085,6 +1062,22 @@ static void lightingCollect(LightingWorkData* lighting_data){
         if(voxel_s->slope){
             lightingSlope(voxel,lighting_data,block_pos,block_size);
         }
+        else if(voxel->type == VOXEL_PLANE){
+            lightingPlaneRecursive(voxel,lighting_data,block_pos,(Vec3i){0},(Plane){.normal = getLookDirection(voxel->angle)},voxel->distance);
+            real preload_offset = FIXED_ONE;
+            if(g_surface.position.x - block_pos.x < preload_offset)
+                lightingSidePre(voxel,lighting_data,block_pos,0);
+            if(g_surface.position.x - block_pos.x - block_size > -preload_offset)
+                lightingSidePre(voxel,lighting_data,vec3Add(block_pos,(Vec3){block_size,0,0}),1);
+            if(g_surface.position.y - block_pos.y < preload_offset)
+                lightingSidePre(voxel,lighting_data,block_pos,2);
+            if(g_surface.position.y - block_pos.y - block_size > -preload_offset)
+                lightingSidePre(voxel,lighting_data,vec3Add(block_pos,(Vec3){0,block_size,0}),3);
+            if(g_surface.position.z - block_pos.z < preload_offset)
+                lightingSidePre(voxel,lighting_data,block_pos,4);
+            if(g_surface.position.z - block_pos.z - block_size > -preload_offset)
+                lightingSidePre(voxel,lighting_data,vec3Add(block_pos,(Vec3){0,0,block_size}),5);
+        }
         else if(voxel_s->emiter){
             LightingWorkData* light_data = lighting_data + lighting_work_data_ptr++;
 
@@ -1100,17 +1093,18 @@ static void lightingCollect(LightingWorkData* lighting_data){
                 else
                     block_pos.z -= realMulR(block_size,voxel->animation);
             }
-            if(g_surface.position.x - block_pos.x < 0)
+            real preload_offset = FIXED_ONE;
+            if(g_surface.position.x - block_pos.x < preload_offset)
                 lightingSidePre(voxel,lighting_data,block_pos,0);
-            if(g_surface.position.x - block_pos.x - block_size > 0)
+            if(g_surface.position.x - block_pos.x - block_size > -preload_offset)
                 lightingSidePre(voxel,lighting_data,vec3Add(block_pos,(Vec3){block_size,0,0}),1);
-            if(g_surface.position.y - block_pos.y < 0)
+            if(g_surface.position.y - block_pos.y < preload_offset)
                 lightingSidePre(voxel,lighting_data,block_pos,2);
-            if(g_surface.position.y - block_pos.y - block_size > 0)
+            if(g_surface.position.y - block_pos.y - block_size > -preload_offset)
                 lightingSidePre(voxel,lighting_data,vec3Add(block_pos,(Vec3){0,block_size,0}),3);
-            if(g_surface.position.z - block_pos.z < 0)
+            if(g_surface.position.z - block_pos.z < preload_offset)
                 lightingSidePre(voxel,lighting_data,block_pos,4);
-            if(g_surface.position.z - block_pos.z - block_size > 0)
+            if(g_surface.position.z - block_pos.z - block_size > -preload_offset)
                 lightingSidePre(voxel,lighting_data,vec3Add(block_pos,(Vec3){0,0,block_size}),5);
         }
     next:
@@ -1123,9 +1117,15 @@ static void lightingTrace(void* arg_void){
     
 	for(int i = arg->index;i < arg->index + arg->amount;i++){
 		LightingWorkData* light_data = arg->data + i;
-        
+
+		Vec3 normal = vec3Cross(light_data->u,light_data->v);
+#if 0
+        PRINT_VAR(normal.x * 0x10000);
+        PRINT_VAR(normal.y * 0x10000);
+        PRINT_VAR(normal.z * 0x10000);
+#endif   
 		Vec3 luxel_pos = vec3Shr(light_data->position,light_data->mipmap);
-		unsigned hash = luxelHashGet(luxel_pos,light_data->mipmap);
+		unsigned hash = luxelHashGet(luxel_pos,light_data->mipmap,normal);
 		Luxel* luxel = luxelGet(hash);
         
 		if(!luxel){
@@ -1144,36 +1144,26 @@ static void lightingTrace(void* arg_void){
         if(luxel->tick_last_updated == g_time.frame_tick)
 			continue;
 
-		Vec3 normal = light_data->use_side ? g_normal_table[light_data->side] : vec3Cross(light_data->u,light_data->v);
-#if 1
         if(!(luxel->flags & LUXEL_DIRECTSAMPLED)){
-            Vec3 direct_lighting = voxelEmit(&g_voxel,light_data->light_position,light_data->mipmap,normal,false);
+            Vec3 direct_lighting = voxelEmit(&g_world.voxel,light_data->position,light_data->mipmap,normal,false);
+
+            Voxel* voxel = voxelPositionGet(light_data->position);
+            if(voxelTranslucent(voxel)){
+                if(g_world.skylight){
+                    Vec3 direction = getLookDirection(g_world.skylight_angle);
+                    if(!treeRayTraceAndInit(light_data->position,direction,0,(TreeTraceFlags){.entity = false})){
+                        Vec3 luminance = g_world.skylight_luminance;
+                        luminance = vec3MulS(luminance,vec3Dot(normal,direction));
+                        direct_lighting = vec3Add(direct_lighting,luminance);
+                    }
+                }
+            }
             luxel->n_sample = tMin(luxel->n_sample + 1 & ~LUXEL_DIRECTSAMPLED,N_LUXEL_SAMPLE) | (luxel->n_sample & LUXEL_DIRECTSAMPLED);
-            luxel->luminance_direct = direct_lighting;
-   
             luxel->flags |= LUXEL_DIRECTSAMPLED;
-#if 0
-            luxel->luminance_direct.x = realRandom(FIXED_ONE);
-            luxel->luminance_direct.y = realRandom(FIXED_ONE);
-            luxel->luminance_direct.z = realRandom(FIXED_ONE);
-
-            luxel->luminance_direct.x = intToFixed(tHash(light_data->mipmap + 0) & 0xFF) / 0x10;
-            luxel->luminance_direct.y = intToFixed(tHash(light_data->mipmap + 1) & 0xFF) / 0x10;
-            luxel->luminance_direct.z = intToFixed(tHash(light_data->mipmap + 2) & 0xFF) / 0x10;
-
-#endif 
+            luxel->luminance_direct = direct_lighting;
         }
-#endif
-#if 0
         else{
-            luxel->n_sample = tMin(luxel->n_sample + 1 & ~LUXEL_DIRECTSAMPLED,N_LUXEL_SAMPLE) | (luxel->n_sample & LUXEL_DIRECTSAMPLED);
-            luxel->tick_last_updated = g_time.frame_tick;
-        }
-#endif
-#if 1
-        else{
-            Vec3 position = light_data->light_position;
-#if 1
+            Vec3 position = light_data->position;
             position = vec3Add(position,vec3MulS(light_data->u,realMulR(realRandom(FIXED_ONE),light_data->size) - light_data->size / 2));
             position = vec3Add(position,vec3MulS(light_data->v,realMulR(realRandom(FIXED_ONE),light_data->size) - light_data->size / 2));
             if(light_data->use_side){
@@ -1181,19 +1171,16 @@ static void lightingTrace(void* arg_void){
                 position.a[axis.x] += realMulR(realRandom(FIXED_ONE),light_data->size) - light_data->size / 2;
                 position.a[axis.y] += realMulR(realRandom(FIXED_ONE),light_data->size) - light_data->size / 2;
             }
-#endif
             Vec3 luminance = luminanceQuery(light_data->voxel,normal,position,luxel->n_sample & ~LUXEL_DIRECTSAMPLED);
             luminance = vec3Shr(luminance,4);
             luxel->n_sample = tMin(luxel->n_sample + 1 & ~LUXEL_DIRECTSAMPLED,N_LUXEL_SAMPLE) | (luxel->n_sample & LUXEL_DIRECTSAMPLED);
             luxel->luminance = vec3Mix(luxel->luminance,luminance,FIXED_ONE / (luxel->n_sample & ~LUXEL_DIRECTSAMPLED));
             luxel->tick_last_updated = g_time.frame_tick;
         }
-#endif
 	}
 }
 
 void lightingOctree(void){
-#if 1
     if(!g_options.lighting_engine)
         return;
 	for(int i = 0;i < countof(luxel_dynamic_cache);i++){
@@ -1217,5 +1204,4 @@ void lightingOctree(void){
     threadWork(lightingTrace,thread_arguments,sizeof *thread_arguments);
 
 	lighting_work_data_ptr = 0;
-#endif
 }

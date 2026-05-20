@@ -24,6 +24,7 @@ typedef enum {
 	TEXTURE_SKYBOX_XY_UP,
 	TEXTURE_SKYBOX_XY_DOWN,
 	TEXTURE_STONE2,
+    TEXTURE_ECOUNT,
 } TextureType;
 
 structure(Texture){
@@ -46,7 +47,7 @@ int cubemapColorGet2(Cubemap* cubemap,Vec3 direction);
 Vec3 cubemapDirectionGet(Cubemap* cubemap,Side side,int x,int y);
 
 void texturesGenerate(void);
-int textureLookup(Texture* texture,int x,int y,int mipmap);
+int textureLookup(Texture* texture,real x,real y,int mipmap);
 void generateMipmaps(Texture* texture);
 
 Texture textureCreate(int size);

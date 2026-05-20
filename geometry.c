@@ -76,7 +76,7 @@ real sdVoxelSquare(Vec3 point,Vec3 voxel_position,real voxel_size){
 
 real rayBoxIntersection(Vec3 box_position,Vec3 box_size,Vec3 ro,Vec3 rd){
 	ro = vec3Sub(ro,box_position);
-    Vec3 m = vec3Div(vec3Single(FIXED_ONE),rd);
+    Vec3 m = vec3Reciprocal(rd);
     Vec3 n = vec3Mul(m,ro);
 	Vec3 k = vec3Mul((Vec3){tAbs(m.x),tAbs(m.y),tAbs(m.z)},box_size);
     Vec3 t1 = vec3Sub((Vec3){-n.x,-n.y,-n.z},k);
@@ -88,34 +88,34 @@ real rayBoxIntersection(Vec3 box_position,Vec3 box_size,Vec3 ro,Vec3 rd){
     return tN;
 }
 
-real rayVoxelIntersection(Voxel* voxel,Vec3 ro,Vec3 rd,Vec3* normal){
-	Vec3 voxel_pos = (Vec3){
-		realShr(voxel->position_x * FIXED_ONE * 2,voxel->depth),
-		realShr(voxel->position_y * FIXED_ONE * 2,voxel->depth),
-		realShr(voxel->position_z * FIXED_ONE * 2,voxel->depth),
-	};
-	ro = vec3Sub(ro,vec3AddS(voxel_pos,realShr(FIXED_ONE,voxel->depth)));
-    Vec3 m = vec3Div(vec3Single(FIXED_ONE),rd);
+real rayCubeIntersection(Vec3 cube_position,real cube_size,Vec3 ro,Vec3 rd){
+	ro = vec3Sub(ro,cube_position);
+    
+    Vec3 m = vec3Reciprocal(rd);
     Vec3 n = vec3Mul(m,ro);
-	Vec3 k = vec3MulS((Vec3){tAbs(m.x),tAbs(m.y),tAbs(m.z)},realShr(FIXED_ONE,voxel->depth));
+	Vec3 k = vec3MulS((Vec3){tAbs(m.x),tAbs(m.y),tAbs(m.z)},cube_size);
     Vec3 t1 = vec3Sub((Vec3){-n.x,-n.y,-n.z},k);
     Vec3 t2 = vec3Add((Vec3){-n.x,-n.y,-n.z},k);
     real tN = tMax(tMax(t1.x,t1.y),t1.z);
     real tF = tMin(tMin(t2.x,t2.y),t2.z);
 	if(tN > tF || tF < 0)
 		return 0;
-	real cmp = tN > 0 ? tN : tF;
-	if(tN > 0){
-		normal->x = tN > t1.x ? 0 : FIXED_ONE;
-		normal->y = tN > t1.y ? 0 : FIXED_ONE;
-		normal->z = tN > t1.z ? 0 : FIXED_ONE;
-	}
-	else{
-		normal->x = tF < t1.x ? 0 : FIXED_ONE;
-		normal->y = tF < t1.y ? 0 : FIXED_ONE;
-		normal->z = tF < t1.z ? 0 : FIXED_ONE;
-	}
     return tN;
+}
+
+real rayCubeIntersectionInside(Vec3 cube_position,real cube_size,Vec3 ro,Vec3 rd){
+	ro = vec3Sub(ro,cube_position);
+    
+    Vec3 m = vec3Reciprocal(rd);
+    Vec3 n = vec3Mul(m,ro);
+	Vec3 k = vec3MulS((Vec3){tAbs(m.x),tAbs(m.y),tAbs(m.z)},cube_size);
+    Vec3 t1 = vec3Sub((Vec3){-n.x,-n.y,-n.z},k);
+    Vec3 t2 = vec3Add((Vec3){-n.x,-n.y,-n.z},k);
+    real tN = tMax(tMax(t1.x,t1.y),t1.z);
+    real tF = tMin(tMin(t2.x,t2.y),t2.z);
+	if(tN > tF || tF < 0)
+		return 0;
+    return tF;
 }
 
 real rayPlaneIntersection(Vec3 pos,Vec3 dir,Plane plane){
@@ -154,23 +154,18 @@ real raySphereIntersection(Vec3 ray_position,Vec3 ray_direction,Vec3 sphere_posi
 }
 
 PlaneCollision intersectBoxPlane(Vec3 box_position,Vec3 box_size,Plane plane){
-    Vec3 e = {
-        box_size.x / 2,
-        box_size.y / 2,
-        box_size.z / 2
-    };
     Vec3 center = {
-        box_position.x + e.x,
-        box_position.y + e.y,
-        box_position.z + e.z
+        box_position.x,
+        box_position.y,
+        box_position.z
     };
 
     real s = vec3Dot(plane.normal,center) + plane.distance;
 
     real r =
-        realMulR(e.x,tAbs(plane.normal.x)) +
-        realMulR(e.y,tAbs(plane.normal.y)) +
-        realMulR(e.z,tAbs(plane.normal.z));
+        realMulR(box_size.x,tAbs(plane.normal.x)) +
+        realMulR(box_size.y,tAbs(plane.normal.y)) +
+        realMulR(box_size.z,tAbs(plane.normal.z));
 
     if(tAbs(s) <= r)
         return PLANE_BETWEEN;
@@ -178,4 +173,22 @@ PlaneCollision intersectBoxPlane(Vec3 box_position,Vec3 box_size,Plane plane){
     return s > r ? PLANE_FRONT : PLANE_BACK;
 }
 
+PlaneCollision intersectCubePlane(Vec3 cube_position,real cube_size,Plane plane){
+    Vec3 center = {
+        cube_position.x,
+        cube_position.y,
+        cube_position.z
+    };
 
+    real s = vec3Dot(plane.normal,center) + plane.distance;
+
+    real r =
+        realMulR(cube_size,tAbs(plane.normal.x)) +
+        realMulR(cube_size,tAbs(plane.normal.y)) +
+        realMulR(cube_size,tAbs(plane.normal.z));
+
+    if(tAbs(s) <= r)
+        return PLANE_BETWEEN;
+
+    return s > r ? PLANE_FRONT : PLANE_BACK;
+}

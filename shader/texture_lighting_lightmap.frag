@@ -2,8 +2,9 @@
 out vec4 FragColor;
 in vec2 textcoords_io;
 in vec3 world_pos_io;
-flat in vec3 u_io;
-flat in vec3 v_io;
+in vec3 lightmap_pos_io;
+flat in vec3 luminance_io;
+flat in ivec3 normal_io;
 flat in int lightmap_index_io;
 
 uniform sampler2D ourTexture;
@@ -12,69 +13,76 @@ uniform vec3 camera_position;
 
 int floatExponent(float x){
     int bits = floatBitsToInt(x);
-    return ((bits >> 23) & 0xFF) - 127;
+    return max(((bits >> 23) & 0xFF) - 127,14);
 }
     
 ivec2 to2D(int index){
     return ivec2(index % 4096,index / 4096);
 }
 
-uint hash4(uint x,uint y,uint z,uint w){
+uint bitRotateRight(uint x,int r){
+    r &= 31;
+    return (x >> r) | (x << (32 - r));
+}
+
+uint tHash(uint x){
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+	return x;
+}
+
+uint hash4(uint x,uint y,uint z,uint w,uint n_x,uint n_y,uint n_z){
     uint h = 0x811C9DC5u;
-    
-    h ^= x;
-	h *= 0x27d4eb2du;
-    h ^= y;
-	h *= 0x165667b1u;
-    h ^= z;
-	h *= 0x1b873593u;
-    h ^= w;
-    h *= 0x85ebca6bu;
-    
-    h ^= h >> 16;
+
+    uint v[7];
+    v[0] = x;
+    v[1] = y;
+    v[2] = z;
+    v[3] = w;
+    v[4] = n_x + 0x80u >> 8u;
+    v[5] = n_y + 0x80u >> 8u;
+    v[6] = n_z + 0x80u >> 8u;
+
+    for(int i = 0;i < 7;i++){
+        h ^= v[i];
+        h = tHash(h);
+    }
+
     return h;
 }
 
-uint luxelHashGet(ivec3 position,int depth){
-	return hash4(uint(position.x),uint(position.y),uint(position.z),uint(depth));
+uint luxelHashGet(ivec3 position,int depth,ivec3 normal){
+	return hash4(uint(position.x),uint(position.y),uint(position.z),uint(depth),uint(normal.x),uint(normal.y),uint(normal.z));
 }
 
 uint luxelGet(uint hash){
 	return hash % 0x40000u * 4u;
 }
 
-vec3 luxelGetColor(ivec3 world_pos,float d){
+vec4 luxelGetColor(ivec3 world_pos,float d,ivec3 normal){
     int depth = floatExponent(d);
-    depth = max(depth,14);
     
     ivec3 world_pos_s = world_pos >> depth;
     
     int hash_entry;
-    uint hash = luxelHashGet(world_pos_s,depth);
+    uint hash = luxelHashGet(world_pos_s,depth,normal);
 
-    int parent = 0;
     hash_entry = int(luxelGet(hash));
 #if 1
     for(int i = 0;i < 4;i++){
         hash_entry = int(luxelGet(hash + uint(i)));
         if(uint(texelFetch(lightmap,to2D(hash_entry + 3),0).r) == hash)
             break;
-        if(i == 3){
-            if(parent == 2){
-                return vec3(0.0,0.0,0.0);
-            }
-            else{
-                parent += 1;
-                i = -1;
-                hash = luxelHashGet(world_pos >> depth + parent,depth + parent);
-            }
-        }
+        if(i == 3)
+            return vec4(0.0,0.0,0.0,0.0);
     }
 #endif
     float red   = intBitsToFloat(texelFetch(lightmap,to2D(hash_entry + 2),0).r);
     float green = intBitsToFloat(texelFetch(lightmap,to2D(hash_entry + 1),0).r);
     float blue  = intBitsToFloat(texelFetch(lightmap,to2D(hash_entry + 0),0).r);
-    return vec3(red,green,blue);
+
+    return vec4(red,green,blue,1.0);
 }
 
 vec3 CubicHermite(vec3 A,vec3 B,vec3 C,vec3 D,float t){
@@ -125,26 +133,66 @@ vec3 BicubicHermiteTextureSample(sampler2D texture_2d,vec2 P){
 }
 
 void main(){
+    ivec3 normal = normal_io;
+
     ivec3 world_pos = ivec3(world_pos_io);
 
-    float d = (distance(camera_position,world_pos_io) + 30000.0f) / 32.0;
+    float d = (distance(camera_position,world_pos_io) + 30000.0f) / 64.0;
+    float dt = dot(normalize(world_pos_io - camera_position),vec3(normal) / 0x10000);
+    float s_angle = abs(dt) / 2.0 + 0.5;
+    s_angle = 1.0 / s_angle;
+    d *= s_angle;
     int depth = floatExponent(d);
-    depth = max(depth,14);
-    vec3 world_pos_n = fract(vec3(world_pos) / (1 << depth));
-    vec2 uv = vec2(dot(world_pos_n,u_io),dot(world_pos_n,v_io));
+    vec3 color[4];
+    color[0] = vec3(0.0);
+    color[1] = vec3(0.0);
+    color[2] = vec3(0.0);
+    color[3] = vec3(0.0);
 
-    ivec3 offset_u = ivec3(u_io * (1 << depth));
-    ivec3 offset_v = ivec3(v_io * (1 << depth));
-
-    vec3 ll = luxelGetColor(world_pos,d);
-    vec3 lh = luxelGetColor(world_pos + offset_u,d);
-    vec3 hh = luxelGetColor(world_pos + offset_u + offset_v,d);
-    vec3 hl = luxelGetColor(world_pos + offset_v,d);
-
-    vec3 lx1 = mix(ll,lh,uv.x);
-    vec3 lx2 = mix(hl,hh,uv.x);
-    
     FragColor.a = 1.0;
+#if 1
+    for(int j = 0;j < 3;j++){
+        int offset = 1 << depth;
+
+        ivec3 offsets[4];
+        offsets[0] = ivec3(0.0);
+        offsets[1] = ivec3(offset,0,0);
+        offsets[2] = ivec3(offset,offset,0);
+        offsets[3] = ivec3(0,offset,0);
+        int i = 0;
+        for(;i < 4;i++){
+            vec4 result = luxelGetColor(ivec3(lightmap_pos_io) + offsets[i],d,normal_io);
+            if(result.a < 0.5)
+                break;
+            color[i] = result.rgb;
+        }
+        if(i == 4)
+            break;
+        if(j == 2){
+            depth -= 2;
+            d /= 4.0;
+            for(int k = 0;k < 3;k++){
+                vec4 result = luxelGetColor(ivec3(lightmap_pos_io),d,normal_io);
+                if(result.a > 0.5){
+                    FragColor.rgb = result.rgb;
+                    vec3 texture_color = BicubicHermiteTextureSample(ourTexture,textcoords_io);           
+                    FragColor.rgb *= texture_color;
+                    return;
+                }
+                d *= 2.0;
+                depth += 1;
+            }
+            FragColor = vec4(0.0,0.0,0.0,1.0);
+            return;
+        }
+        d *= 2.0;
+        depth += 1;
+    }
+#endif
+    vec2 uv = fract(lightmap_pos_io.rg / (1 << depth));
+
+    vec3 lx1 = mix(color[0],color[1],uv.x);
+    vec3 lx2 = mix(color[3],color[2],uv.x);
   
     FragColor.rgb = mix(lx1,lx2,uv.y);
 #if 0
@@ -155,6 +203,7 @@ void main(){
     ivec3 world_pos_s = world_pos >> depth;
     FragColor.r = fract(float(luxelHashGet(world_pos_s,depth)) / 256);
 #endif
-    vec3 texture_color = BicubicHermiteTextureSample(ourTexture,textcoords_io);
+    vec3 texture_color = BicubicHermiteTextureSample(ourTexture,textcoords_io);           
     FragColor.rgb *= texture_color;
-}
+    FragColor.rgb *= luminance_io;
+}   

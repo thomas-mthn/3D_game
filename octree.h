@@ -29,22 +29,22 @@ static Vec3 g_normal_table[] = {
 	{0,0,FIXED_ONE}
 };
 
-static Vec3 g_u_table[] = {
-	{0,FIXED_ONE,0},
-	{0,FIXED_ONE,0},
-	{FIXED_ONE,0,0},
-    {FIXED_ONE,0,0},
-    {FIXED_ONE,0,0},
-    {FIXED_ONE,0,0},
+static Vec3 g_u_table[6] = {
+    {0,0,FIXED_ONE},  
+    {0,0,FIXED_ONE},   
+    {FIXED_ONE,0,0},   
+    {FIXED_ONE,0,0},   
+    {0,FIXED_ONE,0},   
+    {0,FIXED_ONE,0},   
 };
 
-static Vec3 g_v_table[] = {
-	{0,0,FIXED_ONE},
-    {0,0,FIXED_ONE},
-    {0,0,FIXED_ONE},
-    {0,0,FIXED_ONE},
-    {0,FIXED_ONE,0},
-	{0,FIXED_ONE,0},
+static Vec3 g_v_table[6] = {
+    {0, FIXED_ONE,0},
+    {0,-FIXED_ONE,0},
+    {0,0, FIXED_ONE},
+    {0,0,-FIXED_ONE},
+    { FIXED_ONE,0,0},
+    {-FIXED_ONE,0,0},
 };
 
 typedef enum{
@@ -96,6 +96,9 @@ typedef enum{
     VOXEL_SLOPE_ZNN,
     VOXEL_SLOPE_ZPP,
     VOXEL_SLOPE_ZPN,
+    VOXEL_PLANE,
+    VOXEL_CUSTOM,
+    VOXEL_CUSTOM_EMIT,
     VOXEL_ECOUNT,
 } VoxelType;
 
@@ -122,13 +125,7 @@ structure(Voxel){
             int n_link;
             Voxel** links;
 			Voxel* next_voxel_link;
-			Entity* entity_list;
 			int animation;
-
-			//water 
-			Vec2 splash_position;
-			unsigned splash_tick;
-			unsigned collision_tick;
 
             //chest
 			bool chest_open : 1;
@@ -136,6 +133,19 @@ structure(Voxel){
             
             //string
             String string;
+
+            //plane
+            Vec2 angle;
+            real distance;
+
+            //custom
+            Vec3 color;
+            bool has_texture : 1;
+            bool emiter : 1;
+            int8 texture_id;
+            int8 emit_pow;
+
+            Entity* entity_list;
 		};
 	};
 	//TODO: move this in a temporary structure to safe memory
@@ -151,12 +161,17 @@ structure(VoxelStatic){
     bool translucent : 1;
     bool rd_trace : 1;
     bool slope : 1;
+    bool interact : 1;
     
 	Texture* texture;
 	real texture_size;
 	int n_gui;
 	VoxelGuiElement* gui;
+    int n_gui_interact;
+	VoxelGuiElement* gui_interact;
 
+    Vec3 normal;
+    
     Vec3 slope_u;
     Vec3 slope_v;
     Vec3 slope_offset;
@@ -194,6 +209,25 @@ structure(VoxelSerializedString){
     char string_data[];
 };
 
+structure(VoxelSerializedPlane){
+    VoxelSerialized voxel;
+    Vec2 angle;
+    real distance;
+};
+
+structure(VoxelSerializedCustom){
+    VoxelSerialized voxel;
+    Vec3 color;
+    int16 texture_id;
+    int16 has_texture;
+};
+
+structure(VoxelSerializedCustomEmit){
+    VoxelSerialized voxel;
+    Vec3 color;
+    int emit_pow;
+};
+
 structure(VoxelSerializedParent){
 	VoxelSerialized voxel;
 	int child_s[8];
@@ -207,9 +241,10 @@ structure(TraceEntityResult){
 	};
 };
 
-extern Voxel g_voxel;
 extern Voxel* g_voxel_tick_list;
 extern VoxelStatic g_voxel_static[];
+extern VoxelGuiElement g_voxel_custom_gui[];
+extern VoxelGuiElement g_voxel_custom_emit_gui[];
 extern VoxelGuiElement g_inventory_gui[];
 extern AllocatorFreeList g_allocator_world;
 
@@ -238,9 +273,11 @@ Voxel* treeRayTrace(Voxel* voxel,Vec3 position,Vec3 ray_position,Vec3 direction,
 Voxel* treeRayTraceAndInit(Vec3 position,Vec3 direction,Vec3Axis* side,TreeTraceFlags flags);
 int treeRayTraceIntersectCountAndInit(Vec3 position,Vec3 direction);
 void voxelChildMaskSet(Voxel* voxel);
+void octreeRefresh(void);
 
 void voxelFreeRecursive(Voxel* voxel);
-void voxelSet(Voxel* voxel,Vec3i pos,int depth,VoxelType type);
+Voxel* voxelSet(Voxel* voxel,Vec3i pos,int depth,VoxelType type);
+Voxel* voxelEditorSet(Vec3i pos,int depth,VoxelType type);
 Voxel* voxelGet(Vec3i position,int depth);
 Voxel* voxelPositionGet(Vec3 pos);
 bool squareVisible(Vec3i position,int depth,int side,VoxelType voxel_type);

@@ -162,21 +162,19 @@ void staffFire(void){
 		
 	g_spell_index += i;
 
-	if(spell_slot->type != INVENTORY_SPELL)
+	if(spell_slot->type != INVENTORY_SPELL || g_mana < cost)
 		return;
 
-    if(g_mana < cost)
-        return;
 	g_mana -= cost;
 
 	Entity* spell = entityCreate(g_surface.position,spell_entity[spell_slot->spell_type]);
 	Vec3 direction = getLookDirection(g_surface.angle);
 	direction = vec3Normalize(direction);
-
 	spell->adj_speed  = adj_table[SPELL_ADJ_SPEED].amount;
 	spell->adj_damage = adj_table[SPELL_ADJ_DAMAGE].amount;
-	spell->velocity = vec3Shr(direction,2);
+	spell->velocity = direction;
 	spell->velocity = vec3MulS(spell->velocity,FIXED_ONE * (adj_table[SPELL_ADJ_SPEED].amount + 1));
+    spell->parent = g_player.entity;
 
 	audioPlay(g_surface.position,AUDIO_SHOOT);
 }

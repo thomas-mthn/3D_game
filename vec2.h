@@ -71,7 +71,7 @@ static Vec2 vec2Shl(Vec2 v,int a){
 }
 
 static real vec2Length(Vec2 v){
-    return tSqrt((realMulR(v.x,v.x) + realMulR(v.y,v.y)));
+    return tSqrt(realMulR(v.x,v.x) + realMulR(v.y,v.y));
 }
 
 static Vec2 vec2Normalize(Vec2 v){
@@ -83,8 +83,7 @@ static Vec2 vec2Normalize(Vec2 v){
 }
 
 static real vec2Distance(Vec2 v1,Vec2 v2){
-    Vec2 relative = {v1.x - v2.x,v1.y - v2.y};
-    return vec2Length(relative);
+    return vec2Length(vec2Sub(v1,v2));
 }
 
 static real vec2Dot(Vec2 v1,Vec2 v2){

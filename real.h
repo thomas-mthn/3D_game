@@ -69,6 +69,12 @@ static int fixedDivR(int value_1,int value_2){
     return result;
 }
 
+static bool isInfinite(real x){
+    if(IS_FLOAT(real))
+       return x == 1.0f / 0.0f || x == -1.0f / 0.0f;
+    return false;
+}
+
 static real realDivR(real value_1,real value_2){
     if(IS_FLOAT(real))
         return value_1 / value_2;

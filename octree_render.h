@@ -40,6 +40,7 @@ structure(DrawPrimitive){
     int thickness;
     int lightmap_index;
     int side;
+    Vec3 normal;
 };
 
 DrawPrimitive* primitiveToDraw(void);

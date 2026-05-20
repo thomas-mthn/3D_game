@@ -20,6 +20,7 @@ typedef enum {
 	VOXEL_GUI_IMAGE,
 	VOXEL_GUI_INVENTORY_SLOT,
     VOXEL_GUI_RECTANGLE,
+    VOXEL_GUI_COLORPICKER,
 } VoxelGuiElementType;
 
 structure(VoxelGuiElement){
@@ -54,6 +55,9 @@ structure(VoxelGuiElement){
             Vec2 size;
             int color;
         } rectangle;
+        struct{
+            Vec3* color;
+        } colorpicker;
     };
 };
 
@@ -63,8 +67,8 @@ void drawGuiCircle(Voxel* voxel,Vec2i axis,Vec3 block_pos,Vec2 uv,real size,int 
 void drawGuiRectangle(Voxel* voxel,Vec2i axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,int side);
 void drawGuiFrame(Voxel* voxel,Vec2i axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,real thickness,int side);
 
-void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side);
-bool voxelGuiOnClick(Voxel* voxel,int side);
+void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side,VoxelGuiElement* gui,int n_gui);
+bool voxelGuiOnClick(Voxel* voxel,int side,VoxelGuiElement* gui,int n_gui);
 void voxelGuiOnRelease(Voxel* voxel,int side);
 
 Vec2 uvMirror(Vec2 uv,int side);

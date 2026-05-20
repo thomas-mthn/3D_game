@@ -13,7 +13,7 @@ structure(Gui2dFlags){
 };
 
 void gui2dRectangleDraw(Vec2 position,Vec2 size,int color,Gui2dFlags flags);
-void gui2dFrameDraw(real x,real y,real size_x,real size_y,int color,int thickness,Gui2dFlags flags);
+void gui2dFrameDraw(real x,real y,real size_x,real size_y,int color,real thickness,Gui2dFlags flags);
 void gui2dStringDraw(real x,real y,String string,real scale,int color,real thickness,Gui2dFlags flags);
 void gui2dNumberDraw(real x,real y,int number,real scale,Gui2dFlags flags);
 void gui2dEllipsesDraw(Vec2 position,Vec2 size,int color,Gui2dFlags flags);

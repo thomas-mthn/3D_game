@@ -42,8 +42,8 @@ void drawColoredTextureSkyboxPolygon3dGL(DrawSurface* surface,Texture* texture,V
 
 void textureUpdateGL(Texture* texture);
 
-void lightmapUploadGL(char* data,int size);
-void drawLightmapPolygon3dGL(DrawSurface* surface,Vec3* coordinats,int lightmap_index,int side);
-void drawLightmapTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,int lightmap_index,int side);
+void lightmapUploadGL(void);
+void drawLightmapPolygon3dGL(DrawSurface* surface,Vec3* coordinats,int lightmap_index,Vec3 normal,int side);
+void drawLightmapTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,int lightmap_index,int side,Vec3 color);
 
 #endif

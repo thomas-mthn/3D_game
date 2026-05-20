@@ -145,7 +145,7 @@ enum{
 #define RENDER_DISTANCE (FIXED_ONE * 32)
 
 #define PLAYER_SPAWN_POSITION {FIXED_ONE * 0xF1,FIXED_ONE * 0x106,FIXED_ONE * 0x102}
-#define PLAYER_SPAWN_ANGLE {FIXED_ONE / 2,FIXED_ONE / 2}
+#define PLAYER_SPAWN_ANGLE {FIXED_ONE / 2 - REAL_EPSILON,FIXED_ONE / 2 - REAL_EPSILON}
 
 #include "vec3.h"
 #include "octree.h"
@@ -155,6 +155,11 @@ enum{
 #include "octree.h"
 
 structure(Entity);
+
+structure(Quaternion){
+    Vec3 v;
+    real w;
+};
 
 structure(VoxelPointed){
 	Voxel* voxel;
@@ -187,6 +192,7 @@ structure(Player){
     Entity* entity;
     Entity* weapon;
     VoxelType voxel_select;
+    Voxel* voxel_copy;
     int edit_depth;
     bool movement_fly;
 };
@@ -198,6 +204,13 @@ structure(GameTime){
     int frame_tick;
 };
 
+structure(World){
+    bool skylight;
+    Vec3 skylight_luminance;
+    Vec2 skylight_angle;
+    Voxel voxel;
+};
+
 int* iconGenerate(void);
 
 void applicationExit(void);
@@ -206,9 +219,9 @@ real bilinearScalar(Vec2 position,real* values);
 
 bool blockOutlinePositionGet(Vec3i* position);
 
-bool pointInScreenSpace(Vec3 point);
-bool squareInScreenSpace(Vec3* point);
-bool cubeInScreenSpace(Vec3* point);
+bool pointInScreenSpace(Vec3* frustum,Vec3 point);
+bool squareInScreenSpace(Vec3* frustum,Vec3* point);
+bool cubeInScreenSpace(Vec3* frustum,Vec3* point);
 
 Vec3 screenRayDirection(real* tri,real x,real y,real fov_x,real fov_y);
 Plane getPlane(Voxel* voxel,Vec3 dir,unsigned side);
@@ -251,6 +264,9 @@ Vec3 fibonnaciSphereSample(int i,int n);
 
 void configSave(void);
 
+Quaternion quaternionCreate(Vec2 angle);
+Vec3 quaternionRotate(Quaternion q,Vec3 v);
+
 static int colorToPixelColor(Vec3 color){
     Vec3i color_i = {realToInt(color.x / 16),realToInt(color.y / 16),realToInt(color.z / 16)};
 	return (int)tClamp(color_i.x,0,0xFF) | (int)tClamp(color_i.y,0,0xFF) << 8 | (int)tClamp(color_i.z,0,0xFF) << 16;
@@ -278,9 +294,11 @@ extern VoxelPointed g_voxel_pointed;
 extern GameOptions g_options;
 extern Player g_player;
 extern GameTime g_time;
+extern World g_world;
 
 extern bool g_voxel_placement;
-extern Plane g_view_plane[];
+extern Vec3 g_view_plane[];
+extern Vec3 g_view_plane_lighting[];
 extern Voxel* g_voxel_link_list;
 extern InventorySlot g_inventory[];
 extern VoxelSerialized* g_voxel_template;

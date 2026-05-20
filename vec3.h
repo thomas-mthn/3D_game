@@ -105,6 +105,10 @@ static real vec3DistanceSquare(Vec3 v1,Vec3 v2){
     return vec3LengthSquare(vec3Sub(v1,v2));
 }
 
+static Vec3 vec3Reciprocal(Vec3 v){
+    return (Vec3){tReciprocal(v.x),tReciprocal(v.y),tReciprocal(v.z)};
+}
+
 static real vec3Dot(Vec3 v1,Vec3 v2){
 #if 0
     if(IS_FLOAT(real))
@@ -152,6 +156,23 @@ static Vec3 vec3Rnd(void){
     } while(vec3Dot(random,random) > FIXED_ONE);
 
     return vec3Normalize(random);
+}
+
+static Vec3 vec3Epsilon(Vec3 v){
+    if(tAbs(v.x) <= REAL_EPSILON)
+        v.x = v.x < 0 ? -REAL_EPSILON : REAL_EPSILON;
+    if(tAbs(v.y) <= REAL_EPSILON)
+        v.y = v.y < 0 ? -REAL_EPSILON : REAL_EPSILON;
+    if(tAbs(v.z) <= REAL_EPSILON)
+        v.z = v.z < 0 ? -REAL_EPSILON : REAL_EPSILON;
+    return v;
+}
+
+static Vec3 vec3NormalToU(Vec3 v){
+    if(tAbs(v.x) < FIXED_ONE - REAL_EPSILON)
+        return vec3Cross(v,(Vec3){FIXED_ONE,0,0});
+    else
+        return vec3Cross(v,(Vec3){0,FIXED_ONE,0});
 }
 
 #endif

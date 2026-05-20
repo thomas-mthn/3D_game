@@ -1,12 +1,7 @@
 #include "dda.h"
 
 Ray3 initRay3(Vec3 position,Vec3 direction){
-    if(tAbs(direction.x) <= REAL_EPSILON)
-        direction.x = direction.x < 0 ? -REAL_EPSILON : REAL_EPSILON;
-    if(tAbs(direction.y) <= REAL_EPSILON)
-        direction.y = direction.y < 0 ? -REAL_EPSILON : REAL_EPSILON;
-    if(tAbs(direction.z) <= REAL_EPSILON)
-        direction.z = direction.z < 0 ? -REAL_EPSILON : REAL_EPSILON;
+    direction = vec3Epsilon(direction);
 
     int scale = IS_FLOAT(real) ? 0x10000 : 1;
     

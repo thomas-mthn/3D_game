@@ -31,7 +31,7 @@ Vec2 g_texture_coordinates_fill[] = {
 Texture g_textures[] = {
 	[TEXTURE_WALL] = {.size = 0x100},
 	[TEXTURE_GRASS] = {.size = 0x400},
-	[TEXTURE_STONE] = {.size = 0x100},
+	[TEXTURE_STONE] = {.size = 0x400},
 	[TEXTURE_PLANKS] = {.size = 0x100},
 	[TEXTURE_UNDESTRUCTIBLE] = {.size = 0x100},
 	[TEXTURE_STONE_BRICK] = {.size = 0x400},
@@ -87,15 +87,15 @@ void generateMipmaps(Texture* texture){
 	}
 }
 
-int textureLookup(Texture* texture,int x,int y,int mipmap){
+int textureLookup(Texture* texture,real x,real y,int mipmap){
 	int offset = 0;
 	for(int i = 0;i < mipmap;i++)
 		offset += texture->size * texture->size >> i * 2;
 	x = tFract(x);
 	y = tFract(y);
-	x = realShr(x * texture->size / FIXED_ONE,mipmap);
-	y = realShr(y * texture->size / FIXED_ONE,mipmap);
-	return texture->pixel_data[offset + y * (texture->size >> mipmap) + x];
+	int x_i = realShr(realToInt(x * texture->size),mipmap);
+	int y_i = realShr(realToInt(y * texture->size),mipmap);
+	return texture->pixel_data[offset + y_i * (texture->size >> mipmap) + x_i];
 }
 
 void textureAllocate(Texture* texture){
@@ -196,9 +196,6 @@ int cubemapColorGet2(Cubemap* cubemap,Vec3 direction){
 
     int x = realToInt(realMulR(u + FIXED_ONE,intToReal(cubemap->size)));
     int y = realToInt(realMulR(v + FIXED_ONE,intToReal(cubemap->size)));
-
-    PRINT_VAR(x);
-    PRINT_VAR(y);
     
     return cubemap->textures[side].pixel_data[y * cubemap->size + x];
 }
@@ -298,9 +295,49 @@ void texturesGenerate(void){
     textureGenerate("img/grass.bmp",1024,TEXTURE_GRASS);
     softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_STONE;
-
+    
 	for(int i = 0;i < texture->size * texture->size;i++){
-		int r = tRnd() & 0x7F | 0x80;
+        int cell_size = 0x20;
+        
+        int x = i / texture->size;
+        int y = i % texture->size;
+
+        int pos_x = x / cell_size;
+        int pos_y = y / cell_size;
+
+        Vec2 uv = {
+            intToReal(x % cell_size) / cell_size,
+            intToReal(y % cell_size) / cell_size
+        };
+
+        real min_distance = REAL_MAX;
+        int min_index;
+
+        for(int j = 9;j--;){
+            int cell_x = j / 3 - 1;
+            int cell_y = j % 3 - 1;
+
+            int cx = (pos_x + cell_x) % (texture->size / cell_size);
+            int cy = (pos_y + cell_y) % (texture->size / cell_size);
+
+            int c_x = cx + 0x400;
+            int c_y = cy + 0x4000;
+            
+            Vec2 cell = {
+                intToReal(cell_x) + intToReal(tHash(tHash(c_x) ^ c_y) % 0x10) / 0x10,
+                intToReal(cell_y) + intToReal(tHash(tHash(c_y) ^ c_x) % 0x10) / 0x10,
+            };
+ 
+            int index = cx * (texture->size / cell_size) + cy;
+            real distance = vec2Distance(cell,uv);
+
+            if(min_distance > distance){
+                min_distance = distance;
+                min_index = index; 
+            }
+        }
+        
+		int r = tHash(min_index) & 0x7F | 0x80;
 		texture->pixel_data[i] = r | r << 8 | r << 16;
 	}
 
@@ -394,12 +431,21 @@ void texturesGenerate(void){
 
 			real distance = rayPlaneIntersection((Vec3){0},ray_direction,(Plane){.normal = {0,0,FIXED_ONE},.distance = -FIXED_ONE});
             
-            if(distance < 0){
-				continue;
-			}
 			Vec3 position = vec3MulS(ray_direction,distance);
 
-            texture->pixel_data[i] = colorToPixelColor(vec3Single(tReciprocal(distance) * 1600));
+            Vec3 lum_up   = {REAL_UNIT * 0x20,REAL_UNIT * 0x80,REAL_UNIT * 0x100};
+            Vec3 lum_down = {REAL_UNIT * 0x100,REAL_UNIT * 0x80,REAL_UNIT * 0x20};
+
+            Vec3 luminance = vec3MulS(vec3Mix(lum_up,lum_down,tAbs(ray_direction.z)),FIXED_ONE * 0x400);
+
+            if(g_world.skylight){
+                Vec3 skylight_direction = getLookDirection(g_world.skylight_angle);
+                real intensity = realMulR(tReciprocal(vec3Distance(ray_direction,skylight_direction)),0x4);
+                Vec3 sky_lum = vec3MulS(g_world.skylight_luminance,intensity);
+                luminance = vec3Add(luminance,sky_lum);
+            }
+
+            texture->pixel_data[i] = colorToPixelColor(luminance);
 		}
 	}
     

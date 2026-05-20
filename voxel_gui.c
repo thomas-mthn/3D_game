@@ -135,10 +135,7 @@ void drawGuiRectangle(Voxel* voxel,Vec2i axis,Vec3 block_pos,Vec2 uv,Vec2 size,i
     DrawPrimitive* polygon = primitiveToDraw();
     for(int i = countof(points);i--;)
         polygon->position[i] = points[i];
-    polygon->luminance = pixelColorToColor(color);
-#if 0
-    drawPolygon3d(&g_surface,points,pixelColorToColor(color));
-#endif
+    polygon->luminance = vec3DivS(pixelColorToColor(color),FIXED_ONE * 0x100);
 }
 
 void drawGuiFrame(Voxel* voxel,Vec2i axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,real thickness,int side){
@@ -148,7 +145,16 @@ void drawGuiFrame(Voxel* voxel,Vec2i axis,Vec3 block_pos,Vec2 uv,Vec2 size,int c
 	drawGuiRectangle(voxel,axis,block_pos,(Vec2){uv.x + size.x - thickness,uv.y},(Vec2){thickness,size.y},color,side);
 }
 
-static void drawGuiImage(Voxel* voxel,Texture* image,Vec2i axis,Vec3 block_pos,Vec2 uv,Vec2 size){
+static void drawGuiImage(Voxel* voxel,Texture* image,Vec2i axis,Vec3 block_pos,Vec2 uv,Vec2 size,Side side){
+    int mirror = (int[]){
+        1,-1,
+        -1,1,
+        1,-1,
+    }[side];
+
+    if(mirror < 0)
+        uv.x = FIXED_ONE - uv.x;
+    
 	real voxel_size = depthToSize(voxel->depth);
 	Vec3 position = block_pos;
     position.a[axis.x] += realMulR(voxel_size,uv.x);
@@ -159,15 +165,13 @@ static void drawGuiImage(Voxel* voxel,Texture* image,Vec2i axis,Vec3 block_pos,V
 		position,
 		position
 	};
+    
 	points[1].a[axis.y] += realMulR(voxel_size,size.y);
-	points[2].a[axis.x] += realMulR(voxel_size,size.x);
-	points[3].a[axis.x] += realMulR(voxel_size,size.x);
+	points[2].a[axis.x] += realMulR(voxel_size,size.x) * mirror;
+	points[3].a[axis.x] += realMulR(voxel_size,size.x) * mirror;
 	points[3].a[axis.y] += realMulR(voxel_size,size.y);
 
-	points[0] = pointToScreen(points[0]);
-	points[1] = pointToScreen(points[1]);
-	points[2] = pointToScreen(points[2]);
-	points[3] = pointToScreen(points[3]);
+
 
 	Vec2 d_point[] = {
 		{points[0].x,points[0].y},
@@ -175,9 +179,14 @@ static void drawGuiImage(Voxel* voxel,Texture* image,Vec2i axis,Vec3 block_pos,V
 		{points[3].x,points[3].y},
 		{points[2].x,points[2].y}
 	};
-	if(points[0].z <= 0 || points[1].z <= 0 || points[2].z <= 0 || points[3].z <= 0)
-		return;
-	drawTexturePolygon(&g_surface,image,g_texture_coordinates_fill,d_point,vec3MulS(vec3Single(FIXED_ONE * 16),g_exposure),4);
+
+    DrawPrimitive* primitive = primitiveToDraw();
+    primitive->texture = image;
+    for(int i = 4;i--;){
+        primitive->position[i] = points[i];
+        primitive->texture_crd[i] = g_texture_coordinates_fill[i];
+    }
+    primitive->luminance = COLOR_WHITE;
 }
 
 void drawGuiCircle(Voxel* voxel,Vec2i axis,Vec3 block_pos,Vec2 uv,real radius,int color,int side){
@@ -220,20 +229,193 @@ static bool rectInRect(Vec2 position_1,Vec2 size_1,Vec2 position_2,Vec2 size_2){
     return bound_x && bound_y;
 }
 
-void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
+structure(HSV){
+    real h;
+    real s;
+    real v;
+};
+
+static HSV rgb2hsv(Vec3 in){
+    HSV  out;
+    real min, max, delta;
+
+    min = in.x < in.y ? in.x : in.y;
+    min = min  < in.z ? min  : in.z;
+
+    max = in.x > in.y ? in.x : in.y;
+    max = max  > in.z ? max  : in.z;
+
+    out.v = max;            
+    delta = max - min;
+    if(delta < REAL_EPSILON){
+        out.s = 0;
+        out.h = 0;
+        return out;
+    }
+    if(max > 0){
+        out.s = realDivR(delta,max);        
+    }
+    else{
+        out.s = 0;
+        out.h = NAN;     
+        return out;
+    }
+    if(in.x >= max)                    
+        out.h = realDivR((in.y - in.z),delta);    
+    else
+    if(in.y >= max)
+        out.h = FIXED_ONE * 2 + realDivR((in.z - in.x),delta);
+    else
+        out.h = FIXED_ONE * 4 + realDivR((in.x - in.y),delta);  
+
+    out.h = realMulR(out.h,FIXED_ONE * 60);                        
+
+    if(out.h < 0)
+        out.h += FIXED_ONE * 360;
+
+    return out;
+}
+
+
+static Vec3 hsv2rgb(HSV in){
+    real hh, p, q, t, ff;
+    long i;
+    Vec3 out;
+
+    if(in.s <= 0){  
+        out.x = in.v;
+        out.y = in.v;
+        out.z = in.v;
+        return out;
+    }
+    hh = in.h;
+    if(hh >= FIXED_ONE * 360)
+        hh = 0;
+    hh = realDivR(hh,FIXED_ONE * 60.0);
+    i = realToInt(hh);
+    ff = hh - i;
+    p = realMulR(in.v,(FIXED_ONE - in.s));
+    q = realMulR(in.v,(FIXED_ONE - realMulR(in.s,ff)));
+    t = realMulR(in.v,(FIXED_ONE - realMulR(in.s,(FIXED_ONE - ff))));
+
+    switch(i) {
+    case 0:
+        out.x = in.v;
+        out.y = t;
+        out.z = p;
+        break;
+    case 1:
+        out.x = q;
+        out.y = in.v;
+        out.z = p;
+        break;
+    case 2:
+        out.x = p;
+        out.y = in.v;
+        out.z = t;
+        break;
+
+    case 3:
+        out.x = p;
+        out.y = q;
+        out.z = in.v;
+        break;
+    case 4:
+        out.x = t;
+        out.y = p;
+        out.z = in.v;
+        break;
+    case 5:
+    default:
+        out.x = in.v;
+        out.y = p;
+        out.z = q;
+        break;
+    }
+    return out;     
+}
+
+#include "opengl.h"
+
+void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side,VoxelGuiElement* gui,int n_gui){
 	VoxelStatic* voxel_s = g_voxel_static + voxel->type;
 	real voxel_size = depthToSize(voxel->depth);
 	Vec2i axis = g_axis_table[side];
 
-	int n_gui = voxel_s->side[side].custom ? voxel_s->side[side].n_gui : voxel_s->n_gui;
-	VoxelGuiElement* gui = voxel_s->side[side].custom ? voxel_s->side[side].gui : voxel_s->gui;
-
-	if(!n_gui)
-		return;
-
 	for(int i = 0;i < n_gui;i++){
 		VoxelGuiElement* element = gui + i;
 		switch(element->type){
+            case VOXEL_GUI_COLORPICKER:{
+                Vec2 uv = element->position;
+                Vec2 size = {REAL_UNIT * 0x40,REAL_UNIT * 0x10};
+
+                static Texture hue_texture;
+                static Texture sat_texture;
+                static Texture val_texture;
+                
+                if(!hue_texture.pixel_data){
+                    hue_texture = textureCreate(0x40);
+                    sat_texture = textureCreate(0x40);
+                    val_texture = textureCreate(0x40);
+                }
+                HSV hsv = rgb2hsv(*element->colorpicker.color);
+                for(int j = hue_texture.size * hue_texture.size;j--;){
+                    int y = j / hue_texture.size;
+                    real y_r = intToReal(hue_texture.size - y - 1) / hue_texture.size * 360;
+                    if(tAbs(y_r - hsv.h) < FIXED_ONE * 4){
+                        hue_texture.pixel_data[j] = 0;
+                        continue;
+                    }
+                    Vec3 color = hsv2rgb((HSV){
+                            .v = hsv.v,
+                            .h = y_r,
+                            .s = hsv.s,
+                    });
+                    color = vec3MulS(color,FIXED_ONE * 0x1000);
+                    hue_texture.pixel_data[j] = colorToPixelColor(color);
+                }
+                for(int j = hue_texture.size * hue_texture.size;j--;){
+                    int y = j / hue_texture.size;
+                    real y_r = intToReal(hue_texture.size - y - 1) / hue_texture.size;
+                    if(tAbs(y_r - hsv.s) < REAL_UNIT * 4){
+                        sat_texture.pixel_data[j] = 0;
+                        continue;
+                    }
+                    Vec3 color = hsv2rgb((HSV){
+                            .v = hsv.v,
+                            .h = hsv.s,
+                            .s = y_r,
+                    });
+                    color = vec3MulS(color,FIXED_ONE * 0x1000);
+                    sat_texture.pixel_data[j] = colorToPixelColor(color);
+                }
+                for(int j = hue_texture.size * hue_texture.size;j--;){
+                    int y = j / hue_texture.size;
+                    real y_r = intToReal(hue_texture.size - y - 1) / hue_texture.size;
+                    if(tAbs(y_r - hsv.v) < REAL_UNIT * 4){
+                        val_texture.pixel_data[j] = 0;
+                        continue;
+                    }
+                    Vec3 color = hsv2rgb((HSV){
+                            .v = y_r,
+                            .h = hsv.h,
+                            .s = hsv.s,
+                    });
+                    color = vec3MulS(color,FIXED_ONE * 0x1000);
+                    val_texture.pixel_data[j] = colorToPixelColor(color);
+                }
+                generateMipmaps(&hue_texture);
+                generateMipmaps(&val_texture);
+                generateMipmaps(&sat_texture);
+
+                textureUpdateGL(&hue_texture);
+                textureUpdateGL(&val_texture);
+                textureUpdateGL(&sat_texture);
+
+                drawGuiImage(voxel,&hue_texture,axis,block_pos,uv,size,side);
+                drawGuiImage(voxel,&val_texture,axis,block_pos,vec2Add(uv,(Vec2){0,REAL_UNIT * 0x10}),size,side);
+                drawGuiImage(voxel,&sat_texture,axis,block_pos,vec2Add(uv,(Vec2){0,REAL_UNIT * 0x20}),size,side);
+            } break;
 			case VOXEL_GUI_INVENTORY_SLOT:{
 				int color = 0x808080;
 				if(
@@ -280,7 +462,7 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 				}
 			} break;
 			case VOXEL_GUI_IMAGE:{
-				drawGuiImage(voxel,element->image.image,axis,block_pos,element->position,vec2Single(0x6000));
+				drawGuiImage(voxel,element->image.image,axis,block_pos,element->position,vec2Single(0x6000),side);
 			} break;
 			case VOXEL_GUI_CHECKBOX:{
 				int color;
@@ -302,11 +484,12 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
             } break;
 			case VOXEL_GUI_BUTTON:{
 				int color;
-				Vec2 button_size = element->button.size ? vec2Single(element->button.size) : vec2Single(0x1000);
-				if(g_voxel_pointed.voxel == voxel && rectInRect(element->position,button_size,g_voxel_pointed.uv,vec2Single(0x200)))
+				Vec2 button_size = element->button.size ? vec2Single(element->button.size) : vec2Single(REAL_UNIT * 0x10);
+				if(g_voxel_pointed.voxel == voxel && rectInRect(element->position,button_size,g_voxel_pointed.uv,vec2Single(REAL_UNIT * 2)))
 					color = 0x90C090;
 				else
 					color = 0x809080;
+                drawGuiFrame(voxel,axis,block_pos,element->position,button_size,0x000000,REAL_UNIT * 2,side);
                 drawGuiRectangle(voxel,axis,block_pos,element->position,button_size,color,side);
 			} break;
 			case VOXEL_GUI_STRING:{
@@ -327,13 +510,10 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side){
 
 SpellType g_spell_hold;
 
-bool voxelGuiOnClick(Voxel* voxel,int side){
+bool voxelGuiOnClick(Voxel* voxel,int side,VoxelGuiElement* gui,int n_gui){
 	if(!voxel)
 		return false;
 	VoxelStatic* voxel_s = g_voxel_static + g_voxel_pointed.voxel->type;
-
-	int n_gui = voxel_s->side[side].custom ? voxel_s->side[side].n_gui : voxel_s->n_gui;
-	VoxelGuiElement* gui = voxel_s->side[side].custom ? voxel_s->side[side].gui : voxel_s->gui;
 
 	if(!n_gui)
 		return false;
@@ -341,6 +521,41 @@ bool voxelGuiOnClick(Voxel* voxel,int side){
 	for(int i = 0;i < n_gui;i++){
 		VoxelGuiElement* element = gui + i;
 		switch(element->type){
+            case VOXEL_GUI_COLORPICKER:{
+                Vec2 size = {REAL_UNIT * 0x40,REAL_UNIT * 0x10};
+                if(!element->colorpicker.color)
+                    break;
+				if(rectInRect(element->position,size,g_voxel_pointed.uv,vec2Single(REAL_UNIT * 2))){
+				    real relative = g_voxel_pointed.uv.x - element->position.x;
+                    relative = realDivR(relative,size.x);
+                    Vec3 dummy = *element->colorpicker.color;
+                    HSV hsl = rgb2hsv(*element->colorpicker.color);
+                    hsl.h = relative * 360;
+                    *element->colorpicker.color = hsv2rgb(hsl);
+                    octreeRefresh();
+                    return true;
+				}
+                if(rectInRect(element->position,size,vec2Add(g_voxel_pointed.uv,(Vec2){0,-REAL_UNIT * 0x10}),vec2Single(REAL_UNIT * 2))){
+				    real relative = g_voxel_pointed.uv.x - element->position.x;
+                    relative = realDivR(relative,size.x);
+                    Vec3 dummy = *element->colorpicker.color;
+                    HSV hsl = rgb2hsv(*element->colorpicker.color);
+                    hsl.v = relative;
+                    *element->colorpicker.color = hsv2rgb(hsl);
+                    octreeRefresh();
+                    return true;
+				}
+                if(rectInRect(element->position,size,vec2Add(g_voxel_pointed.uv,(Vec2){0,-REAL_UNIT * 0x20}),vec2Single(REAL_UNIT * 2))){
+				    real relative = g_voxel_pointed.uv.x - element->position.x;
+                    relative = realDivR(relative,size.x);
+                    Vec3 dummy = *element->colorpicker.color;
+                    HSV hsl = rgb2hsv(*element->colorpicker.color);
+                    hsl.s = relative;
+                    *element->colorpicker.color = hsv2rgb(hsl);
+                    octreeRefresh();
+                    return true;
+				}
+            } break;
 			case VOXEL_GUI_INVENTORY_SLOT:{
 				if(rectInRect(element->position,(Vec2){0x2000,0x2000},g_voxel_pointed.uv,vec2Single(0x200))){
 					g_spell_hold = element->inventory_slot.slot->spell_type;
@@ -356,8 +571,8 @@ bool voxelGuiOnClick(Voxel* voxel,int side){
                 }
 			} break;
 			case VOXEL_GUI_BUTTON:{
-				Vec2 button_size = element->button.size ? vec2Single(element->button.size) : vec2Single(0x1000);
-				if(rectInRect(element->position,button_size,g_voxel_pointed.uv,vec2Single(0x200)) && element->button.on_click){
+				Vec2 button_size = element->button.size ? vec2Single(element->button.size) : vec2Single(REAL_UNIT * 0x10);
+				if(rectInRect(element->position,button_size,g_voxel_pointed.uv,vec2Single(REAL_UNIT * 2)) && element->button.on_click){
 					element->button.voxel = voxel;
 					element->button.on_click(element);
 					return true;
