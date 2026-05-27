@@ -4,11 +4,13 @@
 #include "langext.h"
 #include "vec3.h"
 #include "vec2.h"
+#include "opengl.h"
 
 structure(DrawSurface);
 structure(Voxel);
 structure(Texture);
 structure(LightmapTree);
+structure(Cubemap);
 
 structure(DrawPrimitive){
     DrawPrimitive* next;
@@ -17,7 +19,12 @@ structure(DrawPrimitive){
     bool is_sprite : 1;
     bool smooth_lighting : 1;
     bool gpu_lightmap : 1;
+    bool is_sphere : 1;
+    bool is_cylinder : 1;
+    bool is_torus : 1;
 
+    ProcTextType procedural_texture;
+    
     enum{
         PRIMITIVE_QUAD,
         PRIMITIVE_TRIANGLE,
@@ -41,6 +48,7 @@ structure(DrawPrimitive){
     int lightmap_index;
     int side;
     Vec3 normal;
+    Voxel* voxel;
 };
 
 DrawPrimitive* primitiveToDraw(void);

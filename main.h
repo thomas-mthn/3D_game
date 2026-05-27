@@ -152,7 +152,6 @@ enum{
 #include "geometry.h"
 #include "staff.h"
 #include "draw.h"
-#include "octree.h"
 
 structure(Entity);
 
@@ -186,6 +185,7 @@ structure(GameOptions){
     bool gl_qlightmap;
     bool rd_dshadow;
     real ms_sensitivity;
+    bool ov_luminance;
 };
 
 structure(Player){
@@ -230,6 +230,8 @@ Vec3 pointToScreenRenderer(Vec3 point,real* tri,Vec3 renderer_position,Vec2 fov)
 bool keyDown(int key);
 int treeRayTraceDistance(Voxel* voxel,Vec3 position,Vec3 dir,int side);
 
+real spriteSize(Vec3 position,real size);
+
 void boxQuadWireframeDraw(Vec3 position,Vec3 size,int color,bool octree);
 
 Vec2 getLookAngle(Vec3 direction);
@@ -268,25 +270,24 @@ Quaternion quaternionCreate(Vec2 angle);
 Vec3 quaternionRotate(Quaternion q,Vec3 v);
 
 static int colorToPixelColor(Vec3 color){
-    Vec3i color_i = {realToInt(color.x / 16),realToInt(color.y / 16),realToInt(color.z / 16)};
-	return (int)tClamp(color_i.x,0,0xFF) | (int)tClamp(color_i.y,0,0xFF) << 8 | (int)tClamp(color_i.z,0,0xFF) << 16;
+    Vec3i color_i = {realToInt(color.x * 0x100),realToInt(color.y * 0x100),realToInt(color.z * 0x100)};
+	return tClamp(color_i.x,0,0xFF) | tClamp(color_i.y,0,0xFF) << 8 | tClamp(color_i.z,0,0xFF) << 16;
 }
 
 static Vec3 pixelColorToColor(int color){
 	return (Vec3){
-        intToReal(color >> 0 & 0xFF) * 16,
-        intToReal(color >> 8 & 0xFF) * 16,
-        intToReal(color >> 16 & 0xFF) * 16
+        intToReal(color >> 0 & 0xFF) / 0x100,
+        intToReal(color >> 8 & 0xFF) / 0x100,
+        intToReal(color >> 16 & 0xFF) / 0x100
     };
 }
 
-#define COLOR_WHITE (Vec3){FIXED_ONE * 16,FIXED_ONE * 16,FIXED_ONE * 16}
+#define COLOR_WHITE (Vec3){FIXED_ONE,FIXED_ONE,FIXED_ONE}
 
 extern char g_voxel_lighting_tree[];
 
 extern bool g_test_bool;
 extern real g_exposure;
-extern bool g_luminance_overlay;
 extern uint8 g_key[];
 extern Vec2 g_cursor;
 extern VoxelPointed g_voxel_pointed;

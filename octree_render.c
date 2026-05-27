@@ -9,6 +9,7 @@
 #include "entity.h"
 #include "span.h"
 #include "draw_soft.h"
+#include "sprite_trace.h"
 
 static void voxelModelRasterizeSide(DrawSurface* surface,Vec2 model_angle,Vec3* luminance,Voxel* voxel,Vec3 block_pos,int side,Vec3 camera_position,real camera_distance){
     unsigned polygon_id = tRnd();
@@ -405,15 +406,7 @@ static void drawSidePart(Voxel* voxel,Vec3 block_pos,Side side,Vec2 size,real di
 	}
 
     switch(voxel->type){
-        case VOXEL_GLASS:{
-            Vec3 relative = vec3Sub(light_pos,g_surface.position);
-            Vec3 offset = vec3Direction(vec3Shr(g_surface.position,4),vec3Shr(light_pos,4));
-            Vec3 position = light_pos;
-            position.a[side >> 1] -= side % 2 ? REAL_EPSILON : -REAL_EPSILON;
-            luminance = rayLuminance(position,offset,(RayLuminanceFlag){0});
-            luminance = vec3Shl(luminance,4);
-        } break;
-        case VOXEL_MIRROR:{
+        case VOXEL_MIRROR: case VOXEL_GLASS: case VOXEL_WATER:{
             DrawPrimitive* primitive = primitiveToDraw();
             primitive->has_lighting = true;
             primitive->smooth_lighting = true;
@@ -427,24 +420,6 @@ static void drawSidePart(Voxel* voxel,Vec3 block_pos,Side side,Vec2 size,real di
                 };
                             
                 primitive->luxel_colors[i] = lightmapGet(trace_buffer,uv);
-                primitive->position[i] = pos[i];
-            }
-        } return;
-        case VOXEL_WATER:{
-            DrawPrimitive* primitive = primitiveToDraw();
-            primitive->has_lighting = true;
-            primitive->smooth_lighting = true;
-
-            int l_table[] = {0,1,3,2};
-            
-            for(int i = 4;i--;){
-                Vec2 uv = {
-                    intToReal((coord.x + l_table[i] / 2)) / (1 << depth),
-                    intToReal((coord.y + l_table[i] % 2)) / (1 << depth),
-                };
-                primitive->luxel_colors[i] = lightmapGet(trace_buffer,uv);
-                //primitive->luxel_colors[i].x = uv.x * 16;
-                //primitive->luxel_colors[i].y = uv.y * 16;
                 primitive->position[i] = pos[i];
             }
         } return;
@@ -654,16 +629,17 @@ static void drawSideRecursive(Voxel* voxel,Vec3 block_pos,int side,Vec2i coord,i
 static void drawSide(Voxel* voxel,Vec3 block_pos,Side side,Vec2 size,bool occlude){
     Vec3 pos[4] = {block_pos,block_pos,block_pos,block_pos};
     Vec2i axis = g_axis_table[side];
+    VoxelStatic* voxel_s = g_voxel_static + voxel->type;
     pos[1].a[axis.y] += size.y;
     pos[2].a[axis.x] += size.x;
     pos[3].a[axis.x] += size.x;
     pos[3].a[axis.y] += size.y;
 #if 1
-    if(voxel->type == VOXEL_MIRROR || voxel->type == VOXEL_WATER){
+    
+    if(voxel_s->rd_trace){
         trace_buffer = memoryArenaAllocateZero(&g_arena_frame,sizeof *trace_buffer);
         lightmapTreeGenerate(trace_buffer,voxel,block_pos,side,(Vec2i){0},0,surfaceAngle(block_pos,g_normal_table[side]),size);
     }
-    
     /*
     if(occlusionBufferHidden(&g_surface,pos))
         return;
@@ -682,7 +658,7 @@ static void drawSide(Voxel* voxel,Vec3 block_pos,Side side,Vec2 size,bool occlud
             drawGuiRectangle(voxel,g_axis_table[side],block_pos,vec2Single(FIXED_ONE / 4),vec2Single(FIXED_ONE / 2),color,side);
         } break;
     }
-    VoxelStatic* voxel_s = g_voxel_static + voxel->type;
+    
     int n_gui = voxel_s->side[side].custom ? voxel_s->side[side].n_gui : voxel_s->n_gui;
     VoxelGuiElement* gui = voxel_s->side[side].custom ? voxel_s->side[side].gui : voxel_s->gui;
     voxelGuiDraw(voxel,block_pos,side,gui,n_gui);
@@ -742,7 +718,16 @@ static void drawSide(Voxel* voxel,Vec3 block_pos,Side side,Vec2 size,bool occlud
         Texture* texture = g_voxel_static[voxel->type].texture;
         if(voxel->type == VOXEL_CUSTOM && voxel->has_texture)
             texture = g_textures + voxel->texture_id;
-        if(texture){
+        else
+            primitive->procedural_texture = voxel->procedural_texture;
+        
+        if(voxel->type == VOXEL_STONE_BRICK){
+            primitive->procedural_texture = PROCTEXT_BRICK;
+        }
+        else if(voxel->type == VOXEL_STONE){
+            primitive->procedural_texture = PROCTEXT_VORONOI;
+        }
+        else if(texture){
             if(voxel_s->texturefill){
                 texture_crd[0] = g_texture_coordinates_fill[0];
                 texture_crd[1] = g_texture_coordinates_fill[1];
@@ -766,8 +751,12 @@ static void drawSide(Voxel* voxel,Vec3 block_pos,Side side,Vec2 size,bool occlud
         primitive->side = side;
         primitive->normal = g_normal_table[side];
 
-        primitive->luminance = voxel->type == VOXEL_CUSTOM ? voxel->color : vec3Single(FIXED_ONE);
-            
+        if(voxel->type == VOXEL_CUSTOM)
+            primitive->luminance = voxel->color;
+        else if(texture)
+             primitive->luminance = COLOR_WHITE;
+        else
+            primitive->luminance = voxel_s->color;
         
         for(int i = 4;i--;){
             primitive->position[i] = pos[i];
@@ -799,6 +788,24 @@ static void drawBox(Voxel* voxel,Vec3 block_pos,Vec3 size){
 		drawSide(voxel,block_pos,SIDE_XY_UP,(Vec2){size.y,size.z},occlude);
     if(g_surface.position.z - block_pos.z - size.z > 0)
 		drawSide(voxel,vec3Add(block_pos,(Vec3){0,0,size.z}),SIDE_XY_DOWN,(Vec2){size.y,size.z},occlude);
+}
+
+static void drawGui(Voxel* voxel,Vec3 block_pos,Vec3 size,VoxelGuiElement* gui,int n_gui){
+    real distance = vec3Distance(g_surface.position,vec3Add(block_pos,vec3Shr(size,1)));
+    
+    bool occlude = distance < depthToSize(voxel->depth) * 8;
+	if(g_surface.position.x - block_pos.x < 0)
+        voxelGuiDraw(voxel,block_pos,SIDE_YZ_UP,gui,n_gui);
+    if(g_surface.position.x - block_pos.x - size.x > 0)
+        voxelGuiDraw(voxel,vec3Add(block_pos,(Vec3){size.x,0,0}),SIDE_YZ_DOWN,gui,n_gui);
+    if(g_surface.position.y - block_pos.y < 0)
+        voxelGuiDraw(voxel,block_pos,SIDE_XZ_UP,gui,n_gui);
+    if(g_surface.position.y - block_pos.y - size.y > 0)
+        voxelGuiDraw(voxel,vec3Add(block_pos,(Vec3){0,size.y,0}),SIDE_XZ_DOWN,gui,n_gui);
+    if(g_surface.position.z - block_pos.z < 0)
+	    voxelGuiDraw(voxel,block_pos,SIDE_XY_UP,gui,n_gui);
+    if(g_surface.position.z - block_pos.z - size.z > 0)
+        voxelGuiDraw(voxel,vec3Add(block_pos,(Vec3){0,0,size.z}),SIDE_XY_DOWN,gui,n_gui);
 }
 
 static void slopeDraw(Voxel* voxel,Vec3 block_pos,real block_size){
@@ -867,13 +874,11 @@ void octreeDraw(Voxel* voxel){
     };
     
     if(voxel->type == VOXEL_PARENT){
-#if 0
-        if(!cubeInScreenSpace(point))
+        if(!cubeInScreenSpace(g_view_plane,point))
             return;
 
         if(sdVoxelSquare(vec3Shr(g_surface.position,4),vec3Shr(block_pos,4),realShr(block_size,4)) > RENDER_DISTANCE)
             return;
-#endif
 #if 0
         bool visible = false;
         bool inside = true;
@@ -960,6 +965,9 @@ void octreeDraw(Voxel* voxel){
     else{
         switch(voxel->type){
             case VOXEL_PLANE:{
+                VoxelStatic* voxel_s = g_voxel_static + voxel->type;
+                if(voxel == g_voxel_interact)
+                    drawGui(voxel,block_pos,vec3Single(block_size),voxel_s->gui_interact,voxel_s->n_gui_interact);
                 Vec3 relative = vec3AddS(block_pos,block_size / 2);
                 Plane plane = {.normal = getLookDirection(voxel->angle),voxel->distance};
                 
@@ -1027,6 +1035,8 @@ void octreeDraw(Voxel* voxel){
                         for(int j = 4;j--;)
                             primitive->position[j] = vec3Add(quad_new[d_index[j]],relative);
                         primitive->normal = g_normal_table[i];
+                        primitive->luminance = voxel->color;
+                        primitive->procedural_texture = voxel->procedural_texture;
                     }
                 }
                 Vec3 pos[4];
@@ -1066,6 +1076,8 @@ void octreeDraw(Voxel* voxel){
                 for(int i = 4;i--;)
                     primitive->position[i] = pos[i];
                 primitive->normal = plane.normal;
+                primitive->luminance = voxel->color;
+                primitive->procedural_texture = voxel->procedural_texture;
             } break;
             case VOXEL_AIR:
                 return;
@@ -1097,6 +1109,148 @@ void octreeDraw(Voxel* voxel){
                 block_pos.z -= FIXED_ONE / 4;
                 if(g_surface.position.z - block_pos.z - block_size > 0)
                     drawSide(voxel,vec3Add(block_pos,(Vec3){0,0,block_size}),5,(Vec2){block_size,block_size},false);
+            } break;
+            case VOXEL_CYLINDER:{
+                VoxelStatic* voxel_s = g_voxel_static + voxel->type;
+                if(voxel == g_voxel_interact)
+                    drawGui(voxel,block_pos,vec3Single(block_size),voxel_s->gui_interact,voxel_s->n_gui_interact);
+                static ModelSprite model = {
+                    .ellipsoid = {
+                        [0] = {
+                            .type = MODEL_CYLINDER,
+                            .color = COLOR_WHITE,
+                            .cylinder.radius = FIXED_ONE / 2,
+                            .cylinder.axis = (Vec3){0,0,FIXED_ONE},
+                        }
+                    },
+                    .n_ellipsoid = 1,
+                };
+                model.ellipsoid[0].cylinder.axis = getLookDirection(voxel->cylinder_angle);
+                model.ellipsoid[0].cylinder.radius = depthToSize(voxel->depth) / 4;
+                Vec3 v_position = voxelWorldPosCenter(voxel);
+                if(!voxel->texture_dynamic){
+                    voxel->cubemap = tMallocZero(sizeof *voxel->cubemap * 2);
+                    
+                    voxel->texture_dynamic = tMallocZero(sizeof *voxel->texture_dynamic);
+                    *voxel->texture_dynamic = textureCreate(0x100);
+
+                    Vec3 cylinder_direction = getLookDirection(voxel->cylinder_angle);
+                    cylinder_direction = vec3MulS(cylinder_direction,depthToSize(voxel->depth) / 2 - REAL_UNIT * 0x10);
+
+                    ellipsoidModelCubemapGenerate(voxel->cubemap,vec3Add(voxelWorldPosCenter(voxel),cylinder_direction),0);
+                    ellipsoidModelCubemapGenerate(voxel->cubemap + 1,vec3Sub(voxelWorldPosCenter(voxel),cylinder_direction),0);
+                }
+                Vec3 cylinder_direction = getLookDirection(voxel->cylinder_angle);
+                cylinder_direction = vec3MulS(cylinder_direction,depthToSize(voxel->depth) / 2);
+                if(tRndChance(0x100)){
+                    ellipsoidModelCubemapGenerate(voxel->cubemap,vec3Add(voxelWorldPosCenter(voxel),cylinder_direction),2);
+                    ellipsoidModelCubemapGenerate(voxel->cubemap + 1,vec3Sub(voxelWorldPosCenter(voxel),cylinder_direction),2);
+                }
+                Vec3 point = pointToScreen(v_position);
+                if(!point.z)
+                    return;
+                real size = spriteSize(v_position,depthToSize(voxel->depth));
+                Vec2 points[] = {
+                    {point.x - realMulR(size,g_surface.fov.x),point.y - realMulR(size,g_surface.fov.y)},
+                    {point.x - realMulR(size,g_surface.fov.x),point.y + realMulR(size,g_surface.fov.y)},
+                    {point.x + realMulR(size,g_surface.fov.x),point.y + realMulR(size,g_surface.fov.y)},
+                    {point.x + realMulR(size,g_surface.fov.x),point.y - realMulR(size,g_surface.fov.y)},
+                };
+   
+                DrawPrimitive* primitive = primitiveToDraw();
+                primitive->is_sprite = true;
+                for(int i = 4;i--;){
+                    primitive->position_sprite[i] = points[i];
+                }
+                primitive->is_cylinder = true;
+                primitive->voxel = voxel;
+            } break;
+            case VOXEL_SPHERE:{
+                static ModelSprite model = {
+                    .ellipsoid = {
+                        [0] = {
+                            .type = MODEL_ELLIPSOID,
+                            .color = COLOR_WHITE,
+                        }
+                    },
+                    .n_ellipsoid = 1,
+                };
+                model.ellipsoid[0].ellipsoid.radius = vec3Single(depthToSize(voxel->depth) / 2);
+                Vec3 v_position = voxelWorldPosCenter(voxel);
+                if(!voxel->texture_dynamic){
+                    voxel->cubemap = tMallocZero(sizeof *voxel->cubemap);
+                    
+                    voxel->texture_dynamic = tMallocZero(sizeof *voxel->texture_dynamic);
+                    *voxel->texture_dynamic = textureCreate(0x100);
+
+                    ellipsoidModelCubemapGenerate(voxel->cubemap,voxelWorldPosCenter(voxel),4);
+                }
+                if(tRndChance(0x100))
+                   ellipsoidModelCubemapGenerate(voxel->cubemap,voxelWorldPosCenter(voxel),5);
+
+                Vec3 point = pointToScreen(v_position);
+                if(!point.z)
+                    return;
+                real size = spriteSize(v_position,depthToSize(voxel->depth));
+                Vec2 points[] = {
+                    {point.x - realMulR(size,g_surface.fov.x),point.y - realMulR(size,g_surface.fov.y)},
+                    {point.x - realMulR(size,g_surface.fov.x),point.y + realMulR(size,g_surface.fov.y)},
+                    {point.x + realMulR(size,g_surface.fov.x),point.y + realMulR(size,g_surface.fov.y)},
+                    {point.x + realMulR(size,g_surface.fov.x),point.y - realMulR(size,g_surface.fov.y)},
+                };
+   
+                DrawPrimitive* primitive = primitiveToDraw();
+                primitive->is_sprite = true;
+                for(int i = 4;i--;){
+                    primitive->position_sprite[i] = points[i];
+                }
+                primitive->is_sphere = true;
+                primitive->voxel = voxel;
+            } break;
+            case VOXEL_TORUS:{
+                VoxelStatic* voxel_s = g_voxel_static + voxel->type;
+                if(voxel == g_voxel_interact)
+                    drawGui(voxel,block_pos,vec3Single(block_size),voxel_s->gui_interact,voxel_s->n_gui_interact);
+                static ModelSprite model = {
+                    .ellipsoid = {
+                        [0] = {
+                            .type = MODEL_ELLIPSOID,
+                            .color = COLOR_WHITE,
+                        }
+                    },
+                    .n_ellipsoid = 1,
+                };
+                model.ellipsoid[0].ellipsoid.radius = vec3Single(depthToSize(voxel->depth) / 2);
+                Vec3 v_position = voxelWorldPosCenter(voxel);
+                if(!voxel->texture_dynamic){
+                    voxel->cubemap = tMallocZero(sizeof *voxel->cubemap);
+                    
+                    voxel->texture_dynamic = tMallocZero(sizeof *voxel->texture_dynamic);
+                    *voxel->texture_dynamic = textureCreate(0x100);
+
+                    ellipsoidModelCubemapGenerate(voxel->cubemap,voxelWorldPosCenter(voxel),4);
+                }
+                if(tRndChance(0x100))
+                   ellipsoidModelCubemapGenerate(voxel->cubemap,voxelWorldPosCenter(voxel),2);
+
+                Vec3 point = pointToScreen(v_position);
+                if(!point.z)
+                    return;
+                real size = spriteSize(v_position,depthToSize(voxel->depth));
+                Vec2 points[] = {
+                    {point.x - realMulR(size,g_surface.fov.x),point.y - realMulR(size,g_surface.fov.y)},
+                    {point.x - realMulR(size,g_surface.fov.x),point.y + realMulR(size,g_surface.fov.y)},
+                    {point.x + realMulR(size,g_surface.fov.x),point.y + realMulR(size,g_surface.fov.y)},
+                    {point.x + realMulR(size,g_surface.fov.x),point.y - realMulR(size,g_surface.fov.y)},
+                };
+   
+                DrawPrimitive* primitive = primitiveToDraw();
+                primitive->is_sprite = true;
+                for(int i = 4;i--;){
+                    primitive->position_sprite[i] = points[i];
+                }
+                primitive->is_torus = true;
+                primitive->voxel = voxel;
             } break;
             default:{
                 drawBox(voxel,block_pos,vec3Single(block_size));
@@ -1144,9 +1298,9 @@ void octreeDrawList(void){
             case PRIMITIVE_QUAD:{
                 if(primitive->gpu_lightmap){
                     if(primitive->texture)
-                        drawLightmapTexturePolygon3dGL(&g_surface,primitive->texture,primitive->texture_crd,primitive->position,primitive->lightmap_index,primitive->side,primitive->luminance);
+                        drawLightmapTexturePolygon3dGL(&g_surface,primitive->texture,primitive->texture_crd,primitive->position,primitive->lightmap_index,primitive->side,vec3MulS(primitive->luminance,g_exposure));
                     else
-                        drawLightmapPolygon3dGL(&g_surface,primitive->position,primitive->lightmap_index,primitive->normal,primitive->side);
+                        drawLightmapPolygon3dGL(&g_surface,primitive->position,primitive->lightmap_index,primitive->normal,primitive->side,vec3MulS(primitive->luminance,g_exposure),primitive->procedural_texture);
                 }
                 else if(primitive->texture){
                     if(primitive->is_sprite){
@@ -1180,10 +1334,19 @@ void octreeDrawList(void){
                         drawPolygon3d(&g_surface,primitive->position,primitive->luminance);
                 }
                 else{
-                    if(primitive->is_sprite)
-                        drawPolygon(&g_surface,primitive->position_sprite,4,primitive->luminance);
-                    else
+                    if(primitive->is_sprite){
+                        if(primitive->is_sphere)
+                            drawSphereGL(&g_surface,primitive->position_sprite,primitive->voxel);
+                        else if(primitive->is_cylinder)
+                            drawCylinderGL(&g_surface,primitive->position_sprite,primitive->voxel);
+                        else if(primitive->is_torus)
+                            drawTorusGL(&g_surface,primitive->position_sprite,primitive->voxel);
+                        else
+                            drawPolygon(&g_surface,primitive->position_sprite,4,primitive->luminance);
+                    }
+                    else{
                         drawPolygon3d(&g_surface,primitive->position,primitive->luminance);
+                    }
                 }
             } break;
             case PRIMITIVE_ELLIPSIS:{

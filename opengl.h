@@ -4,6 +4,8 @@
 #include "draw.h"
 
 structure(LightmapTree);
+structure(Cubemap);
+structure(Voxel);
 
 extern int g_smaa_max;
 extern bool g_vsync;
@@ -37,13 +39,24 @@ void drawTexturePolygonGL(DrawSurface* surface,Texture* texture,Vec2* texture_co
 void drawTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point);
 void drawColoredTexturePolygonGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec2* coordinats,Vec3* color,int n_point);
 void drawColoredTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap,int n_vertex);
+void drawSphereGL(DrawSurface* surface,Vec2* coordinats,Voxel* voxel);
+void drawCylinderGL(DrawSurface* surface,Vec2* coordinats,Voxel* voxel);
+void drawTorusGL(DrawSurface* surface,Vec2* coordinats,Voxel* voxel);
 
 void drawColoredTextureSkyboxPolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,LightmapTree* lightmap);
 
 void textureUpdateGL(Texture* texture);
+void openglUpdateCubemap(Cubemap* cubemap);
+
+typedef enum{
+    PROCTEXT_NONE,
+    PROCTEXT_BRICK,
+    PROCTEXT_VORONOI,
+    PROCTEXT_ECOUNT,
+} ProcTextType;
 
 void lightmapUploadGL(void);
-void drawLightmapPolygon3dGL(DrawSurface* surface,Vec3* coordinats,int lightmap_index,Vec3 normal,int side);
+void drawLightmapPolygon3dGL(DrawSurface* surface,Vec3* coordinats,int lightmap_index,Vec3 normal,int side,Vec3 color,ProcTextType procedural_texture);
 void drawLightmapTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,int lightmap_index,int side,Vec3 color);
 
 #endif

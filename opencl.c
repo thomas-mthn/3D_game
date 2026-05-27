@@ -17,34 +17,34 @@
 
 int (stdcall *clGetPlatformIDs)(unsigned n_entries,void** platform,unsigned* n_platform_id);
 int (stdcall *clGetDeviceIDs)(void* platform,uint64 device_type,unsigned num_entries,void** devices,unsigned* num_devices);
-void* (stdcall *clCreateCommandQueueWithProperties)(void* context,void* device,const void** properties,int* errcode_ret);
-void* (stdcall *clCreateProgramWithSource)(void* context,unsigned count,const char** strings,const size_t* lengths,int* errcode_ret);
+void* (stdcall *clCreateCommandQueueWithProperties)(void* context,void* device,void** properties,int* errcode_ret);
+void* (stdcall *clCreateProgramWithSource)(void* context,unsigned count,char** strings,size_t* lengths,int* errcode_ret);
 void* (stdcall *clCreateContext)(
-    const void** properties,
+    void** properties,
     unsigned n_devices,
-    const void** devices,
-    void (stdcall* pfn_notify)(const char* errinfo, const void* private_info,size_t cb, void* user_data),
+    void** devices,
+    void (stdcall* pfn_notify)(char* errinfo,void* private_info,size_t cb, void* user_data),
     void* user_data,
     int* errcode_ret
 );
 int (stdcall *clBuildProgram)(
     void* program,
     unsigned num_devices,
-    const void** device_list,
-    const char* options,
+    void** device_list,
+    char* options,
     void (stdcall* pfn_notify)(void* program, void* user_data),
     void* user_data
 );
-void* (stdcall *clCreateKernel)(void* program,const char* kernel_name,int* errcode_ret);
+void* (stdcall *clCreateKernel)(void* program,char* kernel_name,int* errcode_ret);
 int (stdcall *clEnqueueNDRangeKernel)(
     void* command_queue,
     void* kernel,
     unsigned work_dim,
-    const size_t* global_work_offset,
-    const size_t* global_work_size_t,
-    const size_t* local_work_size_t,
+    size_t* global_work_offset,
+    size_t* global_work_size_t,
+    size_t* local_work_size_t,
     unsigned num_events_in_wait_list,
-    const void** event_wait_list,
+    void** event_wait_list,
     void** event
 );
 int (stdcall *clEnqueueReadBuffer)(
@@ -55,7 +55,7 @@ int (stdcall *clEnqueueReadBuffer)(
     size_t size_t,
     void* ptr,
     unsigned num_events_in_wait_list,
-    const void** event_wait_list,
+    void** event_wait_list,
     void** event
 );
 int (stdcall *clEnqueueWriteBuffer)(
@@ -64,16 +64,16 @@ int (stdcall *clEnqueueWriteBuffer)(
     int blocking_write,
     size_t offset,
     size_t size_t,
-    const void* ptr,
+    void* ptr,
     unsigned num_events_in_wait_list,
-    const void** event_wait_list,
+    void** event_wait_list,
     void** event
 );
 int (stdcall *clSetKernelArg)(
     void* kernel,
     unsigned arg_index,
     size_t arg_size_t,
-    const void* arg_value
+    void* arg_value
 );
 void* (stdcall *clCreateBuffer)(
     void* context,
@@ -112,10 +112,11 @@ static void* cl_inference;
 static void* cl_inference_bf;
 static void* g_cl_command_queue;
 
+static void* cl_raytrace;
+
 void* g_opencl_lib;
 
 void openclInit(void){
-    return;
 #ifdef _MSC_VER
     g_opencl_lib  = libraryLoad("OpenCL.dll");
 #elif defined(__linux__)
@@ -145,7 +146,7 @@ void openclInit(void){
         {.name = "clGetProgramBuildInfo",.fn_ptr = (funcptr_t*)&clGetProgramBuildInfo},
         {.name = "clGetPlatformInfo",.fn_ptr = (funcptr_t*)&clGetPlatformInfo},
         {.name = "clGetDeviceInfo",.fn_ptr = (funcptr_t*)&clGetDeviceInfo},
-        {.name = "clBuildProgram",.fn_ptr = (funcptr_t*)&clBuildProgram}
+        {.name = "clBuildProgram",.fn_ptr = (funcptr_t*)&clBuildProgram},
     };
     for(int i = countof(functions);i--;){
         *functions[i].fn_ptr = libraryFunctionLoad(g_opencl_lib,functions[i].name);
@@ -163,14 +164,33 @@ void openclInit(void){
     unsigned n_platform = 0;
     unsigned n_device = 0;
 
-    clGetPlatformIDs(20,platforms,&n_platform);
+    int platform_error = clGetPlatformIDs(20,platforms,&n_platform);
+    if(platform_error){
+        print((String)STRING_LITERAL("opencl platform ids fetch failed\n"));
+        print((String)STRING_LITERAL("error code: "));
+        printNumberNL((int)platform_error);
+        goto unload;
+    }
     clGetDeviceIDs(platforms[0],CL_DEVICE_TYPE_ALL,1,devices,&n_device);
-    g_cl_context = clCreateContext(0,1,(const void**)&devices[0],0,0,0);
-    g_cl_command_queue = clCreateCommandQueueWithProperties(g_cl_context,devices[0],0,0);
 
+    int context_error;
+    
+    g_cl_context = clCreateContext(0,1,(void**)&devices[0],0,0,&context_error);
+
+    if(!g_cl_context){
+        print((String)STRING_LITERAL("opencl context creation failed\n"));
+        print((String)STRING_LITERAL("error code: "));
+        printNumberNL((int)context_error);
+        PRINT_VAR(n_device);
+        PRINT_VAR(n_platform);
+        goto unload;
+    }
+    
+    g_cl_command_queue = clCreateCommandQueueWithProperties(g_cl_context,devices[0],0,0);
+#if 0
     String source_file = stringConcat(&g_arena_frame,(String){.data = file.content,.size = file.size},(String)STRING_LITERAL("\0"));
     
-    void* g_cl_program = clCreateProgramWithSource(g_cl_context,1,(const char**)&source_file.data,0,0);
+    void* g_cl_program = clCreateProgramWithSource(g_cl_context,1,(char**)&source_file.data,0,0);
     int build_error = clBuildProgram(g_cl_program,0,0,"-Werror",0,0);
 
     cl_inference    = clCreateKernel(g_cl_program,"inference",0);
@@ -186,9 +206,30 @@ void openclInit(void){
         debugPrint(log);
         goto unload;
     }
+#endif
     char name[128];
 
-    clGetDeviceInfo(devices[0],CL_DEVICE_NAME,sizeof(name),name,0);
+    clGetDeviceInfo(devices[0],CL_DEVICE_NAME,sizeof name,name,0);
+
+    file = storageFileRead(&g_arena_frame,"opencl/ray_tree.cl");
+    String source_file = stringConcat(&g_arena_frame,(String){.data = file.content,.size = file.size},(String)STRING_LITERAL("\0"));
+    void* g_cl_program = clCreateProgramWithSource(g_cl_context,1,(char**)&source_file.data,0,0);
+    int build_error = clBuildProgram(g_cl_program,0,0,"-Werror",0,0);
+    
+    if(build_error){
+        size_t log_size = 0;
+        clGetProgramBuildInfo(g_cl_program,devices[0],CL_PROGRAM_BUILD_LOG,0,NULL,&log_size);
+        char *log = virtualAllocate(log_size + 1);
+        clGetProgramBuildInfo(g_cl_program,devices[0],CL_PROGRAM_BUILD_LOG,log_size,log,NULL);
+        log[log_size] = '\0';
+        print((String)STRING_LITERAL("opencl kernel build failed\n"));
+        debugPrint(log);
+        print((String)STRING_LITERAL("error code: "));
+        printNumberNL((int)g_cl_program);
+        PRINT_VAR((int)g_cl_context);
+        goto unload;
+    }
+    cl_raytrace = clCreateKernel(g_cl_program,"inference",0);
     return;
     
  unload:
@@ -264,4 +305,11 @@ void markovInferenceDeInitOpenCL(void){
 
     cl_vram_buffers = 0;
     cl_indices = 0;
+}
+
+static void* cl_voxel_gpu;
+
+void uploadVoxelGPU(void* data,int n){
+    clSetKernelArg(cl_raytrace,0,sizeof(void*),&cl_voxel_gpu);
+    clEnqueueWriteBuffer(g_cl_command_queue,cl_voxel_gpu,true,0,n * sizeof(VoxelGPU),data,0,0,0);
 }

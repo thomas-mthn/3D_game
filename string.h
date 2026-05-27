@@ -2,6 +2,7 @@
 #define STRING_H
 
 #include "langext.h"
+#include "real.h"
 
 structure(MemoryArena);
 
@@ -14,6 +15,7 @@ bool stringCompareSizeInsensitive(String string,String compare);
 bool stringCompareSizeCaseInsensitive(String string,String compare);
 String stringMake(char* cstring);
 String numberToString(char* buffer,int number);
+String realToString(char* buffer,real r);
 String stringCopy(MemoryArena* arena,String string);
 int stringToNumber(String string);
 String stringInString(String string_1,String string_2);

@@ -12,7 +12,10 @@ String g_spell_names[] = {
 #undef X
 };
 
-int g_mana;
+unsigned g_shoot_timestamp;
+unsigned g_delay_timestamp;
+
+real g_mana;
 bool g_equipped_staff;
 Staff g_equipped;
 
@@ -27,15 +30,15 @@ SpellStatic g_spell_static[] = {
 		.adjective = true
 	},
 	[SPELL_BOLT] = {
-		.cost = 0x1000,
+		.cost = REAL_UNIT * 0x10,
 		.delay = 0x80,
 	},
 	[SPELL_ORB] = {
-		.cost = 0x4000,
+		.cost = REAL_UNIT * 0x40,
 		.delay = 0x80,
 	},
 	[SPELL_BOMB] = {
-		.cost = 0x10000,
+		.cost = REAL_UNIT * 0x100,
 		.delay = 0x80,
 	},
 };
@@ -72,8 +75,8 @@ void staffGenerate(Vec3 position){
 
 	staff->staff = (Staff){
 		.capacity = tRnd() % 4 + 1,
-		.mana_generation = tRnd() % 0x100 + 10,
-		.mana_max = tRnd() % 0x40000 + 4000,
+		.mana_generation = realRandom(REAL_UNIT),
+		.mana_max = realRandom(REAL_UNIT * 0x400) + REAL_UNIT * 0x40,
 		.delay = realRandom(FIXED_ONE / 256) + FIXED_ONE / 1024,
 		.reload = realRandom(FIXED_ONE) + FIXED_ONE / 2,
         .recoil = realRandom(FIXED_ONE),
@@ -144,14 +147,18 @@ void staffFire(void){
 		[SPELL_ADJ_SPEED] = {true,2},	
 	};
 
-	int cost = 0;
+	real cost = 0;
+    real delay = 0;
 
 	for(;;){
 		do
 			spell_slot = g_equipped.spell_array + (g_spell_index + i) % g_equipped.capacity;
 		while(i++ < 0x10 && spell_slot->type != INVENTORY_SPELL);
 
-		cost += g_spell_static[spell_slot->spell_type].cost;
+        SpellStatic* spell_s = g_spell_static + spell_slot->spell_type;
+        
+		cost += spell_s->cost;
+        delay += spell_s->delay;
 
 		if(spell_slot->spell_type < countof(adj_table) && adj_table[spell_slot->spell_type].is_adjective){
 			adj_table[spell_slot->spell_type].amount += 1;
@@ -162,8 +169,11 @@ void staffFire(void){
 		
 	g_spell_index += i;
 
-	if(spell_slot->type != INVENTORY_SPELL || g_mana < cost)
+	if(spell_slot->type != INVENTORY_SPELL || g_mana < cost || g_time.time < g_delay_timestamp)
 		return;
+
+    g_shoot_timestamp = g_time.time;
+    g_delay_timestamp = g_time.time + realToInt(delay * 0x1000);
 
 	g_mana -= cost;
 
@@ -174,6 +184,7 @@ void staffFire(void){
 	spell->adj_damage = adj_table[SPELL_ADJ_DAMAGE].amount;
 	spell->velocity = direction;
 	spell->velocity = vec3MulS(spell->velocity,FIXED_ONE * (adj_table[SPELL_ADJ_SPEED].amount + 1));
+    spell->velocity = vec3MulS(spell->velocity,FIXED_ONE * 4);
     spell->parent = g_player.entity;
 
 	audioPlay(g_surface.position,AUDIO_SHOOT);

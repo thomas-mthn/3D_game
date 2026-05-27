@@ -53,8 +53,13 @@ vec3 BicubicHermiteTextureSample(vec2 P){
 
 void main(){
 	FragColor = vec4(lighting_io,1.0);
-	vec3 texture_color = BicubicHermiteTextureSample(textcoords_io);
-	if(texture(ourTexture,textcoords_io).a > 0.5)
+	
+    float trans = texture(ourTexture,textcoords_io).a;
+    if(trans > 0.5)
 		discard;
+
+    vec3 texture_color = BicubicHermiteTextureSample(textcoords_io);    
+
 	FragColor.rgb *= texture_color;
+    FragColor.rgb /= 1.0 - trans;
 }

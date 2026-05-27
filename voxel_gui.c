@@ -106,6 +106,12 @@ static void drawNumber3D(Voxel* voxel,int side,Vec2 uv,int number,real scale){
 	drawGuiString(voxel,side,uv,string,scale,0x300,0xFFFFFF);
 }
 
+static void drawReal3D(Voxel* voxel,int side,Vec2 uv,real number,real scale){
+	char buffer[0x10];
+    String string = realToString(buffer,number);
+	drawGuiString(voxel,side,uv,string,scale,0x300,0xFFFFFF);
+}
+
 void drawGuiRectangle(Voxel* voxel,Vec2i axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,int side){
     int mirror = (int[]){
         1,-1,
@@ -135,7 +141,7 @@ void drawGuiRectangle(Voxel* voxel,Vec2i axis,Vec3 block_pos,Vec2 uv,Vec2 size,i
     DrawPrimitive* polygon = primitiveToDraw();
     for(int i = countof(points);i--;)
         polygon->position[i] = points[i];
-    polygon->luminance = vec3DivS(pixelColorToColor(color),FIXED_ONE * 0x100);
+    polygon->luminance = pixelColorToColor(color);
 }
 
 void drawGuiFrame(Voxel* voxel,Vec2i axis,Vec3 block_pos,Vec2 uv,Vec2 size,int color,real thickness,int side){
@@ -371,7 +377,6 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side,VoxelGuiElement* gui,int 
                             .h = y_r,
                             .s = hsv.s,
                     });
-                    color = vec3MulS(color,FIXED_ONE * 0x1000);
                     hue_texture.pixel_data[j] = colorToPixelColor(color);
                 }
                 for(int j = hue_texture.size * hue_texture.size;j--;){
@@ -386,7 +391,6 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side,VoxelGuiElement* gui,int 
                             .h = hsv.s,
                             .s = y_r,
                     });
-                    color = vec3MulS(color,FIXED_ONE * 0x1000);
                     sat_texture.pixel_data[j] = colorToPixelColor(color);
                 }
                 for(int j = hue_texture.size * hue_texture.size;j--;){
@@ -401,7 +405,6 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side,VoxelGuiElement* gui,int 
                             .h = hsv.h,
                             .s = hsv.s,
                     });
-                    color = vec3MulS(color,FIXED_ONE * 0x1000);
                     val_texture.pixel_data[j] = colorToPixelColor(color);
                 }
                 generateMipmaps(&hue_texture);
@@ -493,15 +496,22 @@ void voxelGuiDraw(Voxel* voxel,Vec3 block_pos,int side,VoxelGuiElement* gui,int 
                 drawGuiRectangle(voxel,axis,block_pos,element->position,button_size,color,side);
 			} break;
 			case VOXEL_GUI_STRING:{
-				int size = !element->string.size ? REAL_UNIT * 0x08 : element->string.size;
+                
+				real size = !element->string.size ? REAL_UNIT * 0x08 : element->string.size;
 				drawGuiString(voxel,side,element->position,element->string.string,size,REAL_UNIT * 0x03,0xFFFFFF);
 			} break;
 			case VOXEL_GUI_NUMBER:{
-				int size = !element->number.size ? 0x800 : element->number.size;
+				real size = !element->number.size ? 0x800 : element->number.size;
 				drawNumber3D(voxel,side,element->position,*element->number.number,size);	
 			} break;
+            case VOXEL_GUI_REAL:{
+                real size = !element->number.size ? 0x800 : element->number.size;
+				drawReal3D(voxel,side,element->position,*element->number.number,size);	
+            } break;
 		}
 	}
+    if(!n_gui)
+        return;
 	if(g_voxel_pointed.voxel == voxel && g_voxel_pointed.side == side){
 		drawGuiRectangle(voxel,axis,block_pos,vec2Sub(g_voxel_pointed.uv,vec2Single(REAL_UNIT * 0x01)),vec2Single(REAL_UNIT * 0x03),0x000000,side);
 		drawGuiRectangle(voxel,axis,block_pos,vec2Sub(g_voxel_pointed.uv,vec2Single(REAL_UNIT * 0x01)),vec2Single(REAL_UNIT * 0x02),0xFFFFFF,side);

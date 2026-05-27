@@ -1,6 +1,7 @@
 #include "string.h"
 #include "memory.h"
 #include "libc.h"
+#include "real.h"
 
 static int numberStringLength(int number){
     int length = 0;
@@ -155,6 +156,39 @@ String numberToString(char* buffer,int number){
         buffer[0] = '-';
     buffer[length_copy] = 0;
     return (String){.data = buffer,.size = length_copy};
+}
+
+String realToString(char* buffer,real r){
+    if(IS_FLOAT(real)){
+        r *= 1000;
+        int number = realToInt(r);
+        int length = numberStringLength(number) + 1;
+        int length_copy;
+        bool negative = false;
+        int number_copy;
+
+        if(number < 0){
+            negative = true;
+            number = -number;
+        }
+        number_copy = number;
+        length_copy = length;
+ 
+        while(length--){
+            if(length == 3){
+                buffer[length] = '.';
+                continue;
+            }
+            buffer[length] = number % 10 + '0';
+            number /= 10;
+        }
+        if(negative)
+            buffer[0] = '-';
+        buffer[length_copy] = 0;
+        return (String){.data = buffer,.size = length_copy};
+        
+    }
+    return numberToString(buffer,r);
 }
 
 String stringCopy(MemoryArena* arena,String string){

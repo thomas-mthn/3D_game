@@ -26,7 +26,7 @@ int g_debug_int2;
         X(SMOOTH_LIGHTING) X(GL_WIREFRAME) X(SPELL) X(LOAD) X(SAVE) X(CREATE) \
         X(FAST_STARTUP) X(TEXTURES) X(DBG_INT1) X(DBG_INT2) X(OCTREE_WIREFRAME) \
         X(RD_OCCLUSION) X(MULTI_SAMPLE) X(RAY_TEST) X(ECHO) X(RD_ENTITY_HITBOX) \
-        X(GL_QLIGHTMAP) X(RD_DSHADOW)
+        X(GL_QLIGHTMAP) X(RD_DSHADOW) X(OV_LUMINANCE)
 
 
 typedef enum{
@@ -206,6 +206,9 @@ void consoleVoxelDraw(Voxel* voxel,int side){
 static void commandExecute(CommandType command_type){
     String command = {.data = console.buffer,.size = console.index};
     switch(command_type){
+        case COMMAND_OV_LUMINANCE:{
+            changeBooleanSetting(&g_options.ov_luminance);
+        } break;
         case COMMAND_RD_DSHADOW:{
             changeBooleanSetting(&g_options.rd_dshadow);
         } break;
@@ -272,6 +275,7 @@ static void commandExecute(CommandType command_type){
             }
             worldDestroy();
             worldLoad(world_name);
+            octreeRefresh();
             g_voxel_interact = 0;
         } break;
         case COMMAND_SPELL:{

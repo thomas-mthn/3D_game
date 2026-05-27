@@ -20,8 +20,8 @@ typedef enum{
 
 structure(SpellStatic){
 	bool adjective;
-	int cost;
-	int delay;
+	real cost;
+	real delay;
 };
 
 structure(InventorySlot){
@@ -37,21 +37,23 @@ structure(InventorySlot){
 
 structure(Staff){
 	Voxel* model;
-	int reload;
-	int delay;
+	real reload;
+	real delay;
 	int capacity;
-	int mana_generation;
-	int mana_max;
+	real mana_generation;
+	real mana_max;
     int recoil;
 	InventorySlot spell_array[0x10];
 };
 
 extern Staff g_equipped;
-extern int g_mana;
+extern real g_mana;
 extern bool g_equipped_staff;
 extern int g_spell_index;
 extern SpellStatic g_spell_static[];
 extern String g_spell_names[];
+extern unsigned g_shoot_timestamp;
+extern unsigned g_delay_timestamp;
 
 void staffGenerate(Vec3 position);
 void staffSkip(void);

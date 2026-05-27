@@ -31,7 +31,7 @@ structure(Collision){
         Voxel* voxel;
         Entity* entity;
     };
-    bool in_water : 1;
+    real water_covered;
 };
 
 structure(MovementFlags){

@@ -6,10 +6,12 @@
 #include "langext.h"
 #include "voxel_gui.h"
 #include "memory.h"
+#include "opengl.h"
 
 #define LINK_MAX 0x10
 
 structure(Entity);
+structure(Cubemap);
 
 static Vec2i g_axis_table[] = {
 	{VEC3_Y,VEC3_Z},
@@ -99,8 +101,22 @@ typedef enum{
     VOXEL_PLANE,
     VOXEL_CUSTOM,
     VOXEL_CUSTOM_EMIT,
+    VOXEL_SPHERE,
+    VOXEL_CYLINDER,
+    VOXEL_TORUS,
     VOXEL_ECOUNT,
 } VoxelType;
+
+structure(VoxelGPU){
+    int32 parent;
+    VoxelType type;
+    int16 position_x;
+	int16 position_y;
+	int16 position_z;
+    int8 depth;
+    uint8 child_mask;
+    int32 child_s[8];
+};
 
 structure(Voxel){
     Voxel* parent;
@@ -125,7 +141,7 @@ structure(Voxel){
             int n_link;
             Voxel** links;
 			Voxel* next_voxel_link;
-			int animation;
+			real animation;
 
             //chest
 			bool chest_open : 1;
@@ -142,14 +158,25 @@ structure(Voxel){
             Vec3 color;
             bool has_texture : 1;
             bool emiter : 1;
-            int8 texture_id;
+            union{
+                int8 texture_id;
+                ProcTextType procedural_texture;
+            };
             int8 emit_pow;
 
             Entity* entity_list;
+
+            //model_voxels
+            Texture* texture_dynamic;
+            Cubemap* cubemap;
+            Vec3 render_direction;
+            Vec2 cylinder_angle;
+            Vec3 primitive_position;
 		};
 	};
 	//TODO: move this in a temporary structure to safe memory
 	int index;
+    int index_gpu;
 };
 
 structure(VoxelStatic){
@@ -213,6 +240,8 @@ structure(VoxelSerializedPlane){
     VoxelSerialized voxel;
     Vec2 angle;
     real distance;
+    Vec3 color;
+    int texture_id;
 };
 
 structure(VoxelSerializedCustom){
@@ -226,6 +255,16 @@ structure(VoxelSerializedCustomEmit){
     VoxelSerialized voxel;
     Vec3 color;
     int emit_pow;
+};
+
+structure(VoxelSerializedCylinder){
+    VoxelSerialized voxel;
+    Vec2 angle;
+};
+
+structure(VoxelSerializedTorus){
+    VoxelSerialized voxel;
+    Vec3 position;
 };
 
 structure(VoxelSerializedParent){
@@ -245,6 +284,7 @@ extern Voxel* g_voxel_tick_list;
 extern VoxelStatic g_voxel_static[];
 extern VoxelGuiElement g_voxel_custom_gui[];
 extern VoxelGuiElement g_voxel_custom_emit_gui[];
+extern VoxelGuiElement g_voxel_plane_gui[];
 extern VoxelGuiElement g_inventory_gui[];
 extern AllocatorFreeList g_allocator_world;
 
@@ -256,6 +296,8 @@ structure(RayHit){
 structure(TreeTraceFlags){
     bool entity : 1;
     bool everything_solid : 1;
+    bool luminance : 1;
+    bool skip_first : 1;
 };
 
 Vec3 rayVoxelHitPosition(Voxel* voxel,Vec3 ray_position,Vec3 ray_direction,Vec3Axis side);
@@ -289,6 +331,8 @@ void voxelMenuMainSet(void);
 void voxelMenuStaffEditorDefault(void);
 
 bool lineOfSight(Vec3 position_1,Vec3 position_2);
+
+void voxelSetGPU(void);
 
 static real depthToSize(int depth){
 	return realShr((FIXED_ONE * 256) * 2,depth);

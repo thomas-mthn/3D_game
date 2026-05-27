@@ -23,7 +23,7 @@ void gui2dRectangleDraw(Vec2 position,Vec2 size,int color,Gui2dFlags flags){
             position.y -= FIXED_ONE;
     }
     
-    drawRectangle(&g_surface,position.x,position.y,size.x,size.y,vec3MulS(pixelColorToColor(color),REAL_UNIT));
+    drawRectangle(&g_surface,position.x,position.y,size.x,size.y,pixelColorToColor(color));
 }
 
 static void gui2dSegmentDraw(Vec2 pos_1,Vec2 pos_2,real thickness,int color,Gui2dFlags flags){

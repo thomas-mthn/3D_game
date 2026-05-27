@@ -156,7 +156,7 @@ static void textureGenerate(char* path,int size,TextureType type){
 
 #include "console.h"
 
-int cubemapColorGet2(Cubemap* cubemap,Vec3 direction){
+int cubemapColorGetBilinear(Cubemap* cubemap,Vec3 direction){
     real abs_x = tAbs(direction.x);
     real abs_y = tAbs(direction.y);
     real abs_z = tAbs(direction.z);
@@ -193,11 +193,213 @@ int cubemapColorGet2(Cubemap* cubemap,Vec3 direction){
     real inv_major = tReciprocal(major);  
     u = realMulR(u,inv_major);
     v = realMulR(v,inv_major);
-
-    int x = realToInt(realMulR(u + FIXED_ONE,intToReal(cubemap->size)));
-    int y = realToInt(realMulR(v + FIXED_ONE,intToReal(cubemap->size)));
     
-    return cubemap->textures[side].pixel_data[y * cubemap->size + x];
+    int x = realToInt(realMulR(u + FIXED_ONE,intToReal(cubemap->size)) + FIXED_ONE) / 2;
+    int y = realToInt(realMulR(v + FIXED_ONE,intToReal(cubemap->size)) + FIXED_ONE) / 2;
+
+    x -= 1;
+    y -= 1;
+
+    Vec2i crd[] = {
+        {y,x},
+        {y,(x + 1) % cubemap->size},
+        {(y + 1) % cubemap->size,(x + 1) % cubemap->size},
+        {(y + 1) % cubemap->size,x},
+    };
+
+    int sides[] = {
+        side,
+        side,
+        side,
+        side,
+    };
+#if 0
+    if(side != 4 && side != 5)
+        return 0;
+#endif
+    if(y == -1){
+        crd[0].x = 0;
+        crd[1].x = 0;
+    }
+    if(x == -1){
+        crd[0].y = 0;
+        crd[3].y = 0;
+    }
+    
+    if(y == -1){
+        if(side == 0){
+            sides[0] = 2;
+            sides[1] = 2;
+
+            crd[0].x = cubemap->size - 1;
+            crd[1].x = cubemap->size - 1;
+        }
+        else if(side == 1){
+            sides[0] = 1;
+            sides[1] = 1;
+        }
+        else if(side == 2){
+            sides[0] = 5;
+            sides[1] = 5;
+        }
+        else if(side == 3){
+            sides[0] = 5;
+            sides[1] = 5;
+        }
+        else if(side == 4){
+            sides[0] = 3;
+            sides[1] = 3;
+            
+            crd[0].x = cubemap->size - 1;
+            crd[1].x = cubemap->size - 1;
+        }
+        else if(side == 5){
+            sides[0] = 3;
+            sides[1] = 3;
+        }
+    }
+    else if(x == -1){
+        if(side == 0){
+            sides[0] = 3;
+            sides[3] = 3;
+
+            crd[0].y = cubemap->size - 1;
+            crd[3].y = cubemap->size - 1;
+        }
+        else if(side == 1){
+            sides[0] = 3;
+            sides[3] = 3;
+        }
+        else if(side == 2){
+            sides[0] = 1;
+            sides[3] = 1;
+
+            crd[0].y = cubemap->size - 1;
+            crd[3].y = cubemap->size - 1;
+        }
+        else if(side == 3){
+            sides[0] = 1;
+            sides[3] = 1;
+        }
+        else if(side == 4){
+            sides[0] = 1;
+            sides[3] = 1;
+#if 0
+            crd[0].y = cubemap->size - 1;
+            crd[3].y = cubemap->size - 1;
+#endif
+        }
+        else if(side == 5){
+            sides[0] = 1;
+            sides[3] = 1;
+        }
+    }
+    else if(x == cubemap->size - 1){
+        if(side == 0){
+            sides[1] = 2;
+            sides[2] = 2;
+
+            crd[1].y = cubemap->size - 1;
+            crd[2].y = cubemap->size - 1;
+        }
+        else if(side == 2){
+            sides[1] = 0;
+            sides[2] = 0;
+
+            crd[1].y = cubemap->size - 1;
+            crd[2].y = cubemap->size - 1;
+        }
+        else if(side == 1){
+            sides[1] = 2;
+            sides[2] = 2;
+        }
+        else if(side == 3){
+            sides[1] = 0;
+            sides[2] = 0;
+        }
+        else if(side == 5){
+            sides[1] = 3;
+            sides[2] = 3;
+
+            int temp = crd[1].x;
+            crd[1].x = crd[1].y;
+            crd[1].y = temp;
+
+            temp = crd[2].x;
+            crd[2].x = crd[2].y;
+            crd[2].y = temp;
+        }
+        else{
+            sides[1] = 0;
+            sides[2] = 0;
+            
+            int temp = crd[1].x;
+            crd[1].x = crd[1].y;
+            crd[1].y = temp;
+
+            temp = crd[2].x;
+            crd[2].x = crd[2].y;
+            crd[2].y = temp;
+            
+            crd[1].y = cubemap->size - 1;
+            crd[2].y = cubemap->size - 1;
+        }
+    }
+    else if(y == cubemap->size - 1){
+        if(side == 0){
+            sides[3] = 4;
+            sides[2] = 4;
+            crd[3].x = cubemap->size - 1;
+            crd[2].x = cubemap->size - 1;
+        }
+        else if(side == 5){
+            sides[3] = 2;
+            sides[2] = 2;
+        }
+        else if(side == 4){
+            sides[3] = 2;
+            sides[2] = 2;
+            crd[3].x = cubemap->size - 1;
+            crd[2].x = cubemap->size - 1;
+        }
+        else if(side == 3){
+            sides[3] = 4;
+            sides[2] = 4;
+        }
+        else if(side == 1){
+            sides[3] = 4;
+            sides[2] = 4;
+#if 0
+            crd[3].x = cubemap->size - 1;
+            crd[2].x = cubemap->size - 1;
+#endif
+        }
+        else{
+            sides[3] = 4;
+            sides[2] = 4;
+            crd[3].x = cubemap->size - 1;
+            crd[2].x = cubemap->size - 1;
+        }
+    }
+
+    Vec3 ll = pixelColorToColor(cubemap->textures[sides[0]].pixel_data[crd[0].x * cubemap->size + crd[0].y]);
+    Vec3 lh = pixelColorToColor(cubemap->textures[sides[1]].pixel_data[crd[1].x * cubemap->size + crd[1].y]);
+    Vec3 hh = pixelColorToColor(cubemap->textures[sides[2]].pixel_data[crd[2].x * cubemap->size + crd[2].y]);
+    Vec3 hl = pixelColorToColor(cubemap->textures[sides[3]].pixel_data[crd[3].x * cubemap->size + crd[3].y]);
+
+    Vec3 uv = {
+        tFractU(tAbs(u + FIXED_ONE) / 2 * cubemap->size + FIXED_ONE / 2),
+        tFractU(tAbs(v + FIXED_ONE) / 2 * cubemap->size + FIXED_ONE / 2)
+    };
+
+    Vec3 lx1 = vec3Mix(ll,lh,uv.x);
+    Vec3 lx2 = vec3Mix(hl,hh,uv.x);
+
+    Vec3 luminance = vec3Mix(lx1,lx2,uv.y);
+    if(g_test_bool)
+        return colorToPixelColor((Vec3){0,uv.x,uv.y});
+    
+    return colorToPixelColor(luminance);
 }
 
 int cubemapColorGet(Cubemap* cubemap,Vec3 direction){
@@ -255,6 +457,15 @@ Vec3 cubemapDirectionGet(Cubemap* cubemap,Side side,int x,int y){
     ray_direction.a[axis.x] = r_y;
     ray_direction.a[side >> 1] = side & 1 ? -FIXED_ONE : FIXED_ONE;
     return ray_direction;
+}
+
+static unsigned hash(unsigned x){
+    x += x << 10;
+    x ^= x >>  6;
+    x += x <<  3;
+    x ^= x >> 11;
+    x += x << 15;
+    return x;
 }
 
 void texturesGenerate(void){
@@ -433,18 +644,18 @@ void texturesGenerate(void){
             
 			Vec3 position = vec3MulS(ray_direction,distance);
 
-            Vec3 lum_up   = {REAL_UNIT * 0x20,REAL_UNIT * 0x80,REAL_UNIT * 0x100};
-            Vec3 lum_down = {REAL_UNIT * 0x100,REAL_UNIT * 0x80,REAL_UNIT * 0x20};
+            Vec3 lum_up   = {REAL_UNIT * 0x10,REAL_UNIT * 0x40,REAL_UNIT * 0x80};
+            Vec3 lum_down = {REAL_UNIT * 0x40,REAL_UNIT * 0x20,REAL_UNIT * 0x08};
 
-            Vec3 luminance = vec3MulS(vec3Mix(lum_up,lum_down,tAbs(ray_direction.z)),FIXED_ONE * 0x400);
+            Vec3 luminance = vec3Mix(lum_up,lum_down,tSqrt(tAbs(ray_direction.z)));
 
             if(g_world.skylight){
                 Vec3 skylight_direction = getLookDirection(g_world.skylight_angle);
-                real intensity = realMulR(tReciprocal(vec3Distance(ray_direction,skylight_direction)),0x4);
+                real intensity = realMulR(tReciprocal(vec3Distance(ray_direction,skylight_direction)),REAL_UNIT * 4);
                 Vec3 sky_lum = vec3MulS(g_world.skylight_luminance,intensity);
                 luminance = vec3Add(luminance,sky_lum);
             }
-
+            
             texture->pixel_data[i] = colorToPixelColor(luminance);
 		}
 	}
@@ -452,47 +663,58 @@ void texturesGenerate(void){
     textureGenerate("img/planks.bmp",1024,TEXTURE_PLANKS);
 	softSurfaceDestroyMeta(&surface);
 	texture = g_textures + TEXTURE_STONE_BRICK;
-	surface = (DrawSurface){
-		.data = texture->pixel_data,
-		.width = texture->size,
-		.height = texture->size,
-	};
-	surfaceInit(&surface);
 
+    int brick_size = 4;
+    
 	for(int i = 0;i < texture->size * texture->size;i++){
-		int r = tRnd() & 0x1F | 0xC0;
-		texture->pixel_data[i] = r | r << 8 | r << 16;
-	}
+        int x = i / texture->size;
+        int y = i % texture->size;
 
+        int cell_x = x / (texture->size / (brick_size * 2));
+        int cell_y = y / (texture->size / brick_size);
+
+        if(cell_x & 1)
+            cell_y = (y + (texture->size / (brick_size * 2))) / (texture->size / brick_size) % brick_size;
+        
+        unsigned cell_id = hash(hash(cell_x + 1) ^ cell_y);
+
+        Vec3 color_b = {REAL_UNIT * 0xB0,REAL_UNIT * 0xB0,REAL_UNIT * 0xB0};
+        Vec3 color_e = {REAL_UNIT * 0x100,REAL_UNIT * 0x100,REAL_UNIT * 0x100};
+
+        Vec3 color = vec3Mix(color_b,color_e,(real)(cell_id & 0xFFFF) / 0x10000);
+
+		texture->pixel_data[i] = colorToPixelColor(color);
+	}
+#if 1
 	for(int i = 0;i < texture->size;i++){
-		for(int j = 0;j < 5;j++){
-			for(int k = 0;k < 4;k++){
-				Vec3 color = pixelColorToColor(texture->pixel_data[((texture->size / 4) * k + j) * texture->size + i]);
+		for(int j = 0;j < brick_size * 2 + 1;j++){
+			for(int k = 0;k < brick_size * 2;k++){
+				Vec3 color = pixelColorToColor(texture->pixel_data[((texture->size / (brick_size * 2)) * k + j) * texture->size + i]);
 
 				color = vec3MulS(color,FIXED_ONE / 8 * tAbs(j - 2) + FIXED_ONE / 2);
 
-				texture->pixel_data[((texture->size / 4) * k + j) * texture->size + i] = colorToPixelColor(color);
+				texture->pixel_data[((texture->size / (brick_size * 2)) * k + j) * texture->size + i] = colorToPixelColor(color);
 			}
 		}
 	}
+#if 1
+	for(int i = 0;i < texture->size / (brick_size * 2);i++){
+		for(int j = 0;j < brick_size * 2 + 1;j++){
+			for(int k = 0;k < brick_size;k++){
+				for(int l = 0;l < brick_size * 2;l++){
+					int offset = l % brick_size * texture->size / (brick_size * 2);
 
-	for(int i = 0;i < texture->size / 4;i++){
-		for(int j = 0;j < 5;j++){
-			for(int k = 0;k < 2;k++){
-				for(int l = 0;l < 4;l++){
-					int offset = l % 2 * texture->size / 4;
+					Vec3 color = pixelColorToColor(texture->pixel_data[texture->size * (i + l * texture->size / (brick_size * 2)) + (texture->size / brick_size * k + j) + offset]);
 
-					Vec3 color = pixelColorToColor(texture->pixel_data[texture->size * (i + l * texture->size / 4) + (texture->size / 2 * k + j) + offset]);
+					color = vec3MulS(color,FIXED_ONE / 8 * tAbs(j - brick_size) + FIXED_ONE / brick_size);
 
-					color = vec3MulS(color,FIXED_ONE / 8 * tAbs(j - 2) + FIXED_ONE / 2);
-
-					texture->pixel_data[texture->size * (i + l * texture->size / 4) + (texture->size / 2 * k + j) + offset] = colorToPixelColor(color);
+					texture->pixel_data[texture->size * (i + l * texture->size / (brick_size * 2)) + (texture->size / brick_size * k + j) + offset] = colorToPixelColor(color);
 				}
 			}
 		}
 	}
-    textureGenerate("img/brick_alt2.bmp",1024,TEXTURE_STONE_BRICK);
-    softSurfaceDestroyMeta(&surface);
+#endif
+#endif
 	texture = g_textures + TEXTURE_CHEST;
 	surface = (DrawSurface){
 		.data = texture->pixel_data,

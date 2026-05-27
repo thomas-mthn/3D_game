@@ -242,6 +242,6 @@ void genBlockSelect(void){
 
 	if(g_voxel_placement){
 		Vec3 position = {FIXED_ONE * 2 + FIXED_ONE / 2,FIXED_ONE + FIXED_ONE / 2,FIXED_ONE * 2 + FIXED_ONE / 2};
-		drawBlockSelect((Vec3){0},luminance,FIXED_ONE,g_player.voxel_select);
+		drawBlockSelect((Vec3){0},luminance,FIXED_ONE,g_player.voxel_copy ? g_player.voxel_copy->type : g_player.voxel_select);
 	}
 }

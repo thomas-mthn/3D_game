@@ -9,6 +9,7 @@
 #include "string.h"
 
 structure(Voxel);
+structure(ModelSprite);
 
 typedef enum{
 	ENTITY_MONSTER = 1,
@@ -24,12 +25,6 @@ typedef enum{
     ENTITY_WEAPON,
     ENTITY_PLAYER,
 } EntityType;
-
-structure(ModelEllipsoid){
-	Vec3 position;
-	Vec3 radius;
-	Vec3 color;
-};
 
 structure(Entity){
 	Entity* next;
@@ -76,6 +71,7 @@ structure(Entity){
     real lifetime;
 	Texture texture_dynamic;
 	Texture* texture;
+    Cubemap cubemap;
     
 	Vec2 texture_offset;
 	int texture_size;
@@ -105,8 +101,7 @@ structure(Entity){
 	real attack_cooldown;
 	String particle_string;
 
-    int  n_model_sphere;    
-	ModelEllipsoid* model_sphere;
+	ModelSprite* model_sphere;
 
     Voxel* inside;
 };
@@ -123,7 +118,6 @@ void entityDraw(Entity* entity);
 void entityDrawHitbox(void);
 
 void entityInit(void);
-real entitySpriteSize(Vec3 position,real size);
 void entityTick(void);
 void entityVoxelInsertSimulation(void);
 void entityVoxelInsertRender(void);
@@ -132,7 +126,5 @@ Entity* entityRayCollision(Entity* entity_list,Vec3 position,Vec3 direction);
 void entityDynamicLighting(void);
 
 void entityHit(Entity* monster);
-
-void ellipsoidModelGenerate(Vec3 position,Texture* texture,ModelEllipsoid* ellipsoids,int n_ellipsoid,Vec2 model_angle,bool angle_player);
 
 #endif

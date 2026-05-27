@@ -61,6 +61,13 @@
 
 #define GL_NUM_EXTENSIONS 0x821D
 
+#define GL_TEXTURE_CUBE_MAP 0x8513
+#define GL_TEXTURE_CUBE_MAP_POSITIVE_X 0x8515
+
+#define GL_TEXTURE_CUBE_MAP_SEAMLESS 0x884F
+
+#define GL_CLAMP_TO_EDGE 0x812F
+#define GL_TEXTURE_WRAP_R 0x8072
 #if _WIN64
 typedef long long (stdcall *Proc)();
 #else
@@ -192,7 +199,10 @@ static void (stdcall *glDrawArrays)(DrawType type,int first,int count);
 static void (stdcall *glDrawElements)(DrawType type,int count,DataType data_type,void* indices);
 static int  (stdcall *glGetUniformLocation)(unsigned program,char* name);
 static void (stdcall *glUniform1i)(int loc,int v1);
+static void (stdcall *glUniform1f)(int loc,float v1);
+static void (stdcall *glUniform2f)(int loc,float v1,float v2);
 static void (stdcall *glUniform3f)(int loc,float v1,float v2,float v3);
+static void (stdcall *glUniform4f)(int loc,float v1,float v2,float v3,float v4);
 
 static void (stdcall *glGenTextures)(unsigned n,unsigned* textures);
 static void (stdcall *glDeleteTextures)(int n,unsigned* textures);

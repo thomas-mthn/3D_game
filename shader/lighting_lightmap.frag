@@ -2,8 +2,7 @@
 out vec4 FragColor;
 in vec3 world_pos_io;
 in vec3 lightmap_pos_io;
-flat in vec3 u_io;
-flat in vec3 v_io;
+flat in vec3 color_io;
 flat in int lightmap_index_io;
 flat in ivec3 normal_io;
 
@@ -120,6 +119,7 @@ void main(){
                 vec4 result = luxelGetColor(ivec3(lightmap_pos_io),d,normal_io);
                 if(result.a > 0.5){
                     FragColor.rgb = result.rgb;
+                    FragColor.rgb *= color_io; 
                     return;
                 }
                 d *= 2.0;
@@ -148,4 +148,5 @@ void main(){
     ivec3 world_pos_s = world_pos >> depth;
     FragColor.r = fract(float(luxelHashGet(world_pos_s,depth)) / 256);
 #endif
+    FragColor.rgb *= color_io;
 }

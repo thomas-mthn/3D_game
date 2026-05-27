@@ -35,6 +35,7 @@ structure(Texture){
 
 structure(Cubemap){
     int size;
+    unsigned gl_id;
     Texture textures[6];
 };
 
@@ -43,8 +44,8 @@ extern Vec2 g_texture_coordinates_fill[];
 extern Cubemap g_skybox;
 
 int cubemapColorGet(Cubemap* cubemap,Vec3 direction);
-int cubemapColorGet2(Cubemap* cubemap,Vec3 direction);
 Vec3 cubemapDirectionGet(Cubemap* cubemap,Side side,int x,int y);
+int cubemapColorGetBilinear(Cubemap* cubemap,Vec3 direction);
 
 void texturesGenerate(void);
 int textureLookup(Texture* texture,real x,real y,int mipmap);

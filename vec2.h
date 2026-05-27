@@ -4,10 +4,10 @@
 #include "tmath.h"
 #include "real.h"
 
-structure(Vec2){
-    real x;
-    real y;
-};
+typedef union{
+    struct{real x,y;};
+    real a[2];
+} Vec2;
 
 enum{
     VEC2_X,

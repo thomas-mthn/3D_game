@@ -17,6 +17,7 @@ typedef enum {
 	VOXEL_GUI_CHECKBOX,
 	VOXEL_GUI_STRING,
 	VOXEL_GUI_NUMBER,
+    VOXEL_GUI_REAL,
 	VOXEL_GUI_IMAGE,
 	VOXEL_GUI_INVENTORY_SLOT,
     VOXEL_GUI_RECTANGLE,
@@ -45,6 +46,10 @@ structure(VoxelGuiElement){
             int* number;
             real size;
         } number;
+        struct{
+            real* number;
+            real size;
+        } real;
         struct{
             Texture* image;
         } image;

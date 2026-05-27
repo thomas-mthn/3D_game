@@ -68,7 +68,6 @@ GameOptions g_options = {
 bool g_voxel_placement;
 
 real g_exposure = FIXED_ONE;
-bool g_luminance_overlay;
 
 uint8 g_key[0x100];
 Vec2 g_cursor;
@@ -79,15 +78,23 @@ Vec3 g_view_plane[4];
 Vec3 g_view_plane_lighting[4];
 
 Player g_player = {
-    .voxel_select = VOXEL_CUSTOM_EMIT,
+    .voxel_select = VOXEL_GLASS,
     .edit_depth = 10,
 };
-
+#if 1
 World g_world = {
     .skylight = true,
     .skylight_angle = {REAL_UNIT * 0x10,REAL_UNIT * 0x10},
-    .skylight_luminance = {FIXED_ONE * 6,FIXED_ONE * 9,FIXED_ONE * 12},
+    .skylight_luminance = {REAL_UNIT * 0xA0,REAL_UNIT * 0xC0,REAL_UNIT * 0x100},
 };
+#else
+
+World g_world = {
+    .skylight = true,
+    .skylight_angle = {REAL_UNIT * 0x10,REAL_UNIT * 0x28},
+    .skylight_luminance = {REAL_UNIT * 0xC0,REAL_UNIT * 0xE0,REAL_UNIT * 0x100},
+};
+#endif
 
 real bilinearScalar(Vec2 position,real* values){
 	real color_x0 = tMix(values[0],values[1],tFract(position.y));
@@ -216,6 +223,12 @@ Vec3 screenRayDirection(real* tri,real x,real y,real fov_x,real fov_y){
 	ray_ang.x -= realMulR(tri[1],pixel_offset_y);
 	ray_ang.z = tri[3] + realMulR(tri[2],pixel_offset_x);
 	return ray_ang;
+}
+
+real spriteSize(Vec3 position,real size){
+	Vec3 plane_normal = getLookDirection(g_surface.angle);
+	real plane_distance = -vec3Dot(plane_normal,g_surface.position);
+	return realDivR(size,sdPlane(position,plane_normal,plane_distance));
 }
 
 Vec3 pointToScreen(Vec3 point){
@@ -455,7 +468,7 @@ void tickRun(void){
 				}
 			} break;
 			case VOXEL_CHEST: case VOXEL_BOSS:{
-				voxel->animation -= 0x1000;
+				voxel->animation -= REAL_UNIT * 0x10;
 				if(voxel->animation <= 0){
 					if(previous)
 						previous->next_voxel_tick = voxel->next_voxel_tick;
@@ -535,7 +548,33 @@ int treeRayTraceDistance(Voxel* voxel,Vec3 position,Vec3 dir,int side){
     return rayPlaneIntersection(position,dir,plane);
 }
 
-static void addSubVoxel(Vec3i vpos,Vec3i pos,int depth,int remove_depth,VoxelType voxel_type){
+static void propertiesAdd(Voxel* voxel_new,Voxel* copy){
+    if(!copy)
+        return;
+    switch(voxel_new->type){
+        case VOXEL_CUSTOM:{
+            voxel_new->color = copy->color;
+            voxel_new->texture_id = copy->texture_id;
+            voxel_new->has_texture = copy->has_texture;
+        } break;
+        case VOXEL_PLANE:{
+            voxel_new->angle = copy->angle;
+            voxel_new->distance = copy->distance;
+            voxel_new->color = copy->color;
+            voxel_new->texture_id = copy->texture_id;
+        } break;
+        case VOXEL_CUSTOM_EMIT:{
+            voxel_new->color = copy->color;
+#if 0
+            voxel_new->texture_id = copy->texture_id;
+            voxel_new->has_texture = copy->has_texture;
+#endif
+            voxel_new->emit_pow = copy->emit_pow;
+        } break;
+    }
+}
+
+static void addSubVoxel(Voxel* base,Vec3i vpos,Vec3i pos,int depth,int remove_depth,VoxelType voxel_type){
 	if(--depth == -1)
 		return;
 	bool offset_x = pos.x >> depth & 1;
@@ -545,10 +584,11 @@ static void addSubVoxel(Vec3i vpos,Vec3i pos,int depth,int remove_depth,VoxelTyp
 		Vec3i lpos = {(i & 1 << 2) >> 2,(i & 1 << 1) >> 1,(i & 1 << 0) >> 0};
 		if(offset_x == lpos.x && offset_y == lpos.y && offset_z == lpos.z){
 			Vec3i pos2 = {vpos.x + offset_x << 1,vpos.y + offset_y << 1,vpos.z + offset_z << 1};
-			addSubVoxel(pos2,pos,depth,remove_depth,voxel_type);
+			addSubVoxel(base,pos2,pos,depth,remove_depth,voxel_type);
 			continue;
 		}
-		voxelSet(&g_world.voxel,(Vec3i){vpos.x + lpos.x,vpos.y + lpos.y,vpos.z + lpos.z},remove_depth - depth,voxel_type);
+		Voxel* voxel_new = voxelSet(&g_world.voxel,(Vec3i){vpos.x + lpos.x,vpos.y + lpos.y,vpos.z + lpos.z},remove_depth - depth,voxel_type);
+        propertiesAdd(voxel_new,base);
 	}
 }
 
@@ -598,34 +638,6 @@ static KeyTranslate keyTranslate(Key key){
 void keyPress(Key key){
     if(g_voxel_interact){
         switch(g_voxel_interact->type){
-            case VOXEL_PLANE:{
-                switch(key){
-                    case KEY_DOWN:{
-                        g_voxel_interact->angle.y += REAL_UNIT;
-                        octreeRefresh();
-                    } break;
-                    case KEY_UP:{
-                        g_voxel_interact->angle.y -= REAL_UNIT;
-                        octreeRefresh();
-                    } break;
-                    case KEY_LEFT:{
-                        g_voxel_interact->angle.x += REAL_UNIT * 4;
-                        octreeRefresh();
-                    } break;
-                    case KEY_RIGHT:{
-                        g_voxel_interact->angle.x -= REAL_UNIT * 4;
-                        octreeRefresh();
-                    } break;
-                    case KEY_SPACE:{
-                        g_voxel_interact->distance += REAL_UNIT * 16;
-                        octreeRefresh();
-                    } break;
-                    case KEY_LSHIFT:{
-                        g_voxel_interact->distance -= REAL_UNIT * 16;
-                        octreeRefresh();
-                    } break;
-                }
-            } break;
             case VOXEL_CONSOLE:{
                 consoleInput(keyTranslate(key));
             } break;
@@ -897,7 +909,7 @@ void lButtonDown(void){
             } return;
 		}
 	}
-    	
+    
     if(!voxel)
 		return;
     VoxelStatic* voxel_s = g_voxel_static + voxel->type;
@@ -906,10 +918,10 @@ void lButtonDown(void){
             g_voxel_interact = voxel;
             if(voxel->type == VOXEL_CUSTOM)
                 g_voxel_custom_gui[0].colorpicker.color = &voxel->color;
-            
             if(voxel->type == VOXEL_CUSTOM_EMIT)
                 g_voxel_custom_emit_gui[0].colorpicker.color = &voxel->color;
-            
+            if(voxel->type == VOXEL_PLANE)
+                g_voxel_plane_gui[0].colorpicker.color = &voxel->color;
         }
         return;
     }
@@ -971,7 +983,7 @@ void lButtonDown(void){
 		}
 		else{
 			Vec3i begin = voxel_fill_begin.position;
-			VoxelType type = g_player.voxel_select;
+		    VoxelType type = g_player.voxel_copy ? g_player.voxel_copy->type : g_player.voxel_select;
 			for(int x = tMin(begin.x,octree_position.x);x <= tMax(begin.x,octree_position.x);x++){
 				for(int y = tMin(begin.y,octree_position.y);y <= tMax(begin.y,octree_position.y);y++){
 					for(int z = tMin(begin.z,octree_position.z);z <= tMax(begin.z,octree_position.z);z++)
@@ -988,29 +1000,7 @@ void lButtonDown(void){
 	}
     VoxelType type = g_player.voxel_copy ? g_player.voxel_copy->type : g_player.voxel_select;
 	Voxel* voxel_new = voxelEditorSet(octree_position,g_player.edit_depth,type);
-    
-    if(!g_player.voxel_copy)
-        return;
-    
-    switch(type){
-        case VOXEL_CUSTOM:{
-            voxel_new->color = g_player.voxel_copy->color;
-            voxel_new->texture_id = g_player.voxel_copy->texture_id;
-            voxel_new->has_texture = g_player.voxel_copy->has_texture;
-        } break;
-        case VOXEL_PLANE:{
-            voxel_new->angle = g_player.voxel_copy->angle;
-            voxel_new->distance = g_player.voxel_copy->distance;
-        } break;
-        case VOXEL_CUSTOM_EMIT:{
-            voxel_new->color = g_player.voxel_copy->color;
-#if 0
-            voxel_new->texture_id = g_player.voxel_copy->texture_id;
-            voxel_new->has_texture = g_player.voxel_copy->has_texture;
-#endif
-            voxel_new->emit_pow = g_player.voxel_copy->emit_pow;
-        } break;
-    }
+    propertiesAdd(voxel_new,g_player.voxel_copy);
 }
 
 void rButtonDown(void){
@@ -1021,7 +1011,7 @@ void rButtonDown(void){
 	}
 	Vec3Axis side;
 	Vec3 direction = getLookDirection(g_surface.angle);
-	Voxel* voxel = treeRayTraceAndInit(g_surface.position,direction,&side,(TreeTraceFlags){0});
+	Voxel* voxel = treeRayTraceAndInit(g_surface.position,direction,&side,(TreeTraceFlags){.everything_solid = true});
 	if(!voxel)
 		return;
 	Vec3i block_pos_i = {voxel->position_x,voxel->position_y,voxel->position_z};
@@ -1051,7 +1041,7 @@ void rButtonDown(void){
 	pos_i.y = octree_position.y & depht_difference_size - 1;
 	pos_i.z = octree_position.z & depht_difference_size - 1;
 
-	addSubVoxel((Vec3i){block_pos_i.x << 1,block_pos_i.y << 1,block_pos_i.z << 1},pos_i,depht_difference,g_player.edit_depth,voxel_cpy.type);
+	addSubVoxel(&voxel_cpy,(Vec3i){block_pos_i.x << 1,block_pos_i.y << 1,block_pos_i.z << 1},pos_i,depht_difference,g_player.edit_depth,voxel_cpy.type);
     octreeRefresh();
 }
 
@@ -1210,11 +1200,24 @@ void worldDestroy(void){
 }
 
 void worldDefaultGenerate(void){
+    /*
     voxelSet(&g_world.voxel,(Vec3i){64,64,64},7,VOXEL_CONSOLE);
     voxelSet(&g_world.voxel,(Vec3i){0,0,0},1,VOXEL_STONE);
 	voxelSet(&g_world.voxel,(Vec3i){0,1,0},1,VOXEL_STONE);
 	voxelSet(&g_world.voxel,(Vec3i){1,1,0},1,VOXEL_STONE);
 	voxelSet(&g_world.voxel,(Vec3i){1,0,0},1,VOXEL_STONE);
+    */
+    int depth = 6;
+    int depth_s = 1 << depth;
+    for(int i = 0;i < depth_s * depth_s * depth_s;i++){
+        int x = i / (depth_s * depth_s);
+        int y = i / depth_s % depth_s;
+        int z = i % depth_s;
+        if(z > depth_s / 2)
+            continue;
+        if(tRndChance(0x4))
+            voxelSet(&g_world.voxel,(Vec3i){x,y,z},depth,VOXEL_STONE_BRICK);
+    }
 }
 
 static String worldNameToPath(String name){
@@ -1272,17 +1275,14 @@ Vec2 aspectRatioTransform(Vec2 v){
 }
 
 void mainInit(void){
-    printNumberNL(mipmapGet((Vec3){0},(Vec3){0},intToReal(0x10),FIXED_ONE));
-    printNumberNL(mipmapGet((Vec3){0},(Vec3){0},intToReal(0x20),FIXED_ONE));
-    printNumberNL(mipmapGet((Vec3){0},(Vec3){0},intToReal(0x40),FIXED_ONE));
-    printNumberNL(mipmapGet((Vec3){0},(Vec3){0},intToReal(0x80),FIXED_ONE));
+    threadInit();
+    openclInit();
     if(!worldLoad((String)STRING_LITERAL("world_1")))
         worldDefaultGenerate();
 
     voxelChildMaskSet(&g_world.voxel);
-    
-    threadInit();
-    openclInit();
+
+    voxelSetGPU();
 
 	if(g_options.editor){
 		g_player.movement_fly = true;
@@ -1547,7 +1547,7 @@ void frameRender(void){
 			real offset_y = realShr(tCos(intToReal(g_time.time / 0x4000 % 0x100) / 0x100 + n_x),6);
 			Vec3 direction = screenRayDirection(g_surface.rotation_matrix,n_x + offset_x,n_y + offset_y,g_surface.fov.x,g_surface.fov.y);
 
-			Vec3 color = vec3Shr(rayLuminance(g_surface.position,vec3Normalize(direction),(RayLuminanceFlag){0}),4);
+			Vec3 color = rayLuminance(g_surface.position,vec3Normalize(direction),(RayLuminanceFlag){0});
 
 			drawRectangle(&g_surface,n_x,n_y,FIXED_ONE / (WATER_RES / 8),FIXED_ONE / (WATER_RES / 8),color);
 		}
@@ -1561,9 +1561,9 @@ void frameRender(void){
 
 	voxelEntityRemove();
     //return;
-#if 0
+
     if(g_options.lighting_engine){
-        int brightness_acc = 0;
+        real brightness_acc = 0;
 
         TraverseInit init = initTraverse(g_surface.position);
 
@@ -1582,12 +1582,11 @@ void frameRender(void){
         }
 
         if(brightness_acc){
-            g_exposure = tMix(g_exposure,realDivR(FIXED_ONE,brightness_acc >> 4),FIXED_ONE / 0x100);
+            g_exposure = tMix(g_exposure,realDivR(FIXED_ONE,brightness_acc / 0x10),FIXED_ONE / 0x100);
             g_exposure = tMix(g_exposure,FIXED_ONE,FIXED_ONE / 0x40);
         }
     }
-#endif
-	if(g_luminance_overlay){
+	if(g_options.ov_luminance){
 		for(int i = 0;i < 64 * 64;i++){
 			int x = i / 64;
 			int y = i % 64;
@@ -1597,7 +1596,7 @@ void frameRender(void){
 
             Vec3 direction = screenRayDirection(g_surface.rotation_matrix,n_x,n_y,g_surface.fov.x,g_surface.fov.y);
             
-			Vec3 color = vec3Shr(rayLuminance(g_surface.position,direction,(RayLuminanceFlag){0}),4);
+			Vec3 color = rayLuminance(g_surface.position,direction,(RayLuminanceFlag){.no_emit = true});
 
 			drawRectangle(&g_surface,n_x / 4 - FIXED_ONE + FIXED_ONE / 4,n_y / 4 - FIXED_ONE + FIXED_ONE / 4,FIXED_ONE / 128,FIXED_ONE / 128,color);
 		}
@@ -1665,15 +1664,29 @@ void frameRender(void){
 	generateBlockOutline(vec3Single(0),FIXED_ONE);
 
 	genBlockSelect();
-#if 0
+
 	if(g_equipped_staff){
-        int percentage = fixedDivR(g_mana,g_equipped.mana_max);
-        gui2dFrameDraw(0x2800,0x1000,0x1000,0x8000,0x808080,0x100,(Gui2dFlags){0});
-        gui2dRectangleDraw(0x2900,0x1100 + fixedMulR(0x7E00,FIXED_ONE - percentage),0x0E00,fixedMulR(0x7E00,percentage),0xA060FF,(Gui2dFlags){0});
-        gui2dRectangleDraw(0x2900,0x1100,0x0E00,fixedMulR(0x7E00,FIXED_ONE - percentage),0x503080,(Gui2dFlags){0});
-        gui2dStringDraw(0x2900,0x8A00,(String)STRING_LITERAL("mana"),0xE00,0x281840,0x1400,(Gui2dFlags){0});
+        real percentage = realDivR(g_mana,g_equipped.mana_max);
+        gui2dFrameDraw(REAL_UNIT * 0x28,REAL_UNIT * 0x10,REAL_UNIT * 0x10,REAL_UNIT * 0x80,0x808080,REAL_UNIT,(Gui2dFlags){0});
+        gui2dRectangleDraw((Vec2){REAL_UNIT * 0x29,REAL_UNIT * 0x11 + realMulR(REAL_UNIT * 0x7E,FIXED_ONE - percentage)},(Vec2){REAL_UNIT * 0x0E,realMulR(REAL_UNIT * 0x7E,percentage)},0xA060FF,(Gui2dFlags){0});
+        gui2dRectangleDraw((Vec2){REAL_UNIT * 0x29,REAL_UNIT * 0x11},(Vec2){REAL_UNIT * 0x0E,realMulR(REAL_UNIT * 0x7E,FIXED_ONE - percentage)},0x503080,(Gui2dFlags){0});
+        gui2dStringDraw(REAL_UNIT * 0x29,REAL_UNIT * 0x8A,(String)STRING_LITERAL("mana"),REAL_UNIT * 0xE,0x281840,REAL_UNIT * 0x14,(Gui2dFlags){0});
+
+        if(g_time.time > g_shoot_timestamp && g_time.time < g_delay_timestamp){
+            int rel_end = g_delay_timestamp - g_shoot_timestamp;
+            int relative = g_time.time - g_shoot_timestamp;
+
+            percentage = realDivR(intToReal(relative / 0x100),intToReal(rel_end / 0x100) + REAL_EPSILON);
+        }
+        else{
+            percentage = 0;
+        }
+        gui2dFrameDraw(REAL_UNIT * 0x38,REAL_UNIT * 0x10,REAL_UNIT * 0x10,REAL_UNIT * 0x80,0x808080,REAL_UNIT,(Gui2dFlags){0});
+        gui2dRectangleDraw((Vec2){REAL_UNIT * 0x39,REAL_UNIT * 0x11 + realMulR(REAL_UNIT * 0x7E,FIXED_ONE - percentage)},(Vec2){REAL_UNIT * 0x0E,realMulR(REAL_UNIT * 0x7E,percentage)},0xA0A080,(Gui2dFlags){0});
+        gui2dRectangleDraw((Vec2){REAL_UNIT * 0x39,REAL_UNIT * 0x11},(Vec2){REAL_UNIT * 0x0E,realMulR(REAL_UNIT * 0x7E,FIXED_ONE - percentage)},0x808030,(Gui2dFlags){0});
+        gui2dStringDraw(REAL_UNIT * 0x39,REAL_UNIT * 0x8A,(String)STRING_LITERAL("delay"),REAL_UNIT * 0xE,0x686830,REAL_UNIT * 0x14,(Gui2dFlags){0});
 	}
-#endif  
+
     gui2dFrameDraw(REAL_UNIT * 0x18,REAL_UNIT * 0x10,REAL_UNIT * 0x10,REAL_UNIT * 0x80,0x808080,REAL_UNIT,(Gui2dFlags){0});
     real healt_offset = g_player.entity->health;
     gui2dRectangleDraw((Vec2){REAL_UNIT * 0x19,REAL_UNIT * 0x11 + realMulR(REAL_UNIT * 0x7E,FIXED_ONE - healt_offset)},(Vec2){REAL_UNIT * 0x0E,realMulR(REAL_UNIT * 0x7E,healt_offset)},0xFF3030,(Gui2dFlags){0});

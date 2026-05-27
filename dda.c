@@ -28,6 +28,8 @@ Ray3 initRay3(Vec3 position,Vec3 direction){
 	ray.square_pos.y = ray.pos.y >> 16;
 	ray.square_pos.z = ray.pos.z >> 16;
 
+    ray.square_side = 0;
+    
 	return ray;
 }
 
@@ -55,6 +57,8 @@ Ray2 initRay2(Vec2 position,Vec2 direction){
 
 	ray.square_pos.x = realToInt(position.x);
 	ray.square_pos.y = realToInt(position.y);
+
+    ray.square_side = 0;
 
 	return ray;
 }

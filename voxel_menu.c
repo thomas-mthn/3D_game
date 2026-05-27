@@ -14,73 +14,73 @@ void staffEditorCreateMenu(Staff* staff){
 	VoxelGuiElement menu_static[] = {
 		{
             .type = VOXEL_GUI_STRING,
-            .position = {0x1000,FIXED_ONE - 0x1C00},
-            .string.size = 0x1000,
+            .position = {REAL_UNIT * 0x10,FIXED_ONE - REAL_UNIT * 0x1C},
+            .string.size = REAL_UNIT * 0x10,
             .string.string = STRING_LITERAL("staff editor")
         },
 		{
             .type = VOXEL_GUI_STRING,
-            .position = {0x1000,FIXED_ONE - 0x3C00},
-            .string.size = 0x800,
+            .position = {REAL_UNIT * 0x10,FIXED_ONE - REAL_UNIT * 0x3C},
+            .string.size = REAL_UNIT * 8,
             .string.string = STRING_LITERAL("reload   =")
         },
 		{
-            .type = VOXEL_GUI_NUMBER,
-            .position = {0x6800,FIXED_ONE - 0x3C00},
-            .string.size = 0x800,
-            .number = &g_equipped.reload
+            .type = VOXEL_GUI_REAL,
+            .position = {REAL_UNIT * 0x68,FIXED_ONE - REAL_UNIT * 0x3C},
+            .string.size = REAL_UNIT * 8,
+            .real.number = &g_equipped.reload
         },
 		{
             .type = VOXEL_GUI_STRING,
-            .position = {0x1000,FIXED_ONE - 0x4C00},
-            .string.size = 0x800,
+            .position = {REAL_UNIT * 0x10,FIXED_ONE - REAL_UNIT * 0x4C},
+            .string.size = REAL_UNIT * 8,
             .string.string = STRING_LITERAL("delay    =")
         },
 		{
-            .type = VOXEL_GUI_NUMBER,
-            .position = {0x6800,FIXED_ONE - 0x4C00},
-            .string.size = 0x800,
-            .number = &g_equipped.delay
+            .type = VOXEL_GUI_REAL,
+            .position = {REAL_UNIT * 0x68,FIXED_ONE - REAL_UNIT * 0x4C},
+            .string.size = REAL_UNIT * 8,
+            .real.number = &g_equipped.delay
         },
 		{
             .type = VOXEL_GUI_STRING,
-            .position = {0x1000,FIXED_ONE - 0x5C00},
-            .string.size = 0x800,
+            .position = {REAL_UNIT * 0x10,FIXED_ONE - REAL_UNIT * 0x5C},
+            .string.size = REAL_UNIT * 8,
             .string.string = STRING_LITERAL("capacity  =")
         },
 		{
             .type = VOXEL_GUI_NUMBER,
-            .position = {0x6800,FIXED_ONE - 0x5C00},
-            .string.size = 0x800,
+            .position = {REAL_UNIT * 0x68,FIXED_ONE - REAL_UNIT * 0x5C},
+            .string.size = REAL_UNIT * 8,
             .number = &g_equipped.capacity
         },
 		{
             .type = VOXEL_GUI_STRING,
-            .position = {0x1000,FIXED_ONE - 0x6C00},
-            .string.size = 0x800,
+            .position = {REAL_UNIT * 0x10,FIXED_ONE - REAL_UNIT * 0x6C},
+            .string.size = REAL_UNIT * 8,
             .string.string = STRING_LITERAL("mana gen  =")
         },
 		{
-            .type = VOXEL_GUI_NUMBER,
-            .position = {0x6800,FIXED_ONE - 0x6C00},
-            .string.size = 0x800,
-            .number = &g_equipped.mana_generation
+            .type = VOXEL_GUI_REAL,
+            .position = {REAL_UNIT * 0x68,FIXED_ONE - REAL_UNIT * 0x6C},
+            .string.size = REAL_UNIT * 8,
+            .real.number = &g_equipped.mana_generation
         },
 		{
             .type = VOXEL_GUI_STRING,
-            .position = {0x1000,FIXED_ONE - 0x7C00},
-            .string.size = 0x800,
+            .position = {REAL_UNIT * 0x10,FIXED_ONE - REAL_UNIT * 0x7C},
+            .string.size = REAL_UNIT * 8,
             .string.string = STRING_LITERAL("mana max  =")
         },
 		{
-            .type = VOXEL_GUI_NUMBER,
-            .position = {0x6800,FIXED_ONE - 0x7C00},
-            .string.size = 0x800,
-            .number = &g_equipped.mana_max
+            .type = VOXEL_GUI_REAL,
+            .position = {REAL_UNIT * 0x68,FIXED_ONE - REAL_UNIT * 0x7C},
+            .string.size = REAL_UNIT * 8,
+            .real.number = &g_equipped.mana_max
         },
 		{
             .type = VOXEL_GUI_IMAGE,
-            .position = {0x1000,FIXED_ONE - 0xCC00},
+            .position = {REAL_UNIT * 0x10,FIXED_ONE - REAL_UNIT * 0xCC},
             .image.image = &g_spinning_staff
         },
 	};
@@ -88,10 +88,10 @@ void staffEditorCreateMenu(Staff* staff){
 	for(int i = 0;i < countof(menu_static);i++)
 		menu[i] = menu_static[i];
 	for(int i = 0;i < staff->capacity;i++){
-		int offset = i * 0x2800;
+		int offset = i * REAL_UNIT * 0x28;
 		menu[countof(menu_static) + i] = (VoxelGuiElement){
 			.type = VOXEL_GUI_INVENTORY_SLOT,
-			.position = {offset + 0x800,0x800},
+			.position = {offset + REAL_UNIT * 8,REAL_UNIT * 8},
 			.inventory_slot = staff->spell_array + i,
 		};
 	}
@@ -169,8 +169,6 @@ static VoxelGuiElement voxel_menu_gui[] = {
 	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x5C00},.string.string = STRING_LITERAL("movement mode")},
 	{.type = VOXEL_GUI_CHECKBOX,.checkbox.state = &g_options.editor,.position = {0x1000,FIXED_ONE - 0x8000}},
 	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x7C00},.string.string = STRING_LITERAL("editor mode")},
-	{.type = VOXEL_GUI_CHECKBOX,.checkbox.state = &g_luminance_overlay,.position = {0x1000,FIXED_ONE - 0xA000}},
-	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0x9C00},.string.string = STRING_LITERAL("luminance overlay")},
     {.type = VOXEL_GUI_CHECKBOX,.checkbox.state = &g_options.fast_startup,.position = {0x1000,FIXED_ONE - 0xC000}},
 	{.type = VOXEL_GUI_STRING,.position = {0x2000,FIXED_ONE - 0xBC00},.string.string = STRING_LITERAL("fast startup")},
 };

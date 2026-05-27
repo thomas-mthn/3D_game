@@ -105,6 +105,11 @@ static ShaderProgram shader_circle_program;
 static ShaderProgram shader_skybox_program;
 static ShaderProgram shader_lightmap_texture;
 static ShaderProgram shader_lightmap;
+static ShaderProgram shader_lightmap_brick;
+static ShaderProgram shader_lightmap_voronoi;
+static ShaderProgram shader_sphere;
+static ShaderProgram shader_cylinder;
+static ShaderProgram shader_torus;
 
 static unsigned vao;
 static unsigned vao_lighting;
@@ -112,6 +117,7 @@ static unsigned vao_lighting_texture;
 static unsigned vao_circle;
 static unsigned vao_lightmap_texture;
 static unsigned vao_lightmap;
+static unsigned vao_sphere;
 
 static unsigned ebo_quad;
 
@@ -130,9 +136,9 @@ structure(VertexLightmap){
     int lightmap_index;
     float world_pos[3];
     float lightmap_pos[3];
-    float u[3];
-    float v[3];
+    float color[3];
     Vec3i normal;
+    float vnormal[3];
 };
 
 structure(VertexLightingTexture){
@@ -205,17 +211,203 @@ void drawColoredPolygonGL(DrawSurface* surface,Vec2* coordinats,Vec3* color,int 
         current_shaderprogram = &shader_lighting_program;
         buffer_drawtype = GL_TRIANGLES;
     }
-    float color_div = FIXED_ONE * 16;
-    if(hdr)
-        color_div *= 0.33f;
     VertexLighting* vertex = (VertexLighting*)(vertex_buffer + vertex_buffer_ptr);
     for(int i = 4;i--;){
         vertex[i] = (VertexLighting){
             .pos = {-(float)coordinats[i].y / FIXED_ONE,-(float)coordinats[i].x / FIXED_ONE,1.0f},
-            .lighting = {(float)color[i].z / color_div,(float)color[i].y / color_div,(float)color[i].x / color_div}
+            .lighting = {(float)color[i].z,(float)color[i].y,(float)color[i].x}
         };
     }
     vertex_buffer_ptr += sizeof(VertexLighting) * 4;
+}
+
+void openglUpdateCubemap(Cubemap* cubemap){
+    glBindTexture(GL_TEXTURE_CUBE_MAP,cubemap->gl_id);
+    for(int i = 6;i--;){
+        if(i == 4){
+            int* texture_data = memoryArenaAllocate(&g_arena_frame,0x10 * 0x10 * 4);
+            for(int j = 0x10 * 0x10;j--;){
+                int x = j / 0x10;
+                int y = j % 0x10;
+                texture_data[j] = cubemap->textures[i].pixel_data[(0x10 - x - 1) * 0x10 + (y)];
+            }
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,0,GL_RGBA,0x10,0x10,0,GL_RGBA,GL_UNSIGNED_BYTE,texture_data);
+        }
+        else if(i == 0){
+            int* texture_data = memoryArenaAllocate(&g_arena_frame,0x10 * 0x10 * 4);
+            for(int j = 0x10 * 0x10;j--;){
+                int x = j / 0x10;
+                int y = j % 0x10;
+                texture_data[j] = cubemap->textures[i].pixel_data[(0x10 - y - 1) * 0x10 + (0x10 - x - 1)];
+            }
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,0,GL_RGBA,0x10,0x10,0,GL_RGBA,GL_UNSIGNED_BYTE,texture_data);
+        }
+        else if(i == 1){
+            int* texture_data = memoryArenaAllocate(&g_arena_frame,0x10 * 0x10 * 4);
+            for(int j = 0x10 * 0x10;j--;){
+                int x = j / 0x10;
+                int y = j % 0x10;
+                texture_data[j] = cubemap->textures[i].pixel_data[(y) * 0x10 + (0x10 - x - 1)];
+            }
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,0,GL_RGBA,0x10,0x10,0,GL_RGBA,GL_UNSIGNED_BYTE,texture_data);
+        }
+        else if(i == 3){
+            int* texture_data = memoryArenaAllocate(&g_arena_frame,0x10 * 0x10 * 4);
+            for(int j = 0x10 * 0x10;j--;){
+                int x = j / 0x10;
+                int y = j % 0x10;
+                texture_data[j] = cubemap->textures[i].pixel_data[(0x10 - x - 1) * 0x10 + (y)];
+            }
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,0,GL_RGBA,0x10,0x10,0,GL_RGBA,GL_UNSIGNED_BYTE,texture_data);
+        }
+        else if(i == 5){
+            int* texture_data = memoryArenaAllocate(&g_arena_frame,0x10 * 0x10 * 4);
+            for(int j = 0x10 * 0x10;j--;){
+                int x = j / 0x10;
+                int y = j % 0x10;
+                texture_data[j] = cubemap->textures[i].pixel_data[(0x10 - x - 1) * 0x10 + (0x10 - y - 1)];
+            }
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,0,GL_RGBA,0x10,0x10,0,GL_RGBA,GL_UNSIGNED_BYTE,texture_data);
+        }
+        else{
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i,0,GL_RGBA,0x10,0x10,0,GL_RGBA,GL_UNSIGNED_BYTE,cubemap->textures[i].pixel_data);
+        }
+    }
+}
+
+void drawTorusGL(DrawSurface* surface,Vec2* coordinats,Voxel* voxel){
+    batchDraw();
+    current_shaderprogram = &shader_torus;
+    buffer_drawtype = GL_TRIANGLES;
+
+    real voxel_size = depthToSize(voxel->depth);
+    Vec3 voxel_position = voxelWorldPosCenter(voxel);
+
+    Vec3 torus_direction = getLookDirection(voxel->cylinder_angle);
+
+    Vec3 torus_position = voxel_position;
+    torus_position = vec3Add(torus_position,vec3MulS(voxel->primitive_position,voxel_size));
+    
+    glUseProgram(shader_torus.id);
+    glUniform2f(glGetUniformLocation(shader_torus.id,"resolution"),g_surface.height,g_surface.width);
+    glUniform2f(glGetUniformLocation(shader_torus.id,"fov"),g_surface.fov.x,g_surface.fov.y);
+    glUniform1f(glGetUniformLocation(shader_torus.id,"sphere_radius"),voxel_size / 2);
+    glUniform3f(glGetUniformLocation(shader_torus.id,"camera_position"),g_surface.position.x,g_surface.position.y,g_surface.position.z);
+    glUniform3f(glGetUniformLocation(shader_torus.id,"voxel_position"),voxel_position.x,voxel_position.y,voxel_position.z);
+    glUniform3f(glGetUniformLocation(shader_torus.id,"sphere_position"),torus_position.x,torus_position.y,torus_position.z);
+    glUniform3f(glGetUniformLocation(shader_torus.id,"cylinder_direction"),torus_direction.x,torus_direction.y,torus_direction.z);
+    glUniform4f(glGetUniformLocation(shader_torus.id,"tri"),g_surface.rotation_matrix[0],g_surface.rotation_matrix[1],g_surface.rotation_matrix[2],g_surface.rotation_matrix[3]);
+
+    if(!voxel->cubemap->gl_id){
+        glGenTextures(1,&voxel->cubemap->gl_id);
+
+        openglUpdateCubemap(voxel->cubemap);
+
+        glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+    }
+    else{
+        glBindTexture(GL_TEXTURE_CUBE_MAP,voxel->cubemap->gl_id);
+    }
+    
+    Vertex* vertex = (Vertex*)(vertex_buffer + vertex_buffer_ptr);
+    for(int i = 4;i--;){
+        vertex[i] = (Vertex){
+            .pos = {-(float)coordinats[i].y / FIXED_ONE,-(float)coordinats[i].x / FIXED_ONE,1.0f},
+        };
+    }
+    vertex_buffer_ptr += sizeof(Vertex) * 4;
+}
+
+void drawCylinderGL(DrawSurface* surface,Vec2* coordinats,Voxel* voxel){
+    batchDraw();
+    current_shaderprogram = &shader_cylinder;
+    buffer_drawtype = GL_TRIANGLES;
+
+    real voxel_size = depthToSize(voxel->depth);
+    Vec3 voxel_position = voxelWorldPosCenter(voxel);
+
+    Vec3 cylinder_direction = getLookDirection(voxel->cylinder_angle);
+    
+    glUseProgram(shader_cylinder.id);
+    glUniform2f(glGetUniformLocation(shader_cylinder.id,"resolution"),g_surface.height,g_surface.width);
+    glUniform2f(glGetUniformLocation(shader_cylinder.id,"fov"),g_surface.fov.x,g_surface.fov.y);
+    glUniform1f(glGetUniformLocation(shader_cylinder.id,"cylinder_radius"),voxel_size / 2);
+    glUniform3f(glGetUniformLocation(shader_cylinder.id,"camera_position"),g_surface.position.x,g_surface.position.y,g_surface.position.z);
+    glUniform3f(glGetUniformLocation(shader_cylinder.id,"voxel_position"),voxel_position.x,voxel_position.y,voxel_position.z);
+    glUniform3f(glGetUniformLocation(shader_cylinder.id,"cylinder_position"),voxel_position.x,voxel_position.y,voxel_position.z);
+    glUniform3f(glGetUniformLocation(shader_cylinder.id,"cylinder_direction"),cylinder_direction.x,cylinder_direction.y,cylinder_direction.z);
+    glUniform4f(glGetUniformLocation(shader_cylinder.id,"tri"),g_surface.rotation_matrix[0],g_surface.rotation_matrix[1],g_surface.rotation_matrix[2],g_surface.rotation_matrix[3]);
+
+    if(!voxel->cubemap->gl_id){
+        glGenTextures(1,&voxel->cubemap->gl_id);
+
+        openglUpdateCubemap(voxel->cubemap);
+
+        glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+    }
+    else{
+        glBindTexture(GL_TEXTURE_CUBE_MAP,voxel->cubemap->gl_id);
+    }
+    glActiveTexture(GL_TEXTURE0 + 1);
+    if(!voxel->cubemap[1].gl_id){
+        glGenTextures(1,&voxel->cubemap[1].gl_id);
+
+        openglUpdateCubemap(voxel->cubemap + 1);
+
+        glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+    }
+    else{
+        glBindTexture(GL_TEXTURE_CUBE_MAP,voxel->cubemap[1].gl_id);
+    }
+    glActiveTexture(GL_TEXTURE0);
+    
+    Vertex* vertex = (Vertex*)(vertex_buffer + vertex_buffer_ptr);
+    for(int i = 4;i--;){
+        vertex[i] = (Vertex){
+            .pos = {-(float)coordinats[i].y / FIXED_ONE,-(float)coordinats[i].x / FIXED_ONE,1.0f},
+        };
+    }
+    vertex_buffer_ptr += sizeof(Vertex) * 4;
+}
+
+void drawSphereGL(DrawSurface* surface,Vec2* coordinats,Voxel* voxel){
+    batchDraw();
+    current_shaderprogram = &shader_sphere;
+    buffer_drawtype = GL_TRIANGLES;
+
+    real voxel_size = depthToSize(voxel->depth);
+    Vec3 voxel_position = voxelWorldPosCenter(voxel);
+    
+    glUseProgram(shader_sphere.id);
+    glUniform2f(glGetUniformLocation(shader_sphere.id,"resolution"),g_surface.height,g_surface.width);
+    glUniform2f(glGetUniformLocation(shader_sphere.id,"fov"),g_surface.fov.x,g_surface.fov.y);
+    glUniform1f(glGetUniformLocation(shader_cylinder.id,"sphere_radius"),voxel_size / 2);
+    glUniform3f(glGetUniformLocation(shader_sphere.id,"camera_position"),g_surface.position.x,g_surface.position.y,g_surface.position.z);
+    glUniform3f(glGetUniformLocation(shader_cylinder.id,"sphere_position"),voxel_position.x,voxel_position.y,voxel_position.z);
+    glUniform4f(glGetUniformLocation(shader_sphere.id,"tri"),g_surface.rotation_matrix[0],g_surface.rotation_matrix[1],g_surface.rotation_matrix[2],g_surface.rotation_matrix[3]);
+
+    if(!voxel->cubemap->gl_id){
+        glGenTextures(1,&voxel->cubemap->gl_id);
+
+        openglUpdateCubemap(voxel->cubemap);
+
+        glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_CUBE_MAP,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+    }
+    else{
+        glBindTexture(GL_TEXTURE_CUBE_MAP,voxel->cubemap->gl_id);
+    }
+    
+    Vertex* vertex = (Vertex*)(vertex_buffer + vertex_buffer_ptr);
+    for(int i = 4;i--;){
+        vertex[i] = (Vertex){
+            .pos = {-(float)coordinats[i].y / FIXED_ONE,-(float)coordinats[i].x / FIXED_ONE,1.0f},
+        };
+    }
+    vertex_buffer_ptr += sizeof(Vertex) * 4;
 }
 
 void drawPolygonGL(DrawSurface* surface,Vec2* coordinats,int n_point,Vec3 color){
@@ -246,14 +438,11 @@ void drawColoredPolygon3dGL(DrawSurface* surface,Vec3* coordinats,Vec3* color,Li
         current_shaderprogram = &shader_lighting_program;
         buffer_drawtype = GL_TRIANGLES;
     }
-    float color_div = FIXED_ONE * 16;
-    if(hdr)
-        color_div *= 0.33f;
     VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
     for(int i = 4;i--;){
         vertex[i] = (VertexLighting){
             .pos = {-(float)d_point[i].y / FIXED_ONE,-(float)d_point[i].x / FIXED_ONE,(float)d_point[i].z / FIXED_ONE},
-            .lighting = {(float)color[i].z / color_div,(float)color[i].y / color_div,(float)color[i].x / color_div},
+            .lighting = {(float)color[i].z,(float)color[i].y,(float)color[i].x},
         };
     }
     vertex_buffer_ptr += sizeof(VertexLighting) * 4;
@@ -307,6 +496,10 @@ void lightmapUploadGL(void){
     glUniform3f(glGetUniformLocation(shader_lightmap.id,"camera_position"),camera_position.x,camera_position.y,camera_position.z);
     glUseProgram(shader_lightmap_texture.id);
     glUniform3f(glGetUniformLocation(shader_lightmap_texture.id,"camera_position"),camera_position.x,camera_position.y,camera_position.z);
+    glUseProgram(shader_lightmap_brick.id);
+    glUniform3f(glGetUniformLocation(shader_lightmap_brick.id,"camera_position"),camera_position.x,camera_position.y,camera_position.z);
+    glUseProgram(shader_lightmap_voronoi.id);
+    glUniform3f(glGetUniformLocation(shader_lightmap_voronoi.id,"camera_position"),camera_position.x,camera_position.y,camera_position.z);
     
     glActiveTexture(GL_TEXTURE0 + 1);
     if(!lightmap_texture){
@@ -332,23 +525,27 @@ void lightmapUploadGL(void){
     } light[N_LUXEL_CACHE];
     
     for(int i = 0;i < countof(light) / n_part;i += 1){
-        if((g_luxel_cache[offset + i].n_sample & ~LUXEL_DIRECTSAMPLED) > 0x10){
-            light[i].luminance[0] = (float)g_luxel_cache[offset + i].luminance_direct.x / FIXED_ONE / 16;
-            light[i].luminance[1] = (float)g_luxel_cache[offset + i].luminance_direct.y / FIXED_ONE / 16;
-            light[i].luminance[2] = (float)g_luxel_cache[offset + i].luminance_direct.z / FIXED_ONE / 16;
-            light[i].luminance[0] += (float)g_luxel_cache[offset + i].luminance.x / FIXED_ONE / 16;
-            light[i].luminance[1] += (float)g_luxel_cache[offset + i].luminance.y / FIXED_ONE / 16;
-            light[i].luminance[2] += (float)g_luxel_cache[offset + i].luminance.z / FIXED_ONE / 16;
-            light[i].hash = g_luxel_cache[offset + i].hash;
-        }
-        else if(g_luxel_cache[offset + i].refresh){
-            light[i].luminance[0] = (float)g_luxel_cache[offset + i].pre_refresh.x / FIXED_ONE / 16;
-            light[i].luminance[1] = (float)g_luxel_cache[offset + i].pre_refresh.y / FIXED_ONE / 16;
-            light[i].luminance[2] = (float)g_luxel_cache[offset + i].pre_refresh.z / FIXED_ONE / 16;
-            light[i].hash = g_luxel_cache[offset + i].hash;
+        if((g_luxel_cache[offset + i].n_sample & ~LUXEL_DIRECTSAMPLED) < 0x10){
+            if(g_luxel_cache[offset + i].refresh){
+                light[i].luminance[0] = (float)g_luxel_cache[offset + i].pre_refresh.x / FIXED_ONE;
+                light[i].luminance[1] = (float)g_luxel_cache[offset + i].pre_refresh.y / FIXED_ONE;
+                light[i].luminance[2] = (float)g_luxel_cache[offset + i].pre_refresh.z / FIXED_ONE;
+                light[i].hash = g_luxel_cache[offset + i].hash;
+            }
+            else{
+                 light[i].hash = 0;
+            }
         }
         else{
-            light[i].hash = 0;
+            g_luxel_cache[offset + i].refresh = false;
+            
+            light[i].luminance[0] = (float)g_luxel_cache[offset + i].luminance_direct.x / FIXED_ONE;
+            light[i].luminance[1] = (float)g_luxel_cache[offset + i].luminance_direct.y / FIXED_ONE;
+            light[i].luminance[2] = (float)g_luxel_cache[offset + i].luminance_direct.z / FIXED_ONE;
+            light[i].luminance[0] += (float)g_luxel_cache[offset + i].luminance.x / FIXED_ONE;
+            light[i].luminance[1] += (float)g_luxel_cache[offset + i].luminance.y / FIXED_ONE;
+            light[i].luminance[2] += (float)g_luxel_cache[offset + i].luminance.z / FIXED_ONE;
+            light[i].hash = g_luxel_cache[offset + i].hash;
         }
     }
 
@@ -386,14 +583,11 @@ void drawTexturePolygonGL(DrawSurface* surface,Texture* texture,Vec2* texture_co
         current_shaderprogram = &shader_texture_lighting_program;
         buffer_drawtype = GL_TRIANGLES;
     }
-    float color_div = FIXED_ONE * 16;
-    if(hdr)
-        color_div *= 0.33f;
     VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
     for(int i = 4;i--;){
         vertex[i] = (VertexLightingTexture){
             .pos = {-(float)coordinats[i].y / FIXED_ONE,-(float)coordinats[i].x / FIXED_ONE,1.0f},
-            .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
+            .lighting = {(float)color.z,(float)color.y,(float)color.x},
             .texture_pos = {(float)texture_coordinats[i].x / FIXED_ONE,(float)texture_coordinats[i].y / FIXED_ONE}
         };
     }
@@ -401,9 +595,6 @@ void drawTexturePolygonGL(DrawSurface* surface,Texture* texture,Vec2* texture_co
 }
 
 void drawTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3 color,int n_point){
-    float color_div = FIXED_ONE * 16;
-    if(hdr)
-        color_div *= 0.33f;
     if(!texture->gl_id)
 		textureUpload(texture);
 	else
@@ -427,7 +618,7 @@ void drawTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_
         for(int i = 3;i--;){
             vertex[i] = (VertexLightingTexture){
                 .pos = {-(float)point_2[i].y / FIXED_ONE,-(float)point_2[i].x / FIXED_ONE,(float)point_2[i].z / FIXED_ONE},
-                .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
+                .lighting = {(float)color.z,(float)color.y,(float)color.x},
                 .texture_pos = {(float)texture_coordinats[i].x / FIXED_ONE,(float)texture_coordinats[i].y / FIXED_ONE}
             };
         }
@@ -462,7 +653,7 @@ void drawTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_
     for(int i = 4;i--;){
         vertex[i] = (VertexLightingTexture){
             .pos = {-(float)d_point[i].y / FIXED_ONE,-(float)d_point[i].x / FIXED_ONE,(float)d_point[i].z / FIXED_ONE},
-            .lighting = {(float)color.x / color_div,(float)color.y / color_div,(float)color.z / color_div},
+            .lighting = {(float)color.x,(float)color.y,(float)color.z},
             .texture_pos = {(float)texture_coordinats[i].x / FIXED_ONE,(float)texture_coordinats[i].y / FIXED_ONE}
         };
     }
@@ -479,14 +670,11 @@ void drawColoredTexturePolygonGL(DrawSurface* surface,Texture* texture,Vec2* tex
         current_shaderprogram = &shader_texture_lighting_program;
         buffer_drawtype = GL_TRIANGLES;
     }
-    float color_div = FIXED_ONE * 16;
-    if(hdr)
-        color_div *= 0.33f;
     VertexLightingTexture* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
     for(int i = 4;i--;){
         vertex[i] = (VertexLightingTexture){
             .pos = {(float)coordinats[i].y / FIXED_ONE,-(float)coordinats[i].x / FIXED_ONE,1.0f},
-            .lighting = {(float)color[i].x / color_div,(float)color[i].y / color_div,(float)color[i].z / color_div},
+            .lighting = {(float)color[i].x,(float)color[i].y,(float)color[i].z},
             .texture_pos = {(float)texture_coordinats[i].x / FIXED_ONE,(float)texture_coordinats[i].y / FIXED_ONE}
         };
     }
@@ -494,9 +682,6 @@ void drawColoredTexturePolygonGL(DrawSurface* surface,Texture* texture,Vec2* tex
 }
 
 static void coloredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,Vec3* color,ShaderProgram* shader_program,int n_vertex){
-    float color_div = FIXED_ONE * 16;
-    if(hdr)
-        color_div *= 0.25f;
     if(!texture->gl_id)
 		textureUpload(texture);
     if(n_vertex != 4){
@@ -518,7 +703,7 @@ static void coloredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* 
         for(int i = 3;i--;){
             vertex[i] = (VertexLightingTexture){
                 .pos = {-(float)point_2[i].y / FIXED_ONE,-(float)point_2[i].x / FIXED_ONE,(float)point_2[i].z / FIXED_ONE},
-                .lighting = {(float)color[i].x / color_div,(float)color[i].y / color_div,(float)color[i].z / color_div},
+                .lighting = {(float)color[i].x,(float)color[i].y,(float)color[i].z},
                 .texture_pos = {(float)texture_coordinats[i].x / FIXED_ONE,(float)texture_coordinats[i].y / FIXED_ONE}
             };
         }
@@ -552,7 +737,7 @@ static void coloredTexturePolygon3d(DrawSurface* surface,Texture* texture,Vec2* 
     for(int i = 4;i--;){
         vertex[i] = (VertexLightingTexture){
             .pos = {-(float)d_point[i].y / FIXED_ONE,-(float)d_point[i].x / FIXED_ONE,(float)d_point[i].z / FIXED_ONE},
-            .lighting = {(float)color[i].z / color_div,(float)color[i].y / color_div,(float)color[i].x / color_div},
+            .lighting = {(float)color[i].z,(float)color[i].y,(float)color[i].x},
             .texture_pos = {(float)texture_coordinats[i].x / FIXED_ONE,(float)texture_coordinats[i].y / FIXED_ONE},
         };
     }
@@ -563,10 +748,7 @@ void drawColoredTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* t
 	coloredTexturePolygon3d(surface,texture,texture_coordinats,coordinats,color,&shader_texture_lighting_program,n_vertex);
 }
 
-void drawLightmapPolygon3dGL(DrawSurface* surface,Vec3* coordinats,int lightmap_index,Vec3 normal,int side){
-    float color_div = FIXED_ONE * 16;
-    if(hdr)
-        color_div *= 0.25f;
+void drawLightmapPolygon3dGL(DrawSurface* surface,Vec3* coordinats,int lightmap_index,Vec3 normal,int side,Vec3 color,ProcTextType procedural_texture){
     Vec3 point_2[4];
 	point_2[0] = pointToScreenRenderer(coordinats[0],surface->rotation_matrix,surface->position,g_surface.fov);
 	point_2[1] = pointToScreenRenderer(coordinats[1],surface->rotation_matrix,surface->position,g_surface.fov);
@@ -579,10 +761,18 @@ void drawLightmapPolygon3dGL(DrawSurface* surface,Vec3* coordinats,int lightmap_
 		{point_2[3].x,point_2[3].y,point_2[3].z},
 		{point_2[2].x,point_2[2].y,point_2[2].z}
 	};
+
+    ShaderProgram* programs[] = {
+        [PROCTEXT_NONE] = &shader_lightmap,
+        [PROCTEXT_BRICK] = &shader_lightmap_brick,
+        [PROCTEXT_VORONOI] = &shader_lightmap_voronoi,
+    };
     
-    if(current_shaderprogram != &shader_lightmap || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightmap) * 4 || buffer_drawtype != GL_TRIANGLES){
+    ShaderProgram* program = programs[procedural_texture];
+    
+    if(current_shaderprogram != program || vertex_buffer_ptr >= countof(quad_indices) - sizeof(VertexLightmap) * 4 || buffer_drawtype != GL_TRIANGLES){
         batchDraw();
-        current_shaderprogram = &shader_lightmap;
+        current_shaderprogram = program;
         buffer_drawtype = GL_TRIANGLES;
     }
     VertexLightmap* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
@@ -601,6 +791,12 @@ void drawLightmapPolygon3dGL(DrawSurface* surface,Vec3* coordinats,int lightmap_
         coordinats[i] = vec3Add(coordinats[i],vec3MulS(normal,REAL_EPSILON));
     
     for(int i = 4;i--;){
+        Vec3 vnormal = vec3MulS(g_surface.position,FIXED_ONE * 0x10000);
+        vnormal = (Vec3){
+            .x = tAbs(vec3Dot(vnormal,u)),
+            .y = tAbs(vec3Dot(vnormal,v)),
+            .z = tAbs(vec3Dot(vnormal,normal)),
+        };
         if(IS_FLOAT(real))
             coordinats[g_index[i]] = vec3MulS(coordinats[g_index[i]],FIXED_ONE * 0x10000);
         Vec3 w_pos = {
@@ -613,18 +809,15 @@ void drawLightmapPolygon3dGL(DrawSurface* surface,Vec3* coordinats,int lightmap_
             .lightmap_index = lightmap_index,
             .lightmap_pos = {(float)w_pos.x,(float)w_pos.y,(float)w_pos.z},
             .world_pos = {(float)coordinats[g_index[i]].x,(float)coordinats[g_index[i]].y,(float)coordinats[g_index[i]].z},
-            .u = {(float)u.x / FIXED_ONE,(float)u.y / FIXED_ONE,(float)u.z / FIXED_ONE},
-            .v = {(float)v.x / FIXED_ONE,(float)v.y / FIXED_ONE,(float)v.z / FIXED_ONE},
+            .color = {(float)color.z / FIXED_ONE,(float)color.y / FIXED_ONE,(float)color.x / FIXED_ONE},
             .normal = normal_i,
+            .vnormal = {vnormal.x,vnormal.y,vnormal.z},
         };
     }
     vertex_buffer_ptr += sizeof(VertexLightmap) * 4;
 }
 
 void drawLightmapTexturePolygon3dGL(DrawSurface* surface,Texture* texture,Vec2* texture_coordinats,Vec3* coordinats,int lightmap_index,int side,Vec3 color){
-    float color_div = FIXED_ONE * 16;
-    if(hdr)
-        color_div *= 0.25f;
     if(!texture->gl_id)
 		textureUpload(texture);
     Vec3 point_2[4];
@@ -693,15 +886,14 @@ void drawLineGL(DrawSurface* surface,real x1,real y1,real x2,real y2,Vec3 color)
         current_shaderprogram = &shader_lighting_program;
         buffer_drawtype = GL_LINES;
     }
-    float color_div = FIXED_ONE * 16;
     VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
     vertex[0] = (VertexLighting){
         .pos = {-(float)y1 / FIXED_ONE,-(float)x1 / FIXED_ONE,1.0f},
-        .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
+        .lighting = {(float)color.z,(float)color.y,(float)color.x}
     };
     vertex[1] = (VertexLighting){
         .pos = {-(float)y2 / FIXED_ONE,-(float)x2 / FIXED_ONE,1.0f},
-        .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
+        .lighting = {(float)color.z,(float)color.y,(float)color.x}
     };
     vertex_buffer_ptr += sizeof(VertexLighting) * 2;
 }
@@ -712,7 +904,6 @@ void drawSegmentGL(DrawSurface* surface,real x1,real y1,real x2,real y2,real thi
         current_shaderprogram = &shader_lighting_program;
         buffer_drawtype = GL_TRIANGLES;
     }
-    float color_div = FIXED_ONE * 16;
     VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
     Vec2 direction = vec2Direction((Vec2){realShr(x1,8),realShr(y1,8)},(Vec2){realShr(x2,8),realShr(y2,8)});
         
@@ -725,7 +916,7 @@ void drawSegmentGL(DrawSurface* surface,real x1,real y1,real x2,real y2,real thi
     for(int i = 4;i--;){
         vertex[i] = (VertexLighting){
             .pos = {-(float)quad[i].y / FIXED_ONE,-(float)quad[i].x / FIXED_ONE,1.0f},
-            .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
+            .lighting = {(float)color.z,(float)color.y,(float)color.x},
         };
     }
     vertex_buffer_ptr += sizeof(VertexLighting) * 4;
@@ -737,12 +928,11 @@ void drawSegment3dGL(DrawSurface* surface,Vec3* coordinats,int thickness,Vec3 co
         current_shaderprogram = &shader_lighting_program;
         buffer_drawtype = GL_TRIANGLES;
     }
-    float color_div = FIXED_ONE ;
     VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
     for(int i = 4;i--;){
         vertex[i] = (VertexLighting){
             .pos = {-(float)coordinats[i].y / FIXED_ONE,-(float)coordinats[i].x / FIXED_ONE,(float)coordinats[i].z / FIXED_ONE},
-            .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
+            .lighting = {(float)color.z,(float)color.y,(float)color.x},
         };
     }
     vertex_buffer_ptr += sizeof(VertexLighting) * 4;
@@ -754,13 +944,12 @@ void drawRectangleGL(DrawSurface* surface,real x,real y,real size_x,real size_y,
         current_shaderprogram = &shader_lighting_program;
         buffer_drawtype = GL_TRIANGLES;
     }
-    float color_div = FIXED_ONE * 16;
     VertexLighting* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
     Vec2 position[] = {{y,x},{y + size_y,x},{y + size_y,x + size_x},{y,x + size_x}};
     for(int i = 4;i--;){
         vertex[i] = (VertexLighting){
             .pos = {-(float)(position[i].x) / FIXED_ONE,-(float)(position[i].y) / FIXED_ONE,1.0f},
-            .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div}
+            .lighting = {(float)color.z,(float)color.y,(float)color.x}
         };
     }
     vertex_buffer_ptr += sizeof(VertexLighting) * 4;
@@ -774,7 +963,6 @@ void drawEllipsesGL(DrawSurface* surface,real x,real y,real size_x,real size_y,V
 		current_shaderprogram = &shader_circle_program;
 		buffer_drawtype = GL_TRIANGLES;
 	}
-	float color_div = FIXED_ONE * 16;
 	VertexCircle* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
     float gl_coordinates[][2] = {{-1.0f,-1.0f},{1.0f,-1.0f},{1.0f,1.0f},{-1.0f,1.0f}};
     Vec2 position[] = {{y - size_y,x - size_x},{y + size_y,x - size_x},{y + size_y,x + size_x},{y - size_y,x + size_x}};
@@ -782,7 +970,7 @@ void drawEllipsesGL(DrawSurface* surface,real x,real y,real size_x,real size_y,V
         vertex[i] = (VertexCircle){
             .pos = {-(float)(position[i].x) / FIXED_ONE,-(float)(position[i].y) / FIXED_ONE,1.0f},
             .coordinates = {gl_coordinates[i][0],gl_coordinates[i][1]},
-            .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
+            .lighting = {(float)color.z,(float)color.y,(float)color.x},
         };
     }
 	vertex_buffer_ptr += sizeof(VertexCircle) * 4;
@@ -796,14 +984,13 @@ void drawCircle3dGL(DrawSurface* surface,Vec3* coordinates,Vec3 color){
 		current_shaderprogram = &shader_circle_program;
 		buffer_drawtype = GL_TRIANGLES;
 	}
-	float color_div = FIXED_ONE * 16;
 	VertexCircle* vertex = (void*)(vertex_buffer + vertex_buffer_ptr);
     float gl_coordinates[][2] = {{-1.0f,-1.0f},{1.0f,-1.0f},{1.0f,1.0f},{-1.0f,1.0f}};
     for(int i = 4;i--;){
         vertex[i] = (VertexCircle){
             .pos = {-(float)(coordinates[i].y) / FIXED_ONE,-(float)(coordinates[i].x) / FIXED_ONE,(float)coordinates[i].z / FIXED_ONE},
             .coordinates = {gl_coordinates[i][0],gl_coordinates[i][1]},
-            .lighting = {(float)color.z / color_div,(float)color.y / color_div,(float)color.x / color_div},
+            .lighting = {(float)color.z,(float)color.y,(float)color.x},
         };
     }
 	vertex_buffer_ptr += sizeof(VertexCircle) * 4;
@@ -970,7 +1157,6 @@ static void modernGlInit(int pxf){
 	shader_lightmap_texture     = shaderProgramCreate((String)STRING_LITERAL("texture_lighting_lightmap.vert"),(String)STRING_LITERAL("texture_lighting_lightmap.frag"));
 	shader_lightmap_texture.vao = &vao_lightmap_texture;
 
-    glUniform1i(glGetUniformLocation(shader_lightmap_texture.id,"ourTexture"),0);
     glUniform1i(glGetUniformLocation(shader_lightmap_texture.id,"lightmap"),1);
 
     glGenVertexArrays(1,&vao_lightmap);
@@ -987,15 +1173,25 @@ static void modernGlInit(int pxf){
 	glVertexAttribPointer(0,3,GL_FLOAT,0,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,pos));
     glVertexAttribIPointer(1,1,GL_INT,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,lightmap_index));
     glVertexAttribPointer(2,3,GL_FLOAT,0,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,world_pos));
-    glVertexAttribPointer(3,3,GL_FLOAT,0,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,u));
-    glVertexAttribPointer(4,3,GL_FLOAT,0,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,v));
-    glVertexAttribIPointer(5,3,GL_INT,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,normal));
-    glVertexAttribPointer(6,3,GL_FLOAT,0,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,lightmap_pos));
+    glVertexAttribPointer(3,3,GL_FLOAT,0,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,color));
+    glVertexAttribIPointer(4,3,GL_INT,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,normal));
+    glVertexAttribPointer(5,3,GL_FLOAT,0,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,lightmap_pos));
+    glVertexAttribPointer(6,3,GL_FLOAT,0,sizeof(VertexLightmap),(void*)offsetof(VertexLightmap,vnormal));
     
 	shader_lightmap     = shaderProgramCreate((String)STRING_LITERAL("lighting_lightmap.vert"),(String)STRING_LITERAL("lighting_lightmap.frag"));
 	shader_lightmap.vao = &vao_lightmap;
 
     glUniform1i(glGetUniformLocation(shader_lightmap.id,"lightmap"),1);
+
+    shader_lightmap_brick = shaderProgramCreate((String)STRING_LITERAL("lighting_lightmap.vert"),(String)STRING_LITERAL("lighting_lightmap_brick.frag"));
+    shader_lightmap_brick.vao = &vao_lightmap;
+
+    glUniform1i(glGetUniformLocation(shader_lightmap_brick.id,"lightmap"),1);
+
+    shader_lightmap_voronoi = shaderProgramCreate((String)STRING_LITERAL("lighting_lightmap.vert"),(String)STRING_LITERAL("lighting_lightmap_voronoi.frag"));
+    shader_lightmap_voronoi.vao = &vao_lightmap;
+
+    glUniform1i(glGetUniformLocation(shader_lightmap_voronoi.id,"lightmap"),1);
     //lightmap end
 	vertex_size = sizeof(float) * 3;
 
@@ -1007,6 +1203,16 @@ static void modernGlInit(int pxf){
 	shader_program = shaderProgramCreate((String)STRING_LITERAL("vertex.vert"),(String)STRING_LITERAL("fragment.frag"));
 	shader_program.vao = &vao;
 
+    shader_sphere = shaderProgramCreate((String)STRING_LITERAL("vertex.vert"),(String)STRING_LITERAL("sphere.frag"));
+    shader_sphere.vao = &vao;
+
+    shader_torus = shaderProgramCreate((String)STRING_LITERAL("vertex.vert"),(String)STRING_LITERAL("torus.frag"));
+    shader_torus.vao = &vao;
+    
+    shader_cylinder = shaderProgramCreate((String)STRING_LITERAL("vertex.vert"),(String)STRING_LITERAL("cylinder.frag"));
+    shader_cylinder.vao = &vao;
+    glUniform1i(glGetUniformLocation(shader_cylinder.id,"cubemap2"),1);
+    
 	glGenVertexArrays(1,&vao_lighting);
 	glBindVertexArray(vao_lighting);
 
@@ -1047,6 +1253,8 @@ static void modernGlInit(int pxf){
 	glGenBuffers(1,&ebo_quad);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,ebo_quad);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER,sizeof quad_indices,quad_indices,GL_DYNAMIC_DRAW);
+
+    glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
 }
 
 void vsyncSet(bool value){
@@ -1161,7 +1369,7 @@ bool createSurfaceGL(DrawSurface* surface){
 	surface->gl_context = wglCreateContext(surface->window_context);
 	wglMakeCurrent(surface->window_context,surface->gl_context);
 
-	const char* gl_version = glGetString(GL_VERSION);
+	char* gl_version = glGetString(GL_VERSION);
 	if(gl_version[0] == '3' || gl_version[0] == '4')
 		modern_gl = true;
 #endif
@@ -1202,7 +1410,10 @@ bool createSurfaceGL(DrawSurface* surface){
 			{.name = "wglSwapIntervalEXT",.fn_ptr = (funcptr_t*)&wglSwapIntervalEXT},
 
 			{.name = "glUniform1i",.fn_ptr = (funcptr_t*)&glUniform1i},
+            {.name = "glUniform1f",.fn_ptr = (funcptr_t*)&glUniform1f},
+            {.name = "glUniform2f",.fn_ptr = (funcptr_t*)&glUniform2f},
 			{.name = "glUniform3f",.fn_ptr = (funcptr_t*)&glUniform3f},
+            {.name = "glUniform4f",.fn_ptr = (funcptr_t*)&glUniform4f},
 			{.name = "glGetUniformLocation",.fn_ptr = (funcptr_t*)&glGetUniformLocation},
 			{.name = "glActiveTexture",.fn_ptr = (funcptr_t*)&glActiveTexture},
 			{.name = "glGenVertexArrays",.fn_ptr = (funcptr_t*)&glGenVertexArrays},
@@ -1428,6 +1639,8 @@ void surfaceClearGL(DrawSurface* surface){
 }
 
 void changeSurfaceSizeGL(DrawSurface* surface,int width,int height){
+    surface->width = width;
+    surface->height = height;
     glViewport(0,0,surface->window_width,surface->window_height);
 }
 
